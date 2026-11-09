@@ -50,6 +50,30 @@ func run() -> void:
 		await hold(entry[1], 130)
 		await frames(5)
 		check(absf(player.position.y - entry[2]) < 2, "Ladder route %s to %s" % [entry[0], entry[2]])
+	# Attaching off-center must preserve horizontal position.
+	player.position = Vector2(364, 180)
+	player.velocity = Vector2.ZERO
+	player.climbing = false
+	await hold("climb_up", 1)
+	check(player.climbing and absf(player.position.x - 364) < 0.01, "Attach without centering")
+	var diagonal_start := player.position
+	Input.action_press("move_right")
+	await hold("climb_up", 3)
+	Input.action_release("move_right")
+	check(player.climbing and player.position.x > diagonal_start.x and player.position.y < diagonal_start.y, "Diagonal climbing stays attached")
+	var sideways_start := player.position
+	await hold("move_left", 3)
+	check(player.climbing and player.position.x < sideways_start.x and absf(player.position.y - sideways_start.y) < 0.01, "Horizontal ladder movement stays attached")
+	await hold("move_left", 20)
+	check(not player.climbing and player.position.x < 352, "Leaving ladder width detaches")
+	player.position = Vector2(368, 180)
+	player.velocity = Vector2.ZERO
+	player.climbing = false
+	await hold("climb_up", 100)
+	check(player.climbing and absf(player.position.x - 368) < 0.01 and absf(player.position.y - 136) < 0.3, "Top stops upward motion without teleporting")
+	await hold("move_left", 25)
+	await frames(10)
+	check(not player.climbing and player.is_on_floor() and absf(player.position.y - 136) < 1, "Walk from ladder top onto upper floor")
 	player.position = Vector2(368, 180)
 	player.velocity = Vector2.ZERO
 	player.climbing = false

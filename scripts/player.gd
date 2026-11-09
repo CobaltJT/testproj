@@ -21,24 +21,21 @@ func _physics_process(delta: float) -> void:
 					continue
 				active_ladder = i
 				climbing = true
-				position.x = ladder.get_center().x
 				break
 	if climbing:
 		var ladder := LADDERS[active_ladder]
-		velocity = Vector2(0, vertical * CLIMB_SPEED)
-		if Input.is_action_just_pressed("jump") or not is_zero_approx(horizontal):
+		velocity = Vector2(horizontal * SPEED, vertical * CLIMB_SPEED)
+		if Input.is_action_just_pressed("jump"):
 			climbing = false
-			velocity = Vector2(horizontal * SPEED, JUMP_SPEED if Input.is_action_just_pressed("jump") else 0.0)
+			velocity.y = JUMP_SPEED
 		else:
-			# Move through the actual floor opening, then step onto its left lip.
-			if vertical < 0 and position.y <= ladder.position.y:
-				position = Vector2(ladder.position.x - 9, ladder.position.y)
-				climbing = false
-				velocity = Vector2.ZERO
-			elif vertical > 0 and position.y >= ladder.end.y - 1:
-				position.y = ladder.end.y
-				climbing = false
-				velocity = Vector2.ZERO
+			# Limit vertical travel without snapping; clear the floor collision margin
+			# at the top so horizontal movement can reach the landing.
+			var pixels_per_unit := global_scale.y
+			velocity.y = clampf(velocity.y,
+				(ladder.position.y - 0.25 - position.y) * pixels_per_unit / delta,
+				(ladder.end.y - position.y) * pixels_per_unit / delta)
+
 	else:
 		velocity.x = horizontal * SPEED
 		if not is_on_floor():
@@ -48,3 +45,8 @@ func _physics_process(delta: float) -> void:
 	if not is_zero_approx(horizontal):
 		sprite.flip_h = horizontal < 0
 	move_and_slide()
+
+	if climbing:
+		var ladder := LADDERS[active_ladder]
+		if position.x < ladder.position.x or position.x > ladder.end.x:
+			climbing = false

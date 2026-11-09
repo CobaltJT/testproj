@@ -13,4 +13,6 @@ godot --headless --path . --quit-after 10
 godot --headless --path . --script res://tests/movement.gd
 godot --headless --path . --script res://tests/ore.gd
 godot --headless --path . --script res://tests/ore_physics.gd
+godot --headless --path . --script res://tests/forge.gd
+godot --headless --path . --script res://tests/forge_physics.gd
 python3 tools/check_multiplayer.py

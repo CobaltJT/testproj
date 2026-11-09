@@ -8,7 +8,7 @@ Open `project.godot` in **Godot 4.6.x (standard / GDScript)** and press **F5** t
 open `scenes/smithy.tscn` and press **F6**. No plugins or external assets
 are required. From a terminal: `godot --path .`.
 
-Stage 04 adds the first shared task to the building: upstairs workshop/storage, ground-floor
+Stage 05 adds the first forge job to the building: upstairs workshop/storage, ground-floor
 customer counter and forge, and a basement with ore storage and a mine entrance.
 Ladders mark planned routes. The building is an original pixel-style image texture in
 `assets/textures/smithy.svg`, displayed by a Sprite2D with nearest filtering.
@@ -21,7 +21,7 @@ does not reattach until you land or release and press a climb direction again.
 Holding Up also catches the ladder at the peak of an upward jump if still in
 reach. Down + Space detaches into a fall without an upward jump.
 Floors, ceiling, and outer walls are solid. Furniture remains background scenery.
-The whole building stays visible; the first task is transporting ore.
+The whole building stays visible; transport ore, then work the forge.
 
 ## Throw ore into the forge bin
 
@@ -42,7 +42,24 @@ The bin stores each piece once and updates the shared count.
 The host owns physics, pickup decisions, impacts, and bin capture; clients receive
 ore transforms and inventories. Late joiners receive loose, carried, and stored
 ore state. Disconnecting drops carried ore at the dwarf's location. A new hosted
-game resets all ore. Mining replenishment, smithing, and persistence come later.
+game resets all materials and forge progress. Mining replenishment and persistence come later.
+
+## Forge an ingot (five seconds)
+
+1. Throw ore into the shared bin.
+2. Stand on the ground floor beside the forge at the right, with empty hands.
+3. **Hold E for five seconds of work**. The forge reserves one ore from the bin
+   when the job starts, and its shared progress bar fills.
+4. Release E, walk away, jump, climb, or get knocked back to pause. Any eligible
+   dwarf can continue the same job. Only one worker advances progress at a time;
+   extra players do not speed it up or consume extra ore.
+5. A physical ingot drops onto the small output tray to the left of the forge.
+   It can be picked up with E, carried, thrown with F, or dropped with Q.
+
+Holding E after completion starts another job if ore remains. Ingots do not count
+as raw ore and cannot be smelted again by throwing them into the ore bin. Paused
+jobs survive worker disconnects. Late joiners receive material kinds, progress,
+worker status, and output positions. No anvil recipes or customer orders yet.
 
 ## Play together on a LAN
 
@@ -81,9 +98,9 @@ uses three independent processes on loopback, not separate physical machines.
 1. Complete: project and building layout.
 2. Complete: one dwarf, movement, jumping, collision, and ladders; fixed building view.
 3. Complete: LAN host/join, independent dwarfs, and host-authoritative movement.
-4. **Current:** physical ore, pickup, carrying, throwing, knockback, and bin capture.
-   Smithing and customer delivery follow after review.
-5. Mining, merchants, and additional tasks, one reviewed step at a time.
+4. Complete: physical ore, pickup, carrying, throwing, knockback, and bin capture.
+5. **Current:** five-second shared forge job, pausing, handoff, and physical ingots.
+6. Anvil recipes, customer orders, mining, and merchants after review.
 
 ## Validation
 
@@ -102,7 +119,11 @@ sync, independent movement, jumps, ladders, the full ore transport route, client
 departure, and host loss. `tests/ore.gd` checks station reach, one-piece capacity,
 piece contention, duplicate capture, identity conservation, and snapshots.
 `tests/ore_physics.gd` checks settling, drops, thrown bin capture, missed throws,
-impact knockback, and drops on disconnect.
+impact knockback, and drops on disconnect. `tests/forge.gd` checks exact work
+duration, reservation, pause/handoff, contention, and snapshots.
+`tests/forge_physics.gd` checks held-E work, output physics, pickup, and reset.
+The three-process multiplayer test also checks forge handoff, competing workers,
+shared progress, and synchronized ingot output.
 
 The standalone commands above check project loading and startup; they do not replace visual review.
 Generated Godot caches are ignored. No cloud configuration is published by this project.

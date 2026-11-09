@@ -4,6 +4,14 @@ const PLAYER = preload("res://scenes/player.tscn")
 const WORLD = preload("res://scenes/smithy.tscn")
 const ORE_STATE = preload("res://scripts/ore_state.gd")
 const ORE_BODY = preload("res://scenes/ore_piece.tscn")
+const FORGE_STATE = preload("res://scripts/forge_state.gd")
+const ORE_TEXTURE = preload("res://assets/textures/ore.svg")
+const INGOT_TEXTURE = preload("res://assets/textures/ingot.svg")
+const FORGE_POSITION := Vector2(393, 216)
+const OUTPUT_POSITION := Vector2(342, 197)
+var forge = FORGE_STATE.new()
+var forge_station: Node2D
+var work_held: Dictionary = {}
 var ore = ORE_STATE.new()
 var ore_bodies: Dictionary = {}
 var throw_grace: Dictionary = {}
@@ -29,6 +37,8 @@ func _ready() -> void:
 	world.get_node("Player").free()
 	stations = preload("res://scenes/ore_stations.tscn").instantiate()
 	world.add_child(stations)
+	forge_station = preload("res://scenes/forge_station.tscn").instantiate()
+	world.add_child(forge_station)
 	reset_ore(false)
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -125,6 +135,7 @@ func client_ready() -> void:
 	spawn_player.rpc(id, Vector2(210 + (players.size() % 6) * 22, 216))
 	receive_ore.rpc_id(id, ore.snapshot())
 	receive_ore_motion.rpc_id(id, ore_motion())
+	receive_forge.rpc_id(id, forge.snapshot())
 
 @rpc("authority", "call_local", "reliable")
 func spawn_player(id: int, at: Vector2) -> void:
@@ -150,7 +161,7 @@ func spawn_player(id: int, at: Vector2) -> void:
 	refresh_ore()
 	update_status()
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if not active or not players.has(multiplayer.get_unique_id()):
 		return
 	if Input.is_action_just_pressed("throw_ore") or Input.is_action_just_pressed("drop_ore"):
@@ -169,10 +180,13 @@ func _physics_process(_delta: float) -> void:
 	var climb := Input.is_action_pressed("climb_up") or Input.is_action_pressed("climb_down")
 	if multiplayer.is_server():
 		step_ore()
+		work_held[1] = Input.is_action_pressed("interact")
 		apply_controls(1, axis, jump, climb)
 		for id in last_input:
 			if Time.get_ticks_msec() - last_input[id] > 500 and players.has(id):
 				apply_controls(id, Vector2.ZERO, false, false)
+				work_held[id] = false
+		step_forge(delta)
 		tick += 1
 		if tick % 3 == 0:
 			var state: Array = []
@@ -181,8 +195,9 @@ func _physics_process(_delta: float) -> void:
 				state.append([id, dwarf.position, dwarf.velocity, dwarf.climbing, dwarf.sprite.flip_h])
 			receive_state.rpc(state)
 			receive_ore_motion.rpc(ore_motion())
+			receive_forge.rpc(forge.snapshot())
 	else:
-		send_controls.rpc_id(1, axis, jump, climb)
+		send_controls.rpc_id(1, axis, jump, climb, Input.is_action_pressed("interact"))
 
 func apply_controls(id: int, axis: Vector2, jump: bool, climb: bool) -> void:
 	players[id].controls = axis
@@ -190,7 +205,7 @@ func apply_controls(id: int, axis: Vector2, jump: bool, climb: bool) -> void:
 	players[id].climb_held = climb
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
-func send_controls(axis: Vector2, jump: bool, climb: bool) -> void:
+func send_controls(axis: Vector2, jump: bool, climb: bool, work: bool) -> void:
 	if not multiplayer.is_server() or not axis.is_finite():
 		return
 	var id := multiplayer.get_remote_sender_id()
@@ -198,6 +213,7 @@ func send_controls(axis: Vector2, jump: bool, climb: bool) -> void:
 		return
 	apply_controls(id, axis.clamp(Vector2(-1, -1), Vector2.ONE), jump, climb)
 	last_input[id] = Time.get_ticks_msec()
+	work_held[id] = work
 
 @rpc("authority", "call_remote", "unreliable_ordered", 2)
 func receive_state(state: Array) -> void:
@@ -221,6 +237,7 @@ func remove_player(id: int) -> void:
 		players[id].free()
 		players.erase(id)
 	last_input.erase(id)
+	work_held.erase(id)
 	last_interaction.erase(id)
 	update_status()
 
@@ -255,10 +272,12 @@ func interact_for(id: int) -> void:
 	if now - last_interaction.get(id, -1000) < 150:
 		return
 	last_interaction[id] = now
-	var message := "E: pick up nearby ore · F: throw · Q: drop"
+	var message := "E: pick up · F: throw · Q: drop · Hold E at forge: work"
+	if near_forge(players[id]):
+		message = "Hold E with empty hands to forge an ingot (5 seconds)."
 	if id in ore.carriers:
 		message = "F: throw toward the bin · Q: drop"
-	else:
+	elif not near_forge(players[id]):
 		var nearest := -1
 		var distance := 24.0
 		for piece_id in ore_bodies:
@@ -287,17 +306,22 @@ func interaction_feedback(message: String) -> void:
 	hint.text = message
 
 func refresh_ore() -> void:
+	refresh_forge()
 	stations.get_node("SupplyLabel").text = "E: PICK UP · LOOSE: %s" % ore.available
 	stations.get_node("BinLabel").text = "THROW IN: %s" % ore.deposited
 	for piece_id in ore_bodies:
 		var body: RigidBody2D = ore_bodies[piece_id]
 		var loose: bool = ore.is_loose(piece_id)
+		body.get_node("Sprite2D").texture = INGOT_TEXTURE if ore.pieces[piece_id].kind == "ingot" else ORE_TEXTURE
 		body.visible = loose
 		body.freeze = not loose or not (active and multiplayer.is_server())
 		body.collision_layer = 4 if loose and multiplayer.is_server() else 0
 		body.collision_mask = 13 if loose and multiplayer.is_server() else 0
 	for id in players:
-		players[id].get_node("CarriedOre").visible = id in ore.carriers
+		var carried: int = ore.carried_by(id)
+		players[id].get_node("CarriedOre").visible = carried != -1
+		if carried != -1:
+			players[id].get_node("CarriedOre").texture = INGOT_TEXTURE if ore.pieces[carried].kind == "ingot" else ORE_TEXTURE
 
 func reset_ore(simulate: bool) -> void:
 	for body in ore_bodies.values():
@@ -306,6 +330,9 @@ func reset_ore(simulate: bool) -> void:
 	throw_grace.clear()
 	hit_cooldowns.clear()
 	ore = ORE_STATE.new()
+	forge = FORGE_STATE.new()
+	work_held.clear()
+	refresh_forge()
 	for id in ore.pieces:
 		var body: RigidBody2D = ORE_BODY.instantiate()
 		body.name = "Ore_%s" % id
@@ -392,3 +419,38 @@ func position_ore(body: RigidBody2D, at: Vector2, motion: Vector2) -> void:
 	# Update the physics transform as well when releasing a formerly frozen body.
 	PhysicsServer2D.body_set_state(body.get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM, body.global_transform)
 	PhysicsServer2D.body_set_state(body.get_rid(), PhysicsServer2D.BODY_STATE_LINEAR_VELOCITY, motion)
+
+func near_forge(dwarf: CharacterBody2D) -> bool:
+	return absf(dwarf.position.x - FORGE_POSITION.x) <= 23 and absf(dwarf.position.y - FORGE_POSITION.y) <= 6
+
+func step_forge(delta: float) -> void:
+	var eligible: Array[int] = []
+	for id in players:
+		var dwarf = players[id]
+		if work_held.get(id, false) and near_forge(dwarf) and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
+			eligible.append(id)
+	eligible.sort()
+	var result: Dictionary = forge.step(delta, eligible, ore)
+	if result.finished != -1:
+		var body: RigidBody2D = ore_bodies[result.finished]
+		position_ore(body, OUTPUT_POSITION, Vector2(0, 20))
+		body.angular_velocity = 0
+	if result.started != -1 or result.finished != -1:
+		receive_ore.rpc(ore.snapshot())
+		receive_ore_motion.rpc(ore_motion())
+		receive_forge.rpc(forge.snapshot())
+	refresh_forge()
+
+@rpc("authority", "call_remote", "reliable")
+func receive_forge(state: Dictionary) -> void:
+	forge.restore(state)
+	refresh_forge()
+
+func refresh_forge() -> void:
+	forge_station.get_node("Progress").value = forge.progress
+	var text := "HOLD E · 5s"
+	if forge.piece != -1:
+		text = "%s %.1f/5s" % ["WORK" if forge.worker != 0 else "PAUSED", forge.progress]
+	elif ore.deposited == 0:
+		text = "NEED ORE"
+	forge_station.get_node("WorkLabel").text = text

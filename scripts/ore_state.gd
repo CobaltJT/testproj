@@ -5,11 +5,15 @@ var pieces: Dictionary = {}
 
 func _init() -> void:
 	for id in range(INITIAL_ORE):
-		pieces[id] = {"owner": 0, "stored": false}
+		pieces[id] = {"owner": 0, "stored": false, "processing": false, "kind": "ore"}
 
 var available: int:
 	get:
-		return INITIAL_ORE - deposited - carriers.size()
+		var count := 0
+		for id in pieces:
+			if is_loose(id):
+				count += 1
+		return count
 var deposited: int:
 	get:
 		var count := 0
@@ -32,7 +36,7 @@ func carried_by(player: int) -> int:
 	return -1
 
 func is_loose(id: int) -> bool:
-	return pieces.has(id) and pieces[id].owner == 0 and not pieces[id].stored
+	return pieces.has(id) and pieces[id].owner == 0 and not pieces[id].stored and not pieces[id].processing
 
 func pickup(player: int, id: int) -> bool:
 	if player <= 0 or carried_by(player) != -1 or not is_loose(id):
@@ -47,7 +51,7 @@ func release_carrier(player: int) -> int:
 	return id
 
 func store(id: int) -> bool:
-	if not is_loose(id):
+	if not is_loose(id) or pieces[id].kind != "ore":
 		return false
 	pieces[id].stored = true
 	return true
@@ -57,3 +61,16 @@ func snapshot() -> Dictionary:
 
 func restore(state: Dictionary) -> void:
 	pieces = state.duplicate(true)
+
+func begin_smelting() -> int:
+	for id in pieces:
+		if pieces[id].stored and pieces[id].kind == "ore":
+			pieces[id].stored = false
+			pieces[id].processing = true
+			return id
+	return -1
+
+func finish_smelting(id: int) -> void:
+	if pieces.has(id) and pieces[id].processing:
+		pieces[id].processing = false
+		pieces[id].kind = "ingot"

@@ -74,3 +74,8 @@ func finish_smelting(id: int) -> void:
 	if pieces.has(id) and pieces[id].processing:
 		pieces[id].processing = false
 		pieces[id].kind = "ingot"
+
+func finish_hammer(id: int) -> void:
+	if pieces.has(id) and pieces[id].processing and pieces[id].kind == "ingot":
+		pieces[id].processing = false
+		pieces[id].kind = "hammer"

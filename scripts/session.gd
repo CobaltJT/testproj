@@ -7,6 +7,11 @@ const ORE_BODY = preload("res://scenes/ore_piece.tscn")
 const FORGE_STATE = preload("res://scripts/forge_state.gd")
 const ORE_TEXTURE = preload("res://assets/textures/ore.svg")
 const INGOT_TEXTURE = preload("res://assets/textures/ingot.svg")
+const HAMMER_TEXTURE = preload("res://assets/textures/hammer.svg")
+const ANVIL_POSITION := Vector2(260, 216)
+const TOOL_OUTPUT := Vector2(282, 197)
+var anvil = FORGE_STATE.new()
+var anvil_station: Node2D
 const FORGE_POSITION := Vector2(393, 216)
 const OUTPUT_POSITION := Vector2(342, 197)
 var forge = FORGE_STATE.new()
@@ -39,6 +44,8 @@ func _ready() -> void:
 	world.add_child(stations)
 	forge_station = preload("res://scenes/forge_station.tscn").instantiate()
 	world.add_child(forge_station)
+	anvil_station = preload("res://scenes/anvil_station.tscn").instantiate()
+	world.add_child(anvil_station)
 	reset_ore(false)
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -136,6 +143,7 @@ func client_ready() -> void:
 	receive_ore.rpc_id(id, ore.snapshot())
 	receive_ore_motion.rpc_id(id, ore_motion())
 	receive_forge.rpc_id(id, forge.snapshot())
+	receive_anvil.rpc_id(id, anvil.snapshot())
 
 @rpc("authority", "call_local", "reliable")
 func spawn_player(id: int, at: Vector2) -> void:
@@ -187,6 +195,7 @@ func _physics_process(delta: float) -> void:
 				apply_controls(id, Vector2.ZERO, false, false)
 				work_held[id] = false
 		step_forge(delta)
+		step_anvil(delta)
 		tick += 1
 		if tick % 3 == 0:
 			var state: Array = []
@@ -196,6 +205,7 @@ func _physics_process(delta: float) -> void:
 			receive_state.rpc(state)
 			receive_ore_motion.rpc(ore_motion())
 			receive_forge.rpc(forge.snapshot())
+			receive_anvil.rpc(anvil.snapshot())
 	else:
 		send_controls.rpc_id(1, axis, jump, climb, Input.is_action_pressed("interact"))
 
@@ -272,12 +282,24 @@ func interact_for(id: int) -> void:
 	if now - last_interaction.get(id, -1000) < 150:
 		return
 	last_interaction[id] = now
-	var message := "E: pick up · F: throw · Q: drop · Hold E at forge: work"
+	if near_anvil(players[id]) and ore.carried_by(id) != -1:
+		var loaded: bool = anvil.load_ingot(id, ore)
+		receive_ore.rpc(ore.snapshot())
+		receive_anvil.rpc(anvil.snapshot())
+		var feedback := "Ingot loaded. Hold E for 5 seconds to make a hammer." if loaded else "Anvil needs a carried ingot and an empty job slot."
+		if id == 1:
+			interaction_feedback(feedback)
+		else:
+			interaction_feedback.rpc_id(id, feedback)
+		return
+	var message := "E: pick up · F: throw · Q: drop · Hold E at a station: work"
 	if near_forge(players[id]):
 		message = "Hold E with empty hands to forge an ingot (5 seconds)."
+	elif near_anvil(players[id]):
+		message = "Hold E with empty hands to make a hammer (5 seconds)." if anvil.piece != -1 else "Bring a carried ingot and press E to load the anvil."
 	if id in ore.carriers:
-		message = "F: throw toward the bin · Q: drop"
-	elif not near_forge(players[id]):
+		message = "F: throw · Q: drop · E at anvil: load an ingot"
+	elif not near_forge(players[id]) and not (near_anvil(players[id]) and anvil.piece != -1):
 		var nearest := -1
 		var distance := 24.0
 		for piece_id in ore_bodies:
@@ -288,7 +310,7 @@ func interact_for(id: int) -> void:
 				distance = offset.length()
 				nearest = piece_id
 		if nearest != -1 and ore.pickup(id, nearest):
-			message = "Ore picked up. F: throw · Q: drop"
+			message = "Picked up %s. F: throw · Q: drop" % ore.pieces[nearest].kind
 
 	receive_ore.rpc(ore.snapshot())
 	if id == 1:
@@ -307,12 +329,13 @@ func interaction_feedback(message: String) -> void:
 
 func refresh_ore() -> void:
 	refresh_forge()
+	refresh_anvil()
 	stations.get_node("SupplyLabel").text = "E: PICK UP · LOOSE: %s" % ore.available
 	stations.get_node("BinLabel").text = "THROW IN: %s" % ore.deposited
 	for piece_id in ore_bodies:
 		var body: RigidBody2D = ore_bodies[piece_id]
 		var loose: bool = ore.is_loose(piece_id)
-		body.get_node("Sprite2D").texture = INGOT_TEXTURE if ore.pieces[piece_id].kind == "ingot" else ORE_TEXTURE
+		body.get_node("Sprite2D").texture = material_texture(ore.pieces[piece_id].kind)
 		body.visible = loose
 		body.freeze = not loose or not (active and multiplayer.is_server())
 		body.collision_layer = 4 if loose and multiplayer.is_server() else 0
@@ -321,7 +344,7 @@ func refresh_ore() -> void:
 		var carried: int = ore.carried_by(id)
 		players[id].get_node("CarriedOre").visible = carried != -1
 		if carried != -1:
-			players[id].get_node("CarriedOre").texture = INGOT_TEXTURE if ore.pieces[carried].kind == "ingot" else ORE_TEXTURE
+			players[id].get_node("CarriedOre").texture = material_texture(ore.pieces[carried].kind)
 
 func reset_ore(simulate: bool) -> void:
 	for body in ore_bodies.values():
@@ -331,6 +354,9 @@ func reset_ore(simulate: bool) -> void:
 	hit_cooldowns.clear()
 	ore = ORE_STATE.new()
 	forge = FORGE_STATE.new()
+	anvil = FORGE_STATE.new()
+	anvil.output_kind = "hammer"
+	refresh_anvil()
 	work_held.clear()
 	refresh_forge()
 	for id in ore.pieces:
@@ -454,3 +480,40 @@ func refresh_forge() -> void:
 	elif ore.deposited == 0:
 		text = "NEED ORE"
 	forge_station.get_node("WorkLabel").text = text
+
+func material_texture(kind: String) -> Texture2D:
+	if kind == "hammer":
+		return HAMMER_TEXTURE
+	return INGOT_TEXTURE if kind == "ingot" else ORE_TEXTURE
+
+func near_anvil(dwarf: CharacterBody2D) -> bool:
+	return absf(dwarf.position.x - ANVIL_POSITION.x) <= 20 and absf(dwarf.position.y - ANVIL_POSITION.y) <= 6
+
+func step_anvil(delta: float) -> void:
+	var eligible: Array[int] = []
+	for id in players:
+		var dwarf = players[id]
+		if work_held.get(id, false) and near_anvil(dwarf) and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
+			eligible.append(id)
+	eligible.sort()
+	var result: Dictionary = anvil.step(delta, eligible, ore)
+	if result.finished != -1:
+		var body: RigidBody2D = ore_bodies[result.finished]
+		position_ore(body, TOOL_OUTPUT, Vector2(0, 20))
+		body.angular_velocity = 0
+		receive_ore.rpc(ore.snapshot())
+		receive_ore_motion.rpc(ore_motion())
+		receive_anvil.rpc(anvil.snapshot())
+	refresh_anvil()
+
+@rpc("authority", "call_remote", "reliable")
+func receive_anvil(state: Dictionary) -> void:
+	anvil.restore(state)
+	refresh_anvil()
+
+func refresh_anvil() -> void:
+	anvil_station.get_node("Progress").value = anvil.progress
+	var text := "E: LOAD INGOT"
+	if anvil.piece != -1:
+		text = "%s %.1f/5s" % ["WORK" if anvil.worker != 0 else "PAUSED", anvil.progress]
+	anvil_station.get_node("WorkLabel").text = text

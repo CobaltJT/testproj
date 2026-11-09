@@ -131,6 +131,36 @@ func run() -> void:
 		var output: RigidBody2D = session.ore_bodies[ingot_id()]
 		check(output.visible and output.get_node("Sprite2D").texture == session.INGOT_TEXTURE, "Every peer displays physical ingot output")
 		check(is_equal_approx(session.forge_station.get_node("Progress").value, session.forge.progress), "Progress bar follows shared forge state")
+	if role == "client1":
+		await walk_to(dwarf, 342)
+		await press_interact()
+		var collected := await until(func(): return id in session.ore.carriers)
+		check(collected, "Client picks up forge ingot for anvil")
+		await walk_to(dwarf, 260)
+		await press_interact()
+		check(session.anvil.piece != -1 and id not in session.ore.carriers, "Client loads carried ingot into shared anvil")
+		Input.action_press("interact")
+		await frames(120)
+		Input.action_release("interact")
+		var resumed := await until(func(): return session.anvil.progress >= 4 and session.anvil.worker == 0)
+		check(resumed and hammer_id() == -1, "Other players resume anvil without accelerating recipe")
+		Input.action_press("interact")
+	else:
+		await walk_to(dwarf, 260)
+		var paused_anvil := await until(func(): return session.anvil.progress > 1.8 and session.anvil.worker == 0, 900)
+		check(paused_anvil, "Loaded and paused anvil state replicates")
+		# Keep the pause visible long enough for both independent clients to observe it.
+		await frames(30)
+		Input.action_press("interact")
+		await frames(130)
+		Input.action_release("interact")
+		check(hammer_id() == -1, "Two anvil workers cannot finish before five seconds")
+	var hammered := await until(func(): return hammer_id() != -1)
+	Input.action_release("interact")
+	await frames(30)
+	check(hammered and session.anvil.piece == -1 and session.ore.pieces.size() == 8, "All peers see one hammer and conserved material identity")
+	if hammered:
+		check(session.ore_bodies[hammer_id()].visible and session.ore_bodies[hammer_id()].get_node("Sprite2D").texture == session.HAMMER_TEXTURE, "Physical hammer image replicates")
 	await walk_to(dwarf, 200)
 	if role == "host":
 		# Let the last thrower return to the waiting area, then create an impact.
@@ -181,5 +211,11 @@ func press_interact() -> void:
 func ingot_id() -> int:
 	for piece_id in session.ore.pieces:
 		if session.ore.pieces[piece_id].kind == "ingot":
+			return piece_id
+	return -1
+
+func hammer_id() -> int:
+	for piece_id in session.ore.pieces:
+		if session.ore.pieces[piece_id].kind == "hammer":
 			return piece_id
 	return -1

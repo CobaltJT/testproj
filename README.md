@@ -8,7 +8,7 @@ Open `project.godot` in **Godot 4.6.x (standard / GDScript)** and press **F5** t
 open `scenes/smithy.tscn` and press **F6**. No plugins or external assets
 are required. From a terminal: `godot --path .`.
 
-Stage 05 adds the first forge job to the building: upstairs workshop/storage, ground-floor
+Stage 06 adds the first anvil recipe to the building: upstairs workshop/storage, ground-floor
 customer counter and forge, and a basement with ore storage and a mine entrance.
 Ladders mark planned routes. The building is an original pixel-style image texture in
 `assets/textures/smithy.svg`, displayed by a Sprite2D with nearest filtering.
@@ -59,7 +59,22 @@ game resets all materials and forge progress. Mining replenishment and persisten
 Holding E after completion starts another job if ore remains. Ingots do not count
 as raw ore and cannot be smelted again by throwing them into the ore bin. Paused
 jobs survive worker disconnects. Late joiners receive material kinds, progress,
-worker status, and output positions. No anvil recipes or customer orders yet.
+worker status, and output positions. The first anvil recipe is a hammer; customer orders come later.
+
+## Shape an ingot into a hammer
+
+1. Pick up a finished ingot from the forge output tray with **E**.
+2. Carry it to the central anvil and press **E** to load it. Raw ore and finished
+   tools are rejected, and an occupied anvil cannot take a second item.
+3. With empty hands, **hold E for five seconds** beside the anvil. Releasing E,
+   moving away, jumping, or getting hit pauses the job. Another dwarf can resume.
+4. A physical hammer appears on the small tray to the right of the anvil.
+   Pick it up, carry it, throw it with **F**, or drop it with **Q**.
+
+One worker advances each station at a time. Loading consumes the carried ingot
+into the shared job; completion transforms that same material into one hammer.
+Paused jobs survive worker departures. The forge and anvil can operate in parallel.
+Hammers are products for now, with no tool action or customer delivery yet.
 
 ## Play together on a LAN
 
@@ -99,8 +114,9 @@ uses three independent processes on loopback, not separate physical machines.
 2. Complete: one dwarf, movement, jumping, collision, and ladders; fixed building view.
 3. Complete: LAN host/join, independent dwarfs, and host-authoritative movement.
 4. Complete: physical ore, pickup, carrying, throwing, knockback, and bin capture.
-5. **Current:** five-second shared forge job, pausing, handoff, and physical ingots.
-6. Anvil recipes, customer orders, mining, and merchants after review.
+5. Complete: five-second shared forge job, pausing, handoff, and physical ingots.
+6. **Current:** load an ingot, work the anvil, and produce a physical hammer.
+7. Customer orders, more recipes, mining, and merchants after review.
 
 ## Validation
 
@@ -123,7 +139,10 @@ impact knockback, and drops on disconnect. `tests/forge.gd` checks exact work
 duration, reservation, pause/handoff, contention, and snapshots.
 `tests/forge_physics.gd` checks held-E work, output physics, pickup, and reset.
 The three-process multiplayer test also checks forge handoff, competing workers,
-shared progress, and synchronized ingot output.
+shared progress, and synchronized ingot output. `tests/anvil.gd` and
+`tests/anvil_physics.gd` cover loading, wrong materials, occupied jobs, exact
+duration, handoff, output physics, carrying, throwing, and reset. The network
+test continues from the forge to a shared anvil job and replicated hammer.
 
 The standalone commands above check project loading and startup; they do not replace visual review.
 Generated Godot caches are ignored. No cloud configuration is published by this project.

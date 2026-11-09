@@ -1,6 +1,7 @@
 extends RefCounted
 ## One shared job. Work time advances once per host tick, regardless of helpers.
 const DURATION := 5.0
+var output_kind := "ingot"
 var piece := -1
 var progress := 0.0
 var worker := 0
@@ -12,6 +13,9 @@ func step(delta: float, eligible: Array[int], ore: RefCounted) -> Dictionary:
 	if worker == 0:
 		return result
 	if piece == -1:
+		if output_kind != "ingot":
+			worker = 0
+			return result
 		piece = ore.begin_smelting()
 		if piece == -1:
 			worker = 0
@@ -21,7 +25,10 @@ func step(delta: float, eligible: Array[int], ore: RefCounted) -> Dictionary:
 		progress = minf(DURATION, progress + delta)
 		if progress >= DURATION - 0.00001:
 			result.finished = piece
-			ore.finish_smelting(piece)
+			if output_kind == "ingot":
+				ore.finish_smelting(piece)
+			else:
+				ore.finish_hammer(piece)
 			piece = -1
 			progress = 0.0
 			worker = 0
@@ -34,3 +41,16 @@ func restore(state: Dictionary) -> void:
 	piece = state.piece
 	progress = state.progress
 	worker = state.worker
+
+func load_ingot(player: int, ore: RefCounted) -> bool:
+	if output_kind != "hammer" or piece != -1:
+		return false
+	var carried: int = ore.carried_by(player)
+	if carried == -1 or ore.pieces[carried].kind != "ingot":
+		return false
+	ore.release_carrier(player)
+	ore.pieces[carried].processing = true
+	piece = carried
+	progress = 0.0
+	worker = 0
+	return true

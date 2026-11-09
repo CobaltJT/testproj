@@ -1,6 +1,83 @@
 [gd_scene load_steps=2 format=3]
 
-[ext_resource type="Script" path="res://scripts/smithy.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/textures/smithy.svg" id="1"]
 
 [node name="Smithy" type="Node2D"]
-script = ExtResource("1")
+scale = Vector2(2, 2)
+
+[node name="Building" type="Sprite2D" parent="."]
+texture_filter = 1
+texture = ExtResource("1")
+centered = false
+
+[node name="Caption1" type="Label" parent="."]
+offset_left = 24.0
+offset_top = 7.0
+theme_override_colors/font_color = Color(0.9176470588235294, 0.8431372549019608, 0.6901960784313725, 1)
+theme_override_font_sizes/font_size = 16
+text = "HEARTH & HAMMER"
+mouse_filter = 2
+
+[node name="Caption2" type="Label" parent="."]
+offset_left = 25.0
+offset_top = 29.0
+theme_override_colors/font_color = Color(0.5450980392156862, 0.6039215686274509, 0.6666666666666666, 1)
+theme_override_font_sizes/font_size = 8
+text = "A DWARVEN SMITHY  /  BUILDING STUDY"
+mouse_filter = 2
+
+[node name="Caption3" type="Label" parent="."]
+offset_left = 64.0
+offset_top = 74.0
+theme_override_colors/font_color = Color(0.9176470588235294, 0.8431372549019608, 0.6901960784313725, 1)
+theme_override_font_sizes/font_size = 8
+text = "WORKSHOP & STORAGE"
+mouse_filter = 2
+
+[node name="Caption4" type="Label" parent="."]
+offset_left = 64.0
+offset_top = 147.0
+theme_override_colors/font_color = Color(0.9176470588235294, 0.8431372549019608, 0.6901960784313725, 1)
+theme_override_font_sizes/font_size = 8
+text = "CUSTOMERS"
+mouse_filter = 2
+
+[node name="Caption5" type="Label" parent="."]
+offset_left = 149.0
+offset_top = 179.0
+theme_override_colors/font_color = Color(0.9176470588235294, 0.8431372549019608, 0.6901960784313725, 1)
+theme_override_font_sizes/font_size = 8
+text = "ORDERS"
+mouse_filter = 2
+
+[node name="Caption6" type="Label" parent="."]
+offset_left = 377.0
+offset_top = 167.0
+theme_override_colors/font_color = Color(0.9176470588235294, 0.8431372549019608, 0.6901960784313725, 1)
+theme_override_font_sizes/font_size = 8
+text = "FORGE"
+mouse_filter = 2
+
+[node name="Caption7" type="Label" parent="."]
+offset_left = 144.0
+offset_top = 227.0
+theme_override_colors/font_color = Color(0.9176470588235294, 0.8431372549019608, 0.6901960784313725, 1)
+theme_override_font_sizes/font_size = 8
+text = "CELLAR / MINE ACCESS"
+mouse_filter = 2
+
+[node name="Caption8" type="Label" parent="."]
+offset_left = 352.0
+offset_top = 256.0
+theme_override_colors/font_color = Color(0.9176470588235294, 0.8431372549019608, 0.6901960784313725, 1)
+theme_override_font_sizes/font_size = 8
+text = "MINES"
+mouse_filter = 2
+
+[node name="Caption9" type="Label" parent="."]
+offset_left = 24.0
+offset_top = 305.0
+theme_override_colors/font_color = Color(0.6039215686274509, 0.6549019607843137, 0.6980392156862745, 1)
+theme_override_font_sizes/font_size = 8
+text = "STAGE 01  /  Layout preview - movement and LAN co-op come next"
+mouse_filter = 2

@@ -10,9 +10,10 @@ are required. From a terminal: `godot --path .`.
 
 Stage 01 is a static building study: upstairs workshop/storage, ground-floor
 customer counter and forge, and a basement with ore storage and a mine entrance.
-Ladders mark planned routes. All art is original procedural pixel-style placeholder
-geometry, editable in `scripts/smithy.gd`; the `@tool` script also previews it in
-the editor. There is no player, collision, interaction, or networking yet.
+Ladders mark planned routes. The building is an original pixel-style image texture in
+`assets/textures/smithy.svg`, displayed by a Sprite2D with nearest filtering.
+Captions are separate Label nodes in the scene. Edit the SVG in an image/vector
+editor; there is no runtime drawing script. There is no player, collision, interaction, or networking yet.
 
 ## Agreed direction
 

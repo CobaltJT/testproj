@@ -8,7 +8,7 @@ Open `project.godot` in **Godot 4.6.x (standard / GDScript)** and press **F5** t
 open `scenes/smithy.tscn` and press **F6**. No plugins or external assets
 are required. From a terminal: `godot --path .`.
 
-Stage 07 adds customers and shared earnings to the building: upstairs workshop/storage, ground-floor
+Stage 08 adds basic shared mining to the building: upstairs workshop/storage, ground-floor
 customer counter and forge, and a basement with ore storage and a mine entrance.
 Ladders mark planned routes. The building is an original pixel-style image texture in
 `assets/textures/smithy.svg`, displayed by a Sprite2D with nearest filtering.
@@ -42,7 +42,7 @@ The bin stores each piece once and updates the shared count.
 The host owns physics, pickup decisions, impacts, and bin capture; clients receive
 ore transforms and inventories. Late joiners receive loose, carried, and stored
 ore state. Disconnecting drops carried ore at the dwarf's location. A new hosted
-game resets all materials and forge progress. Mining replenishment and persistence come later.
+game resets all materials and crafting progress. Mining replenishes ore during a session; persistence comes later.
 
 ## Forge an ingot (five seconds)
 
@@ -90,8 +90,21 @@ The sold hammer is removed. A served customer leaves, and the next visit starts
 including late joiners. New hosted sessions reset orders and coins.
 
 For this first version there is one patient customer at a time, one recipe, no
-penalties, and no spending system. The existing eight starting ore pieces remain
-the finite supply; further replenishment is a later stage.
+penalties, and no spending system. Eight ore pieces are available initially; mining provides more whenever needed.
+
+## Mine more ore
+
+Stand beside the ore vein at the right of the basement mine entrance, with empty
+hands, and **hold E for three seconds**. A new physical ore piece falls out near
+the entrance, a short distance to the left of the vein. Pick it up with E and use
+it in the existing throwing, smelting, smithing, and delivery workflow.
+
+Release E, move away, jump, or get hit to pause extraction. Another dwarf can
+continue, including after the original miner leaves. One miner advances the
+shared progress at a time; helpers do not speed it up or duplicate output.
+Holding E continues with the next three-second cycle. The vein has unlimited
+ore for this prototype. No separate mine level, pickaxe requirement, upgrades,
+or depletion yet. New sessions reset extraction progress and mined items.
 
 ## Play together on a LAN
 
@@ -133,8 +146,9 @@ uses three independent processes on loopback, not separate physical machines.
 4. Complete: physical ore, pickup, carrying, throwing, knockback, and bin capture.
 5. Complete: five-second shared forge job, pausing, handoff, and physical ingots.
 6. Complete: load an ingot, work the anvil, and produce a physical hammer.
-7. **Current:** patient customer orders, hammer delivery, and shared coins.
-8. More recipes, mining, and merchants after review.
+7. Complete: patient customer orders, hammer delivery, and shared coins.
+8. **Current:** three-second mining cycles, shared progress, and physical ore output.
+9. Balance, more recipes, and merchants after review.
 
 ## Validation
 
@@ -169,3 +183,8 @@ Customer checks in `tests/customers.gd` and `tests/customers_physics.gd` cover
 arrival, patient waiting, wrong items, reach, competing deliveries, rewards,
 departure, snapshots, E interactions, and session reset. The three-process test
 finishes the production chain with a real client delivery and shared earnings.
+
+Mining tests in `tests/mining.gd` and `tests/mining_physics.gd` check exact
+extraction time, contention, pauses, handoffs, worker disconnects, unique IDs,
+physical output, pickup, throwing, and reset. The three-process test verifies
+shared extraction and client pickup of a newly created ore body.

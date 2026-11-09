@@ -79,3 +79,10 @@ func finish_hammer(id: int) -> void:
 	if pieces.has(id) and pieces[id].processing and pieces[id].kind == "ingot":
 		pieces[id].processing = false
 		pieces[id].kind = "hammer"
+
+func add_mined_ore() -> int:
+	var id := 0
+	for existing in pieces:
+		id = maxi(id, existing + 1)
+	pieces[id] = {"owner": 0, "stored": false, "processing": false, "kind": "ore", "delivered": false}
+	return id

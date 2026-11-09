@@ -1,5 +1,10 @@
 extends Node
 ## ENet LAN session. Only the host simulates physics; clients send controls.
+const MINING_STATE = preload("res://scripts/mining_state.gd")
+const MINE_POSITION := Vector2(390, 288)
+const MINE_OUTPUT := Vector2(344, 276)
+var mining = MINING_STATE.new()
+var mining_station: Node2D
 const CUSTOMER_STATE = preload("res://scripts/customer_state.gd")
 var orders = CUSTOMER_STATE.new()
 var customer: Node2D
@@ -50,6 +55,8 @@ func _ready() -> void:
 	world.add_child(forge_station)
 	anvil_station = preload("res://scenes/anvil_station.tscn").instantiate()
 	world.add_child(anvil_station)
+	mining_station = preload("res://scenes/mining_station.tscn").instantiate()
+	world.add_child(mining_station)
 	customer = preload("res://scenes/customer.tscn").instantiate()
 	world.add_child(customer)
 	reset_ore(false)
@@ -156,6 +163,7 @@ func client_ready() -> void:
 	receive_forge.rpc_id(id, forge.snapshot())
 	receive_anvil.rpc_id(id, anvil.snapshot())
 	receive_orders.rpc_id(id, orders.snapshot())
+	receive_mining.rpc_id(id, mining.snapshot())
 
 @rpc("authority", "call_local", "reliable")
 func spawn_player(id: int, at: Vector2) -> void:
@@ -208,6 +216,7 @@ func _physics_process(delta: float) -> void:
 				work_held[id] = false
 		step_forge(delta)
 		step_anvil(delta)
+		step_mining(delta)
 		orders.step(delta)
 		refresh_orders()
 		tick += 1
@@ -221,6 +230,7 @@ func _physics_process(delta: float) -> void:
 			receive_forge.rpc(forge.snapshot())
 			receive_anvil.rpc(anvil.snapshot())
 			receive_orders.rpc(orders.snapshot())
+			receive_mining.rpc(mining.snapshot())
 	else:
 		send_controls.rpc_id(1, axis, jump, climb, Input.is_action_pressed("interact"))
 
@@ -297,6 +307,13 @@ func interact_for(id: int) -> void:
 	if now - last_interaction.get(id, -1000) < 150:
 		return
 	last_interaction[id] = now
+	if near_mine(players[id]):
+		var mine_hint := "Hold E with empty hands to mine ore (3 seconds)."
+		if id == 1:
+			interaction_feedback(mine_hint)
+		else:
+			interaction_feedback.rpc_id(id, mine_hint)
+		return
 	if absf(players[id].position.x - 166) <= 30 and absf(players[id].position.y - 216) <= 6 and orders.phase == "waiting" and ore.carried_by(id) != -1:
 		var sold: bool = orders.deliver(id, players[id].position, ore)
 		receive_ore.rpc(ore.snapshot())
@@ -357,6 +374,9 @@ func refresh_ore() -> void:
 	refresh_anvil()
 	stations.get_node("SupplyLabel").text = "E: PICK UP · LOOSE: %s" % ore.available
 	stations.get_node("BinLabel").text = "THROW IN: %s" % ore.deposited
+	for piece_id in ore.pieces:
+		if not ore_bodies.has(piece_id):
+			create_ore_body(piece_id, false, MINE_OUTPUT)
 	for piece_id in ore_bodies:
 		var body: RigidBody2D = ore_bodies[piece_id]
 		var loose: bool = ore.is_loose(piece_id)
@@ -379,6 +399,8 @@ func reset_ore(simulate: bool) -> void:
 	hit_cooldowns.clear()
 	ore = ORE_STATE.new()
 	forge = FORGE_STATE.new()
+	mining = MINING_STATE.new()
+	refresh_mining()
 	orders = CUSTOMER_STATE.new()
 	refresh_orders()
 	anvil = FORGE_STATE.new()
@@ -387,14 +409,7 @@ func reset_ore(simulate: bool) -> void:
 	work_held.clear()
 	refresh_forge()
 	for id in ore.pieces:
-		var body: RigidBody2D = ORE_BODY.instantiate()
-		body.name = "Ore_%s" % id
-		world.add_child(body)
-		body.global_position = world.to_global(Vector2(210 + id * 8, 281 - (id % 2) * 3))
-		body.freeze = not simulate
-		body.collision_layer = 4 if simulate else 0
-		body.collision_mask = 13 if simulate else 0
-		ore_bodies[id] = body
+		create_ore_body(id, simulate, Vector2(210 + id * 8, 281 - (id % 2) * 3))
 	refresh_ore()
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -570,3 +585,45 @@ func refresh_orders() -> void:
 		elif orders.phase == "leaving":
 			request = "Order completed! +10 coins"
 		order_label.text = "%s\nCoins: %s · Orders served: %s" % [request, orders.coins, orders.completed]
+
+func create_ore_body(id: int, simulate: bool, at: Vector2) -> RigidBody2D:
+	var body: RigidBody2D = ORE_BODY.instantiate()
+	body.name = "Ore_%s" % id
+	world.add_child(body)
+	body.global_position = world.to_global(at)
+	body.freeze = not simulate
+	body.collision_layer = 4 if simulate else 0
+	body.collision_mask = 13 if simulate else 0
+	ore_bodies[id] = body
+	return body
+
+func near_mine(dwarf: CharacterBody2D) -> bool:
+	return absf(dwarf.position.x - MINE_POSITION.x) <= 20 and absf(dwarf.position.y - MINE_POSITION.y) <= 6
+
+func step_mining(delta: float) -> void:
+	var eligible: Array[int] = []
+	for id in players:
+		var dwarf = players[id]
+		if work_held.get(id, false) and near_mine(dwarf) and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
+			eligible.append(id)
+	eligible.sort()
+	if mining.step(delta, eligible):
+		var piece_id: int = ore.add_mined_ore()
+		var body := create_ore_body(piece_id, true, MINE_OUTPUT)
+		position_ore(body, MINE_OUTPUT, Vector2(0, 20))
+		receive_ore.rpc(ore.snapshot())
+		receive_ore_motion.rpc(ore_motion())
+		receive_mining.rpc(mining.snapshot())
+	refresh_mining()
+
+@rpc("authority", "call_remote", "reliable")
+func receive_mining(state: Dictionary) -> void:
+	mining.restore(state)
+	refresh_mining()
+
+func refresh_mining() -> void:
+	mining_station.get_node("Progress").value = mining.progress
+	var text := "HOLD E: MINE · 3s"
+	if mining.progress > 0:
+		text = "%s %.1f/3s" % ["MINING" if mining.worker != 0 else "PAUSED", mining.progress]
+	mining_station.get_node("WorkLabel").text = text

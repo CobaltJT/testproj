@@ -1,0 +1,21 @@
+[gd_scene load_steps=2 format=3]
+[ext_resource type="Texture2D" path="res://assets/textures/ore_vein.svg" id="1"]
+[node name="MiningStation" type="Node2D"]
+[node name="Vein" type="Sprite2D" parent="."]
+position = Vector2(410, 276)
+texture_filter = 1
+texture = ExtResource("1")
+[node name="WorkLabel" type="Label" parent="."]
+offset_left = 337.0
+offset_top = 230.0
+theme_override_font_sizes/font_size = 7
+text = "HOLD E: MINE · 3s"
+mouse_filter = 2
+[node name="Progress" type="ProgressBar" parent="."]
+offset_left = 375.0
+offset_top = 240.0
+offset_right = 423.0
+offset_bottom = 246.0
+max_value = 3.0
+show_percentage = false
+mouse_filter = 2

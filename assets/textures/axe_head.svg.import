@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://1e1u15y7kvoa"
-path="res://.godot/imported/hammer.svg-1cd4f9d90682a8845e9bdf64f2e81017.ctex"
+uid="uid://rsc5r1q7400u"
+path="res://.godot/imported/axe_head.svg-fe9bdd51dc4d53721427a1c05b91aa44.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/textures/hammer.svg"
-dest_files=["res://.godot/imported/hammer.svg-1cd4f9d90682a8845e9bdf64f2e81017.ctex"]
+source_file="res://assets/textures/axe_head.svg"
+dest_files=["res://.godot/imported/axe_head.svg-fe9bdd51dc4d53721427a1c05b91aa44.ctex"]
 
 [params]
 

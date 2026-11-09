@@ -1,25 +1,29 @@
 extends SceneTree
-const STATE = preload("res://scripts/ore_state.gd")
+const MATERIALS = preload("res://scripts/ore_state.gd")
 var failures := 0
 func check(ok: bool, message: String) -> void:
-	if ok:
-		print("PASS ore: ", message)
+	if ok: print("PASS materials: ", message)
 	else:
 		failures += 1
 		push_error(message)
-
 func _initialize() -> void:
-	var ore = STATE.new()
-	check(ore.pickup(1, 0) and not ore.pickup(1, 1), "Carry at most one identified piece")
-	check(not ore.pickup(2, 0), "Only one contender can pick up a piece")
-	check(not ore.store(0), "Carried ore cannot be deposited by interaction")
-	check(ore.release_carrier(1) == 0 and ore.release_carrier(1) == -1, "Release a carried piece exactly once")
-	check(ore.store(0) and not ore.store(0) and not ore.pickup(3, 0), "Bin captures a loose piece exactly once")
-	ore.pickup(4, 1)
-	var copy = STATE.new()
-	copy.restore(ore.snapshot())
-	ore.release_carrier(4)
-	check(copy.carried_by(4) == 1 and copy.deposited == 1, "Snapshot preserves identity without aliasing")
-	check(ore.available + ore.deposited + ore.carriers.size() == 8, "Loose, carried and stored pieces conserve total")
-	print("ORE RESULT: ", failures, " failures")
+	var materials = MATERIALS.new()
+	check(materials.pickup(1, 0) and not materials.pickup(1, 1), "Hands carry at most one item")
+	check(not materials.pickup(2, 0), "Contending players cannot own the same piece")
+	check(materials.release_carrier(1) == 0 and materials.release_carrier(1) == -1, "Drop releases identity exactly once")
+	materials.pieces[0].processing = true
+	check(not materials.pickup(2, 0), "Reserved station input cannot be picked up")
+	materials.pieces[0].processing = false
+	materials.pieces[0].consumed = true
+	check(not materials.pickup(2, 0), "Consumed ingredient cannot be reused")
+	materials.pieces[1].delivered = true
+	check(not materials.pickup(2, 1), "Delivered product cannot be reused")
+	materials.pickup(4, 2)
+	var copy = MATERIALS.new()
+	copy.restore(materials.snapshot())
+	materials.release_carrier(4)
+	check(copy.carried_by(4) == 2 and copy.pieces[0].consumed, "Snapshot copies ownership and material states independently")
+	var id: int = copy.add_mined_ore()
+	check(id == 8 and copy.is_loose(id), "New material IDs do not overlap initial pieces")
+	print("MATERIALS RESULT: ", failures, " failures")
 	quit(1 if failures else 0)

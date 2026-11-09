@@ -13,15 +13,10 @@ godot --headless --path . --quit-after 10
 godot --headless --path . --script res://tests/movement.gd
 godot --headless --path . --script res://tests/ore.gd
 godot --headless --path . --script res://tests/ore_physics.gd
-godot --headless --path . --script res://tests/forge.gd
-godot --headless --path . --script res://tests/forge_physics.gd
-godot --headless --path . --script res://tests/anvil.gd
-godot --headless --path . --script res://tests/anvil_physics.gd
+godot --headless --path . --script res://tests/workshop.gd
+godot --headless --path . --script res://tests/build_physics.gd
 godot --headless --path . --script res://tests/customers.gd
 godot --headless --path . --script res://tests/customers_physics.gd
 godot --headless --path . --script res://tests/mining.gd
 godot --headless --path . --script res://tests/mining_physics.gd
-godot --headless --path . --script res://tests/economy.gd
-godot --headless --path . --script res://tests/market_physics.gd
 python3 tools/check_multiplayer.py
-python3 tools/check_multiplayer.py res://tests/market_multiplayer.gd

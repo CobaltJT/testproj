@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d1no3vtethop0"
-path="res://.godot/imported/output_tray.svg-a64c5cedfb4e7d937880ac06ed390d39.ctex"
+uid="uid://d2l7och47kfx1"
+path="res://.godot/imported/station_anvil.svg-41bba5f5ecf5045430c51b0aa5c13c3f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/textures/output_tray.svg"
-dest_files=["res://.godot/imported/output_tray.svg-a64c5cedfb4e7d937880ac06ed390d39.ctex"]
+source_file="res://assets/textures/station_anvil.svg"
+dest_files=["res://.godot/imported/station_anvil.svg-41bba5f5ecf5045430c51b0aa5c13c3f.ctex"]
 
 [params]
 

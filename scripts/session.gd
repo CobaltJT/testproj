@@ -1,5 +1,14 @@
 extends Node
 ## ENet LAN session. Only the host simulates physics; clients send controls.
+const WORKSHOP_STATE = preload("res://scripts/workshop_state.gd")
+const STATION_JOB = preload("res://scripts/station_job.gd")
+const STATION_SCENE = preload("res://scenes/workstation.tscn")
+const STATION_VIEW = preload("res://scripts/station_view.gd")
+var workshop = WORKSHOP_STATE.new()
+var station_nodes: Dictionary = {}
+var build_ghost: Sprite2D
+var catalog: PanelContainer
+var build_button: Button
 const MERCHANT_STATE = preload("res://scripts/merchant_state.gd")
 var merchant = MERCHANT_STATE.new()
 var merchant_node: Node2D
@@ -7,9 +16,13 @@ var merchant_label: Label
 var customer_nodes: Dictionary = {}
 var recipe_label: Label
 const EXTRA_TEXTURES = {
+	"horseshoe": preload("res://assets/textures/horseshoe.svg"),
 	"sword": preload("res://assets/textures/sword.svg"),
 	"axe": preload("res://assets/textures/axe.svg"),
-	"wood": preload("res://assets/textures/wood.svg")
+	"wood": preload("res://assets/textures/wood.svg"),
+	"dull_sword": preload("res://assets/textures/dull_sword.svg"),
+	"axe_head": preload("res://assets/textures/axe_head.svg"),
+	"shaft": preload("res://assets/textures/shaft.svg")
 }
 const MINING_STATE = preload("res://scripts/mining_state.gd")
 const MINE_POSITION := Vector2(390, 288)
@@ -23,24 +36,12 @@ const PLAYER = preload("res://scenes/player.tscn")
 const WORLD = preload("res://scenes/smithy.tscn")
 const ORE_STATE = preload("res://scripts/ore_state.gd")
 const ORE_BODY = preload("res://scenes/ore_piece.tscn")
-const FORGE_STATE = preload("res://scripts/forge_state.gd")
 const ORE_TEXTURE = preload("res://assets/textures/ore.svg")
-const INGOT_TEXTURE = preload("res://assets/textures/ingot.svg")
-const HAMMER_TEXTURE = preload("res://assets/textures/hammer.svg")
-const ANVIL_POSITION := Vector2(260, 216)
-const TOOL_OUTPUT := Vector2(282, 197)
-var anvil = FORGE_STATE.new()
-var anvil_station: Node2D
-const FORGE_POSITION := Vector2(393, 216)
-const OUTPUT_POSITION := Vector2(342, 197)
-var forge = FORGE_STATE.new()
-var forge_station: Node2D
 var work_held: Dictionary = {}
 var ore = ORE_STATE.new()
 var ore_bodies: Dictionary = {}
 var throw_grace: Dictionary = {}
 var hit_cooldowns: Dictionary = {}
-var stations: Node2D
 var hint: Label
 var last_interaction: Dictionary = {}
 const PORT := 24567
@@ -59,12 +60,6 @@ func _ready() -> void:
 	world = WORLD.instantiate()
 	add_child(world)
 	world.get_node("Player").free()
-	stations = preload("res://scenes/ore_stations.tscn").instantiate()
-	world.add_child(stations)
-	forge_station = preload("res://scenes/forge_station.tscn").instantiate()
-	world.add_child(forge_station)
-	anvil_station = preload("res://scenes/anvil_station.tscn").instantiate()
-	world.add_child(anvil_station)
 	mining_station = preload("res://scenes/mining_station.tscn").instantiate()
 	world.add_child(mining_station)
 	merchant_node = preload("res://scenes/merchant.tscn").instantiate()
@@ -93,7 +88,8 @@ func _ready() -> void:
 	layer.add_child(recipe_label)
 	refresh_orders()
 	refresh_merchant()
-	refresh_anvil()
+	init_build_ui(layer)
+	refresh_workshop()
 	var column := VBoxContainer.new()
 	panel.add_child(column)
 	status = Label.new()
@@ -180,8 +176,7 @@ func client_ready() -> void:
 	broadcast_state("spawn_player", [id, Vector2(210 + (players.size() % 6) * 22, 216)], true)
 	receive_ore.rpc_id(id, ore.snapshot())
 	receive_ore_motion.rpc_id(id, ore_motion())
-	receive_forge.rpc_id(id, forge.snapshot())
-	receive_anvil.rpc_id(id, anvil.snapshot())
+	receive_workshop.rpc_id(id, workshop.snapshot())
 	receive_orders.rpc_id(id, orders.snapshot())
 	receive_mining.rpc_id(id, mining.snapshot())
 	receive_merchant.rpc_id(id, merchant.snapshot())
@@ -213,12 +208,25 @@ func spawn_player(id: int, at: Vector2) -> void:
 func _physics_process(delta: float) -> void:
 	if not active or not players.has(multiplayer.get_unique_id()):
 		return
-	for choice in FORGE_STATE.RECIPES:
+	for choice in STATION_JOB.ANVIL_RECIPES:
 		if Input.is_action_just_pressed("recipe_" + choice):
 			if multiplayer.is_server():
 				choose_recipe(1, choice)
 			else:
 				request_recipe.rpc_id(1, choice)
+	if Input.is_action_just_pressed("build_menu"):
+		catalog.visible = not catalog.visible
+	if Input.is_action_just_pressed("cancel_build"):
+		catalog.hide()
+		if multiplayer.is_server():
+			cancel_build_for(1)
+		else:
+			request_cancel_build.rpc_id(1)
+	if Input.is_action_just_pressed("pack_station"):
+		if multiplayer.is_server():
+			pack_for(1)
+		else:
+			request_pack.rpc_id(1)
 	if Input.is_action_just_pressed("buy_wood"):
 		if multiplayer.is_server():
 			buy_wood_for(1)
@@ -246,11 +254,11 @@ func _physics_process(delta: float) -> void:
 			if Time.get_ticks_msec() - last_input[id] > 500 and players.has(id):
 				apply_controls(id, Vector2.ZERO, false, false)
 				work_held[id] = false
-		step_forge(delta)
-		step_anvil(delta)
+		step_workstations(delta)
 		step_mining(delta)
-		orders.step(delta)
-		merchant.step(delta)
+		if workshop.opened:
+			orders.step(delta)
+			merchant.step(delta)
 		refresh_orders()
 		refresh_merchant()
 		tick += 1
@@ -261,8 +269,7 @@ func _physics_process(delta: float) -> void:
 				state.append([id, dwarf.position, dwarf.velocity, dwarf.climbing, dwarf.sprite.flip_h])
 			broadcast_state("receive_state", [state], false)
 			broadcast_state("receive_ore_motion", [ore_motion()], false)
-			broadcast_state("receive_forge", [forge.snapshot()], false)
-			broadcast_state("receive_anvil", [anvil.snapshot()], false)
+			broadcast_state("receive_workshop", [workshop.snapshot()], false)
 			broadcast_state("receive_orders", [orders.snapshot()], false)
 			broadcast_state("receive_mining", [mining.snapshot()], false)
 			broadcast_state("receive_merchant", [merchant.snapshot()], false)
@@ -297,6 +304,11 @@ func receive_state(state: Array) -> void:
 
 func peer_left(id: int) -> void:
 	if multiplayer.is_server():
+		workshop.cancel(id, orders)
+		sync_build()
+		workshop.cancel(id, orders)
+		broadcast_state("receive_workshop", [workshop.snapshot()])
+		broadcast_state("receive_orders", [orders.snapshot()])
 		release_ore(id, true)
 		broadcast_state("remove_player", [id], true)
 		broadcast_state("receive_ore", [ore.snapshot()], true)
@@ -334,67 +346,6 @@ func request_interaction() -> void:
 	if multiplayer.is_server():
 		interact_for(multiplayer.get_remote_sender_id())
 
-func interact_for(id: int) -> void:
-	if not multiplayer.is_server() or not players.has(id):
-		return
-	# Position and inventory come from host state, never from a client request.
-	var now := Time.get_ticks_msec()
-	if now - last_interaction.get(id, -1000) < 150:
-		return
-	last_interaction[id] = now
-	if near_mine(players[id]):
-		var mine_hint := "Hold E with empty hands to mine ore (3 seconds)."
-		if id == 1:
-			interaction_feedback(mine_hint)
-		else:
-			interaction_feedback.rpc_id(id, mine_hint)
-		return
-	if absf(players[id].position.x - 166) <= 30 and absf(players[id].position.y - 216) <= 6 and not orders.queue.is_empty() and ore.carried_by(id) != -1:
-		var requested: String = orders.queue[0].kind
-		var sold: bool = orders.deliver(id, players[id].position, ore)
-		broadcast_state("receive_ore", [ore.snapshot()], true)
-		broadcast_state("receive_orders", [orders.snapshot()], false)
-		var reply := "%s delivered! +%s coins, +1 reputation." % [requested.capitalize(), CUSTOMER_STATE.PRICES[requested]] if sold else "Front customer wants a %s. Later orders cannot be served first." % requested
-		if id == 1:
-			interaction_feedback(reply)
-		else:
-			interaction_feedback.rpc_id(id, reply)
-		return
-	if near_anvil(players[id]) and ore.carried_by(id) != -1:
-		var loaded: bool = anvil.load_material(id, ore)
-		broadcast_state("receive_ore", [ore.snapshot()], true)
-		broadcast_state("receive_anvil", [anvil.snapshot()], false)
-		var feedback := "Loaded. %s recipe: hold E once all ingredients are present." % anvil.recipe.capitalize() if loaded else "This recipe needs %s; loaded ingredients cannot be replaced." % ("one ingot and one wood" if anvil.recipe == "axe" else "one ingot")
-		if id == 1:
-			interaction_feedback(feedback)
-		else:
-			interaction_feedback.rpc_id(id, feedback)
-		return
-	var message := "E: pick up · F: throw · Q: drop · Hold E at a station: work"
-	if near_forge(players[id]):
-		message = "Hold E with empty hands to forge an ingot (5 seconds)."
-	elif near_anvil(players[id]):
-		message = "Hold E to work (5 seconds). Load both ingredients for an axe." if anvil.piece != -1 or anvil.wood_piece != -1 else "Choose 1: hammer, 2: sword, 3: axe. E loads an ingredient."
-	if id in ore.carriers:
-		message = "F: throw · Q: drop · E at anvil: load an ingot"
-	elif not near_forge(players[id]) and not (near_anvil(players[id]) and (anvil.piece != -1 or anvil.wood_piece != -1)):
-		var nearest := -1
-		var distance := 24.0
-		for piece_id in ore_bodies:
-			if not ore.is_loose(piece_id):
-				continue
-			var offset: Vector2 = world.to_local(ore_bodies[piece_id].global_position) - (players[id].position - Vector2(0, 8))
-			if absf(offset.y) <= 18 and offset.length() < distance:
-				distance = offset.length()
-				nearest = piece_id
-		if nearest != -1 and ore.pickup(id, nearest):
-			message = "Picked up %s. F: throw · Q: drop" % ore.pieces[nearest].kind
-
-	broadcast_state("receive_ore", [ore.snapshot()], true)
-	if id == 1:
-		interaction_feedback(message)
-	else:
-		interaction_feedback.rpc_id(id, message)
 
 @rpc("authority", "call_local", "reliable")
 func receive_ore(state: Dictionary) -> void:
@@ -405,50 +356,7 @@ func receive_ore(state: Dictionary) -> void:
 func interaction_feedback(message: String) -> void:
 	hint.text = message
 
-func refresh_ore() -> void:
-	refresh_forge()
-	refresh_anvil()
-	stations.get_node("SupplyLabel").text = "E: PICK UP · LOOSE: %s" % ore.available
-	stations.get_node("BinLabel").text = "THROW IN: %s" % ore.deposited
-	for piece_id in ore.pieces:
-		if not ore_bodies.has(piece_id):
-			create_ore_body(piece_id, false, MINE_OUTPUT)
-	for piece_id in ore_bodies:
-		var body: RigidBody2D = ore_bodies[piece_id]
-		var loose: bool = ore.is_loose(piece_id)
-		body.get_node("Sprite2D").texture = material_texture(ore.pieces[piece_id].kind)
-		body.visible = loose
-		body.freeze = not loose or not (active and multiplayer.is_server())
-		body.collision_layer = 4 if loose and multiplayer.is_server() else 0
-		body.collision_mask = 13 if loose and multiplayer.is_server() else 0
-	for id in players:
-		var carried: int = ore.carried_by(id)
-		players[id].get_node("CarriedOre").visible = carried != -1
-		if carried != -1:
-			players[id].get_node("CarriedOre").texture = material_texture(ore.pieces[carried].kind)
 
-func reset_ore(simulate: bool) -> void:
-	for body in ore_bodies.values():
-		body.free()
-	ore_bodies.clear()
-	throw_grace.clear()
-	hit_cooldowns.clear()
-	ore = ORE_STATE.new()
-	forge = FORGE_STATE.new()
-	mining = MINING_STATE.new()
-	refresh_mining()
-	orders = CUSTOMER_STATE.new()
-	merchant = MERCHANT_STATE.new()
-	refresh_orders()
-	refresh_merchant()
-	anvil = FORGE_STATE.new()
-	anvil.output_kind = "hammer"
-	refresh_anvil()
-	work_held.clear()
-	refresh_forge()
-	for id in ore.pieces:
-		create_ore_body(id, simulate, Vector2(210 + id * 8, 281 - (id % 2) * 3))
-	refresh_ore()
 
 @rpc("any_peer", "call_remote", "reliable")
 func request_throw(drop: bool) -> void:
@@ -491,15 +399,10 @@ func receive_ore_motion(state: Array) -> void:
 			body.linear_velocity = item[3]
 
 func step_ore() -> void:
-	var changed := false
-	var catch_area: Area2D = stations.get_node("BinCatch")
 	for piece_id in ore_bodies:
 		if not ore.is_loose(piece_id):
 			continue
 		var body: RigidBody2D = ore_bodies[piece_id]
-		if catch_area.overlaps_body(body) and body.linear_velocity.y >= 0:
-			changed = ore.store(piece_id) or changed
-			continue
 		if body.linear_velocity.length() < 110:
 			continue
 		for id in players:
@@ -513,8 +416,6 @@ func step_ore() -> void:
 				hit_cooldowns[Vector2i(piece_id, id)] = now + 400
 				body.linear_velocity = Vector2(-body.linear_velocity.x * 0.4, -70)
 				break
-	if changed:
-		broadcast_state("receive_ore", [ore.snapshot()], true)
 
 func position_ore(body: RigidBody2D, at: Vector2, motion: Vector2) -> void:
 	body.freeze = false
@@ -526,89 +427,10 @@ func position_ore(body: RigidBody2D, at: Vector2, motion: Vector2) -> void:
 	PhysicsServer2D.body_set_state(body.get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM, body.global_transform)
 	PhysicsServer2D.body_set_state(body.get_rid(), PhysicsServer2D.BODY_STATE_LINEAR_VELOCITY, motion)
 
-func near_forge(dwarf: CharacterBody2D) -> bool:
-	return absf(dwarf.position.x - FORGE_POSITION.x) <= 23 and absf(dwarf.position.y - FORGE_POSITION.y) <= 6
 
-func step_forge(delta: float) -> void:
-	var eligible: Array[int] = []
-	for id in players:
-		var dwarf = players[id]
-		if work_held.get(id, false) and near_forge(dwarf) and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
-			eligible.append(id)
-	eligible.sort()
-	var result: Dictionary = forge.step(delta, eligible, ore)
-	if result.finished != -1:
-		var body: RigidBody2D = ore_bodies[result.finished]
-		position_ore(body, OUTPUT_POSITION, Vector2(0, 20))
-		body.angular_velocity = 0
-	if result.started != -1 or result.finished != -1:
-		broadcast_state("receive_ore", [ore.snapshot()], true)
-		broadcast_state("receive_ore_motion", [ore_motion()], false)
-		broadcast_state("receive_forge", [forge.snapshot()], false)
-	refresh_forge()
 
-@rpc("authority", "call_remote", "reliable")
-func receive_forge(state: Dictionary) -> void:
-	forge.restore(state)
-	refresh_forge()
 
-func refresh_forge() -> void:
-	forge_station.get_node("Progress").value = forge.progress
-	var text := "HOLD E · 5s"
-	if forge.piece != -1:
-		text = "%s %.1f/5s" % ["WORK" if forge.worker != 0 else "PAUSED", forge.progress]
-	elif ore.deposited == 0:
-		text = "NEED ORE"
-	forge_station.get_node("WorkLabel").text = text
 
-func material_texture(kind: String) -> Texture2D:
-	if EXTRA_TEXTURES.has(kind):
-		return EXTRA_TEXTURES[kind]
-	if kind == "hammer":
-		return HAMMER_TEXTURE
-	return INGOT_TEXTURE if kind == "ingot" else ORE_TEXTURE
-
-func near_anvil(dwarf: CharacterBody2D) -> bool:
-	return absf(dwarf.position.x - ANVIL_POSITION.x) <= 20 and absf(dwarf.position.y - ANVIL_POSITION.y) <= 6
-
-func step_anvil(delta: float) -> void:
-	var eligible: Array[int] = []
-	for id in players:
-		var dwarf = players[id]
-		if work_held.get(id, false) and near_anvil(dwarf) and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
-			eligible.append(id)
-	eligible.sort()
-	var result: Dictionary = anvil.step(delta, eligible, ore)
-	if result.finished != -1:
-		var body: RigidBody2D = ore_bodies[result.finished]
-		position_ore(body, TOOL_OUTPUT, Vector2(0, 20))
-		body.angular_velocity = 0
-		broadcast_state("receive_ore", [ore.snapshot()], true)
-		broadcast_state("receive_ore_motion", [ore_motion()], false)
-		broadcast_state("receive_anvil", [anvil.snapshot()], false)
-	refresh_anvil()
-
-@rpc("authority", "call_remote", "reliable")
-func receive_anvil(state: Dictionary) -> void:
-	anvil.restore(state)
-	refresh_anvil()
-
-func refresh_anvil() -> void:
-	anvil_station.get_node("Progress").value = anvil.progress
-	var text: String = anvil.recipe.to_upper()
-	if anvil.piece != -1 or anvil.wood_piece != -1:
-		if anvil.piece == -1:
-			text += " · NEED INGOT"
-		elif anvil.recipe == "axe" and anvil.wood_piece == -1:
-			text += " · NEED WOOD"
-		else:
-			text += " · %s %.1f/5s" % ["WORK" if anvil.worker != 0 else "PAUSED", anvil.progress]
-	else:
-		text += " · E: LOAD"
-	anvil_station.get_node("WorkLabel").text = text
-	if recipe_label != null:
-		recipe_label.visible = active
-		recipe_label.text = "Anvil: 1 Hammer (ingot) · 2 Sword (ingot) · 3 Axe (ingot + wood) · Selected: %s" % anvil.recipe
 
 @rpc("authority", "call_remote", "reliable")
 func receive_orders(state: Dictionary) -> void:
@@ -637,7 +459,7 @@ func refresh_orders() -> void:
 		for i in range(orders.queue.size()):
 			var order: Dictionary = orders.queue[i]
 			text += "\n%s #%s: %s · %ss · %sg" % ["FRONT" if i == 0 else "QUEUED", order.id, order.kind.capitalize(), ceili(order.remaining), CUSTOMER_STATE.PRICES[order.kind]]
-		text += "\nNext arrival: %ss · E at counter serves FRONT only" % ceili(orders.until_arrival)
+		text += "\nNext arrival: %ss · E serves FRONT only" % ceili(orders.until_arrival) if workshop.opened else "\nPlace an anvil to open the workshop. Tab: build catalog"
 		order_label.text = text
 
 func show_customer(id: int, at: Vector2, request: String, leaving: bool) -> void:
@@ -669,7 +491,7 @@ func step_mining(delta: float) -> void:
 	var eligible: Array[int] = []
 	for id in players:
 		var dwarf = players[id]
-		if work_held.get(id, false) and near_mine(dwarf) and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
+		if not workshop.pending.has(id) and work_held.get(id, false) and near_mine(dwarf) and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
 			eligible.append(id)
 	eligible.sort()
 	if mining.step(delta, eligible):
@@ -698,12 +520,6 @@ func request_recipe(choice: String) -> void:
 	if multiplayer.is_server():
 		choose_recipe(multiplayer.get_remote_sender_id(), choice)
 
-func choose_recipe(id: int, choice: String) -> void:
-	if not multiplayer.is_server() or not players.has(id) or not near_anvil(players[id]):
-		return
-	if anvil.select_recipe(choice):
-		broadcast_state("receive_anvil", [anvil.snapshot()], false)
-		refresh_anvil()
 
 @rpc("any_peer", "call_remote", "reliable")
 func request_wood() -> void:
@@ -753,3 +569,259 @@ func broadcast_state(method: String, arguments: Array, apply_local: bool = false
 		var peer: ENetPacketPeer = transport.get_peer(id)
 		if peer != null and peer.get_state() == ENetPacketPeer.STATE_CONNECTED and peer.get_channels() > 0:
 			callv("rpc_id", [id, method] + arguments)
+
+func material_texture(kind: String) -> Texture2D:
+	return EXTRA_TEXTURES.get(kind, ORE_TEXTURE)
+
+func interact_for(id: int) -> void:
+	if not multiplayer.is_server() or not players.has(id) or workshop.pending.has(id):
+		return
+	var now := Time.get_ticks_msec()
+	if now - last_interaction.get(id, -1000) < 150:
+		return
+	last_interaction[id] = now
+	var dwarf = players[id]
+	var carried: int = ore.carried_by(id)
+	var message := "E: pick up/load · Hold E: work · Tab: build · R: pack idle station"
+	if near_mine(dwarf):
+		message = "Hold E with empty hands to mine ore (3 seconds)."
+	elif absf(dwarf.position.x - 166) <= 30 and absf(dwarf.position.y - 216) <= 6 and not orders.queue.is_empty() and carried != -1:
+		var product: String = orders.queue[0].kind
+		var sold: bool = orders.deliver(id, dwarf.position, ore)
+		message = "%s delivered! +%s coins, +1 reputation." % [product.capitalize(), CUSTOMER_STATE.PRICES[product]] if sold else "Front customer needs a %s." % product
+		broadcast_state("receive_orders", [orders.snapshot()])
+		refresh_orders()
+	else:
+		var station_id: int = workshop.nearest(dwarf.position)
+		if carried != -1 and station_id != -1:
+			var job = workshop.stations[station_id].job
+			message = "Ingredient loaded. Hold E with empty hands to work." if job.load_material(id, ore) else "Wrong or duplicate ingredient for this station recipe."
+			broadcast_state("receive_workshop", [workshop.snapshot()])
+			refresh_workshop()
+		elif carried == -1 and (station_id == -1 or workshop.stations[station_id].job.slots.is_empty()):
+			var nearest := -1
+			var distance := 24.0
+			for piece_id in ore_bodies:
+				if not ore.is_loose(piece_id):
+					continue
+				var offset: Vector2 = world.to_local(ore_bodies[piece_id].global_position) - (dwarf.position - Vector2(0, 8))
+				if absf(offset.y) <= 18 and offset.length() < distance:
+					distance = offset.length()
+					nearest = piece_id
+			if nearest != -1 and ore.pickup(id, nearest):
+				message = "Picked up %s. F: throw · Q: drop" % ore.pieces[nearest].kind.replace("_", " ")
+	broadcast_state("receive_ore", [ore.snapshot()], true)
+	feedback_for(id, message)
+
+func feedback_for(id: int, message: String) -> void:
+	if id == 1:
+		interaction_feedback(message)
+	else:
+		interaction_feedback.rpc_id(id, message)
+
+func refresh_ore() -> void:
+	for piece_id in ore.pieces:
+		if not ore_bodies.has(piece_id):
+			create_ore_body(piece_id, false, MINE_OUTPUT)
+	for piece_id in ore_bodies:
+		var body: RigidBody2D = ore_bodies[piece_id]
+		var loose: bool = ore.is_loose(piece_id)
+		body.get_node("Sprite2D").texture = material_texture(ore.pieces[piece_id].kind)
+		body.visible = loose
+		body.freeze = not loose or not (active and multiplayer.is_server())
+		body.collision_layer = 4 if loose and multiplayer.is_server() else 0
+		body.collision_mask = 13 if loose and multiplayer.is_server() else 0
+	for id in players:
+		var carried: int = ore.carried_by(id)
+		players[id].get_node("CarriedOre").visible = carried != -1
+		if carried != -1:
+			players[id].get_node("CarriedOre").texture = material_texture(ore.pieces[carried].kind)
+
+func reset_ore(simulate: bool) -> void:
+	for body in ore_bodies.values():
+		body.free()
+	ore_bodies.clear()
+	throw_grace.clear()
+	hit_cooldowns.clear()
+	ore = ORE_STATE.new()
+	workshop = WORKSHOP_STATE.new()
+	refresh_workshop()
+	mining = MINING_STATE.new()
+	refresh_mining()
+	orders = CUSTOMER_STATE.new()
+	merchant = MERCHANT_STATE.new()
+	refresh_orders()
+	refresh_merchant()
+	work_held.clear()
+	for id in ore.pieces:
+		create_ore_body(id, simulate, Vector2(210 + id * 8, 281 - (id % 2) * 3))
+	refresh_ore()
+
+func choose_recipe(id: int, choice: String) -> void:
+	if not multiplayer.is_server() or not players.has(id):
+		return
+	var station_id: int = workshop.nearest(players[id].position)
+	if station_id != -1 and workshop.stations[station_id].job.select(choice):
+		broadcast_state("receive_workshop", [workshop.snapshot()])
+		refresh_workshop()
+
+func step_workstations(delta: float) -> void:
+	var changed := false
+	for station_id in workshop.stations:
+		var entry: Dictionary = workshop.stations[station_id]
+		var eligible: Array[int] = []
+		for id in players:
+			var dwarf = players[id]
+			if work_held.get(id, false) and workshop.nearest(dwarf.position) == station_id and not workshop.pending.has(id) and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
+				eligible.append(id)
+		eligible.sort()
+		var output: int = entry.job.step(delta, eligible, ore)
+		if output != -1:
+			position_ore(ore_bodies[output], entry.at + Vector2(28, -18), Vector2(0, 20))
+			ore_bodies[output].angular_velocity = 0
+			changed = true
+	if changed:
+		broadcast_state("receive_ore", [ore.snapshot()], true)
+		broadcast_state("receive_ore_motion", [ore_motion()])
+		broadcast_state("receive_workshop", [workshop.snapshot()])
+	refresh_workshop()
+
+@rpc("authority", "call_remote", "reliable")
+func receive_workshop(state: Dictionary) -> void:
+	workshop.restore(state)
+	refresh_workshop()
+
+func refresh_workshop() -> void:
+	for id in station_nodes.keys():
+		if not workshop.stations.has(id):
+			station_nodes[id].free()
+			station_nodes.erase(id)
+	for id in workshop.stations:
+		if not station_nodes.has(id):
+			var view: Node2D = STATION_SCENE.instantiate()
+			world.add_child(view)
+			station_nodes[id] = view
+		station_nodes[id].update_view(workshop.stations[id])
+	if recipe_label != null:
+		recipe_label.visible = active
+		recipe_label.text = "Tab: buy/place · R: pack idle station · Anvil: 1 Horseshoe  2 Blade  3 Axe head  4 Assemble axe"
+	if build_button != null:
+		build_button.visible = active
+
+func init_build_ui(layer: CanvasLayer) -> void:
+	build_ghost = Sprite2D.new()
+	build_ghost.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	world.add_child(build_ghost)
+	build_ghost.hide()
+	build_button = Button.new()
+	build_button.text = "Build [Tab]"
+	build_button.position = Vector2(820, 642)
+	build_button.pressed.connect(func(): catalog.visible = not catalog.visible)
+	build_button.focus_mode = Control.FOCUS_NONE
+	layer.add_child(build_button)
+	catalog = PanelContainer.new()
+	catalog.position = Vector2(600, 320)
+	layer.add_child(catalog)
+	var column := VBoxContainer.new()
+	catalog.add_child(column)
+	var title := Label.new()
+	title.text = "Buy a workstation (empty hands)"
+	column.add_child(title)
+	for kind in WORKSHOP_STATE.PRICES:
+		var button := Button.new()
+		button.text = "%s · %s coins" % [kind.capitalize(), WORKSHOP_STATE.PRICES[kind]]
+		button.focus_mode = Control.FOCUS_NONE
+		button.pressed.connect(func(): buy_station(kind))
+		column.add_child(button)
+	var help := Label.new()
+	help.text = "After buying: click a green floor preview.\nRed: blocked. Esc: cancel/refund kit.\nR beside an empty station: pack/move."
+	help.add_theme_font_size_override("font_size", 12)
+	column.add_child(help)
+	var close := Button.new()
+	close.text = "Close"
+	close.pressed.connect(func(): catalog.hide())
+	column.add_child(close)
+	catalog.hide()
+
+func _process(_delta: float) -> void:
+	if build_ghost == null:
+		return
+	var id := multiplayer.get_unique_id()
+	var carrying_kit: bool = active and workshop.pending.has(id)
+	build_ghost.visible = carrying_kit
+	if carrying_kit:
+		catalog.hide()
+		var at: Vector2 = workshop.snap(world.get_local_mouse_position())
+		build_ghost.position = at + Vector2(8, -16)
+		build_ghost.texture = STATION_VIEW.TEXTURES[workshop.pending[id].kind]
+		build_ghost.modulate = Color(0.4, 1, 0.5, 0.7) if workshop.can_place(at) else Color(1, 0.3, 0.3, 0.7)
+	if not active:
+		catalog.hide()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if active and build_ghost != null and build_ghost.visible and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		var at: Vector2 = workshop.snap(world.get_global_transform_with_canvas().affine_inverse() * event.position)
+		if multiplayer.is_server():
+			place_for(1, at)
+		else:
+			request_place.rpc_id(1, at)
+		get_viewport().set_input_as_handled()
+
+func buy_station(kind: String) -> void:
+	if multiplayer.is_server():
+		purchase_for(1, kind)
+	else:
+		request_station.rpc_id(1, kind)
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_station(kind: String) -> void:
+	if multiplayer.is_server():
+		purchase_for(multiplayer.get_remote_sender_id(), kind)
+
+func purchase_for(id: int, kind: String) -> void:
+	if not multiplayer.is_server() or not players.has(id):
+		return
+	if not workshop.purchase(id, kind, orders, ore):
+		feedback_for(id, "Cannot buy: check coins, empty hands, and any unplaced kit.")
+	sync_build()
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_place(at: Vector2) -> void:
+	if multiplayer.is_server():
+		place_for(multiplayer.get_remote_sender_id(), at)
+
+func place_for(id: int, at: Vector2) -> void:
+	if not multiplayer.is_server() or not players.has(id):
+		return
+	if workshop.place(id, at) == -1:
+		feedback_for(id, "Blocked placement: keep paths, fixed fixtures, and other stations clear.")
+	sync_build()
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_cancel_build() -> void:
+	if multiplayer.is_server():
+		cancel_build_for(multiplayer.get_remote_sender_id())
+
+func cancel_build_for(id: int) -> void:
+	if not multiplayer.is_server() or not players.has(id):
+		return
+	workshop.cancel(id, orders)
+	sync_build()
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_pack() -> void:
+	if multiplayer.is_server():
+		pack_for(multiplayer.get_remote_sender_id())
+
+func pack_for(id: int) -> void:
+	if not multiplayer.is_server() or not players.has(id):
+		return
+	if not workshop.pack(id, players[id].position, ore):
+		feedback_for(id, "Only empty, idle stations can be packed; keep your hands free.")
+	sync_build()
+
+func sync_build() -> void:
+	refresh_workshop()
+	refresh_orders()
+	broadcast_state("receive_workshop", [workshop.snapshot()])
+	broadcast_state("receive_orders", [orders.snapshot()])

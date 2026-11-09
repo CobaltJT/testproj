@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bd6ohejvldjx"
-path="res://.godot/imported/ore_bin.svg-3887f2e8c4fba39a90e7060c4cfd153b.ctex"
+uid="uid://dkql2vcdcilsa"
+path="res://.godot/imported/station_grinder.svg-611ce4e424ac0f66532f2816bd587caa.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/textures/ore_bin.svg"
-dest_files=["res://.godot/imported/ore_bin.svg-3887f2e8c4fba39a90e7060c4cfd153b.ctex"]
+source_file="res://assets/textures/station_grinder.svg"
+dest_files=["res://.godot/imported/station_grinder.svg-611ce4e424ac0f66532f2816bd587caa.ctex"]
 
 [params]
 

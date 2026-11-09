@@ -1,217 +1,134 @@
 # Hearth & Hammer
 
-A small side-view co-op game about dwarfs running a smithy.
+A small Godot 4.6.x / GDScript LAN co-op platformer about running a dwarven smithy.
+Open `project.godot` and press **F5**. One player hosts; others enter that player's
+LAN IP and use the same UDP port (default **24567**). Allow that port through the
+host's LAN firewall. `127.0.0.1` is for multiple instances on one computer.
 
-## Run this milestone
+## Build your workshop
 
-Open `project.godot` in **Godot 4.6.x (standard / GDScript)** and press **F5** to open the LAN menu. For a standalone single-player check,
-open `scenes/smithy.tscn` and press **F6**. No plugins or external assets
-are required. From a terminal: `godot --path .`.
+The starting building has **no workstations**. The mine, counter, ladders, door,
+walls, and floors are fixed. You start with **100 shared coins** and eight loose
+ore pieces in the basement.
 
-Stage 09 adds multiple products, trading, timed queues, and reputation to the building: upstairs workshop/storage, ground-floor
-customer counter and forge, and a basement with ore storage and a mine entrance.
-Ladders mark planned routes. The building is an original pixel-style image texture in
-`assets/textures/smithy.svg`, displayed by a Sprite2D with nearest filtering.
-Captions are separate Label nodes in the scene. Edit the SVG in an image/vector
-editor; there is no runtime drawing script. Walk with **A/D** or **Left/Right**, jump with **Space**, and climb with
-**W/S** or **Up/Down** while at a ladder. Release to hold on a ladder. Move horizontally or diagonally while attached;
-leaving the ladder width or pressing jump detaches. Upward movement stops at the
-top, where you can move sideways onto a landing. Attaching never centers the dwarf. After jumping off, holding a climb direction
-does not reattach until you land or release and press a climb direction again.
-Holding Up also catches the ladder at the peak of an upward jump if still in
-reach. Down + Space detaches into a fall without an upward jump.
-Floors, ceiling, and outer walls are solid. Furniture remains background scenery.
-The whole building stays visible; transport ore, then work the forge.
+Press **Tab** or click **Build** to open the catalog:
 
-## Throw ore into the forge bin
+| Station | Cost | Purpose |
+| --- | --- | --- |
+| Anvil | 20 | Shape ore; assemble axe heads and shafts |
+| Grinder | 25 | Sharpen unfinished swords |
+| Woodworking bench | 25 | Turn purchased wood into shafts |
 
-- The basement starts with **8 individual physics ore pieces**.
-- **E** picks up the nearest loose piece within reach; carry one at a time.
-- **F** throws in the dwarf's facing direction, with an upward arc.
-- **Q** gently drops the carried piece.
-- Aim throws into the open top of the ground-floor bin. A good starting position
-  is roughly 50 pixels left of the bin (on the 480-pixel world canvas), facing right.
-  **E no longer deposits ore.**
+Buy with empty hands, then move the mouse and **left-click a green preview** to
+place the kit on a floor. Placement snaps to an 8-pixel grid. Red previews mean
+blocked placement: fixed fixtures, storefront/merchant space, ladders and their
+landings, mine access, walls, floor gaps, and existing stations stay clear.
+You can place multiple stations of each type and use all three floors.
 
-Loose ore falls, bounces, and settles against floors, walls, other ore, and the
-bin. Missed throws remain in the world and can be picked up again. Fast-moving
-ore hits knock dwarfs back, including off ladders; the thrower gets a short grace
-period to avoid hitting themselves immediately. There is no health damage yet.
-The bin stores each piece once and updates the shared count.
+A purchase charges once and reserves one kit per player. Invalid placement keeps
+the kit. **Esc** cancels an unplaced kit for a full refund. Stand beside an empty
+station and press **R** to pack it, then place it elsewhere or press Esc to refund
+it. Loaded or working stations cannot be packed. Disconnecting refunds an
+unplaced kit; placed stations belong to the whole team and remain.
 
-The host owns physics, pickup decisions, impacts, and bin capture; clients receive
-ore transforms and inventories. Late joiners receive loose, carried, and stored
-ore state. Disconnecting drops carried ore at the dwarf's location. A new hosted
-game resets all materials and crafting progress. Mining replenishes ore during a session; persistence comes later.
+The first anvil placement opens the shop and starts customer and merchant clocks.
+Once open, the clocks keep running even while stations are being rearranged.
 
-## Forge an ingot (five seconds)
+## Produce goods
 
-1. Throw ore into the shared bin.
-2. Stand on the ground floor beside the forge at the right, with empty hands.
-3. **Hold E for five seconds of work**. The forge reserves one ore from the bin
-   when the job starts, and its shared progress bar fills.
-4. Release E, walk away, jump, climb, or get knocked back to pause. Any eligible
-   dwarf can continue the same job. Only one worker advances progress at a time;
-   extra players do not speed it up or consume extra ore.
-5. A physical ingot drops onto the small output tray to the left of the forge.
-   It can be picked up with E, carried, thrown with F, or dropped with Q.
+Metal is now worked **directly from ore**. There is no separate smelter, ingot
+step, or preinstalled ore bin. Carry each ingredient to a station and press **E**
+to load it, then **hold E with empty hands for five seconds** to work. Release,
+move away, jump, or get knocked back to pause; another dwarf can continue.
+Helpers never multiply work speed. Outputs drop onto each station's right tray.
 
-Holding E after completion starts another job if ore remains. Ingots do not count
-as raw ore and cannot be smelted again by throwing them into the ore bin. Paused
-jobs survive worker disconnects. Late joiners receive material kinds, progress,
-worker status, and output positions. The anvil makes finished products, and customers request specific items at the counter.
+At an empty anvil, select its shared recipe with keys **1–4**:
 
-## Produce hammers, swords, and axes
+| Key | Anvil recipe | Input → output |
+| --- | --- | --- |
+| 1 | Horseshoe | Ore → finished horseshoe |
+| 2 | Blade | Ore → unfinished sword |
+| 3 | Axe head | Ore → axe head |
+| 4 | Assemble axe | Axe head + worked shaft → finished axe |
 
-Stand at the central anvil and choose a shared recipe while the station is empty:
+- **Horseshoe:** needs only an anvil, replacing the old hammer recipe.
+- **Sword:** make a blade at an anvil, then load and work it at a grinder to sharpen it.
+- **Axe:** make a head at an anvil; make a shaft from wood at a woodworking bench;
+  load both at an anvil set to recipe 4 and work to assemble the axe.
 
-| Key | Product | Ingredients | Work | Sale price |
-| --- | --- | --- | --- | --- |
-| **1** | Hammer | 1 ingot | 5 seconds | 10 coins |
-| **2** | Sword | 1 ingot | 5 seconds | 15 coins |
-| **3** | Axe | 1 ingot + 1 wood | 5 seconds | 25 coins |
+Grinders and woodworking benches have fixed recipes. Assembly ingredients may
+be supplied in either order and by different players. Loaded recipes lock until
+the job finishes. Wrong and duplicate inputs stay in your hands. A shaft is
+consumed once when the axe is assembled; unfinished parts cannot fulfill orders.
 
-Carry each ingredient to the anvil and press **E** to load it. Axe ingredients
-can be loaded in either order and by different players. The selected recipe locks
-when the first ingredient is loaded. Wrong or duplicate inputs stay in your hands.
-Axe work cannot advance until both ingredients are present.
+## Move and handle items
 
-Hold **E** with empty hands to work. Release, move away, jump, or get hit to pause;
-another dwarf can resume. Only one worker advances progress at normal speed.
-A finished product falls onto the right-hand tray. All products can be picked up,
-carried, dropped, or thrown, and cannot be smelted again in the ore bin.
-The forge and anvil can operate in parallel. Products have no tool action yet.
+- **A/D or Left/Right:** walk. **Space:** jump.
+- **W/S or Up/Down:** climb ladders, including diagonal movement.
+- **E:** pick up nearby loose items or load a station. **Hold E:** work or mine.
+- **F:** throw the carried item in the facing direction. **Q:** drop it.
 
-## Buy wood from the visiting merchant
+You can carry one item. Loose items fall, bounce, stay where they land, and can
+knock dwarfs back. Jumping off a ladder prevents immediate reattachment while
+ascending; held Up can catch it at the apex. Down + Jump detaches into a fall.
+Work takes priority over pickup while a nearby station contains a loaded job.
+Furniture lets dwarfs walk past it; output trays collide with physical items.
 
-The team starts with **20 shared coins**. A purple-clothed merchant first visits
-at **12 seconds**, stays for **20 seconds**, and returns every **45 seconds** on a
-fixed schedule. Each visit offers **4 wood**, costing **5 coins each**.
+## Mine ore and buy wood
 
-Stand beside the merchant (between the counter and anvil), with empty hands,
-and press **B** once per purchase. Paid wood appears as a physical log nearby.
-Pick it up with E, carry it to the anvil, drop it, or throw it like ore.
-Only the merchant supplies wood; mining still produces ore. Purchases are checked
-by the host for range, floor, presence, stock, funds, and free hands. Shared coins
-cannot go negative. Each axe consumes exactly one log on completion.
+Hold **E for three seconds**, empty-handed beside the vein at the right of the
+basement, to extract a new ore piece. It falls out a short distance to the left.
+Mining supports pausing, handoffs, and unlimited repeat cycles for this prototype.
 
-## Serve timed customer orders
+Wood comes **only from the merchant**. The merchant first visits 12 seconds after
+opening, stays 20 seconds, and returns every 45 seconds. Each visit offers four
+wood at **5 coins each**. Stand beside the purple merchant between the counter
+and the ground-floor build area, with empty hands, and press **B** per purchase.
+Pick up the physical wood and take it to a woodworking bench. Buying is checked
+by the host for stock, funds, position, and free hands.
 
-The first customer arrives at **8 seconds**, then a new customer arrives every
-**20 seconds**, regardless of the existing queue. Requests rotate through hammer,
-sword, and axe. Each customer has **30 seconds from arrival**, including walking
-in and waiting behind others. They do not receive a fresh timer at the front.
+## Customers and reputation
 
-The HUD lists the front request, queued requests, remaining patience, and prices.
-Carry the exact product to the left counter and press **E** to serve **only the
-front customer**. Later customers cannot be served out of order. Correct delivery
-removes the product, earns its sale price, and gives **+1 shared reputation**.
-Each customer who runs out of patience leaves and costs **1 reputation**. There
-is no coin fine; reputation can fall below zero. The next queued customer advances.
+After the shop opens, the first customer arrives at 8 seconds, then one arrives
+every 20 seconds independently of the queue. Requests rotate through horseshoe,
+sword, and axe. Every customer has **30 seconds from arrival**, including walking
+in and queuing. Advancing to the front does not restart that timer.
 
-Coins, reputation, queues, deadlines, selected recipes, partially loaded
-ingredients, merchant stock, and physical items synchronize with clients and
-late joiners. A new hosted game resets the economy, reputation, clocks, and
-materials. There is no persistence, reputation-based difficulty, or shop upgrade
-system yet.
+Carry the exact finished product to the left counter and press **E**. Only the
+**front customer** can be served. Horseshoes sell for **10 coins**, swords for
+**15**, and axes for **25**. Delivery gives **+1 shared reputation**. Every expired
+order costs **1 reputation** and no coins. The HUD shows specific requests,
+patience, coins, and reputation. Reputation can fall below zero.
 
-## Mine more ore
+## Multiplayer and scope
 
-Stand beside the ore vein at the right of the basement mine entrance, with empty
-hands, and **hold E for three seconds**. A new physical ore piece falls out near
-the entrance, a short distance to the left of the vein. Pick it up with E and use
-it in the existing throwing, smelting, smithing, and delivery workflow.
+The host owns station purchases/placement, inventories, physics, work progress,
+mining, merchant stock, orders, and rewards. Late joiners receive the layout,
+loaded jobs, unfinished parts, and economy state. Each dwarf is independent and
+passes through other dwarfs. Clients receive snapshots at 20 Hz; prediction and
+interpolation remain future work. Verification uses one host and two clients on
+loopback; separate-computer LAN play still needs user testing.
 
-Release E, move away, jump, or get hit to pause extraction. Another dwarf can
-continue, including after the original miner leaves. One miner advances the
-shared progress at a time; helpers do not speed it up or duplicate output.
-Holding E continues with the next three-second cycle. The vein has unlimited
-ore for this prototype. No separate mine level, pickaxe requirement, upgrades,
-or depletion yet. New sessions reset extraction progress and mined items.
-
-## Play together on a LAN
-
-1. All players use the same revision of this project and Godot 4.6.x.
-2. One player presses **Host LAN game**. The host plays their own dwarf too.
-3. Others enter the host computer's LAN IPv4 address (for example `192.168.1.20`)
-   and press **Join LAN game**. Keep the same UDP port on all machines (default
-   **24567**). `127.0.0.1` is for testing multiple instances on one computer only.
-4. Allow Godot inbound **UDP 24567** on the host's local-network firewall if
-   prompted. Devices must be on the same reachable LAN; guest Wi-Fi isolation
-   may prevent connections. No port forwarding, dedicated server, or internet
-   matchmaking is included.
-
-Your dwarf is marked **YOU**; other players have colored sprites and labels.
-Dwarfs pass through each other. Late joiners receive the current roster and
-positions. **Leave game** returns to the menu. If the host leaves, everyone
-returns to the menu; there is no host migration or saved session yet.
-
-The host simulates physics and accepts only controls belonging to each sender.
-Clients receive movement snapshots at 20 Hz. This first implementation has no
-client prediction or interpolation, so clients may feel latency or visible
-stepping; tune that after initial LAN playtesting. Multiplayer verification here
-uses three independent processes on loopback, not separate physical machines.
-
-## Agreed direction
-
-- Godot 4 + GDScript, 2D platformer, pixel art.
-- Player-hosted LAN co-op for more than two players; no dedicated server.
-- No gameplay player cap yet; ENet has a technical limit of 4095 remote peers.
-  Large player counts have not been tested.
-- Players stay within the building; the cellar provides access to mining tasks.
-- Review each milestone before starting the next.
-
-## Milestones
-
-1. Complete: project and building layout.
-2. Complete: one dwarf, movement, jumping, collision, and ladders; fixed building view.
-3. Complete: LAN host/join, independent dwarfs, and host-authoritative movement.
-4. Complete: physical ore, pickup, carrying, throwing, knockback, and bin capture.
-5. Complete: five-second shared forge job, pausing, handoff, and physical ingots.
-6. Complete: load an ingot, work the anvil, and produce a physical hammer.
-7. Complete: patient customer orders, hammer delivery, and shared coins.
-8. Complete: three-second mining cycles, shared progress, and physical ore output.
-9. **Current:** three products, merchant wood, front-only timed queues, and reputation.
-10. Balance and further systems after review.
+Leave returns to the menu. Host departure ends the session. New hosted games
+reset stations, resources, budget, reputation, and clocks. No persistence,
+upgrades, dedicated servers, internet matchmaking, or separate mine level yet.
 
 ## Validation
 
-```sh
-godot --headless --path . --editor --import --quit
-godot --headless --path . --quit-after 10
-```
+Run **`bash tools/check.sh`** with Godot 4.6.x and Python 3 available. It isolates
+Godot's writable settings in temporary folders, imports and starts the project,
+and runs:
 
-In the cloud sandbox, run `bash tools/check.sh` to give Godot writable temporary
-settings and cache folders.
+- Movement, ladder, collision, loose-item physics, and knockback checks.
+- Material identity, purchase/placement validation, recipe routes, exact work
+  duration, loading rules, handoffs, packing, relocation, refunds, and snapshots.
+- Actual catalog-button, placement-click, recipe, work, customer and mining inputs.
+- Customer deadlines, front-only service, economy and reputation checks.
+- A real host and two clients exercising all station types, co-op jobs, wood
+  purchases, intermediate products, deliveries, placement races, relocation,
+  refunds on disconnect, and reconnect restoration of loaded paused jobs.
 
-`bash tools/check.sh` also runs physics checks for movement, jumping, wall/floor
-collisions, both ladder routes, holding on ladders, and jumping off. It then runs
-`python3 tools/check_multiplayer.py`: one host and two clients exercising roster
-sync, independent movement, jumps, ladders, the full ore transport route, client
-departure, and host loss. `tests/ore.gd` checks station reach, one-piece capacity,
-piece contention, duplicate capture, identity conservation, and snapshots.
-`tests/ore_physics.gd` checks settling, drops, thrown bin capture, missed throws,
-impact knockback, and drops on disconnect. `tests/forge.gd` checks exact work
-duration, reservation, pause/handoff, contention, and snapshots.
-`tests/forge_physics.gd` checks held-E work, output physics, pickup, and reset.
-The three-process multiplayer test also checks forge handoff, competing workers,
-shared progress, and synchronized ingot output. `tests/anvil.gd` and
-`tests/anvil_physics.gd` cover loading, wrong materials, occupied jobs, exact
-duration, handoff, output physics, carrying, throwing, and reset. The network
-test continues from the forge to a shared anvil job and replicated hammer.
-
-The standalone commands above check project loading and startup; they do not replace visual review.
-Generated Godot caches are ignored. No cloud configuration is published by this project.
-
-Customer checks in `tests/customers.gd` and `tests/customers_physics.gd` cover
-regular arrivals, exact patience, front-only service, rewards, expiry penalties,
-queue advancement, E interactions, and reset. Mining checks cover exact timing,
-contention, pauses, handoffs, disconnects, new IDs, physics, pickup, and throwing.
-
-`tests/economy.gd` checks all recipes, both axe loading orders, ingredient locking,
-wood consumption, merchant visits, stock, funds, and simultaneous purchase rules.
-`python3 tools/check_multiplayer.py res://tests/market_multiplayer.gd` runs a
-separate host and two clients through competing purchases, client-selected
-recipes, cooperative axe loading, sword production, front-only delivery,
-reputation gain/loss, and a real client disconnect/rejoin with state restoration.
-Both network suites are included in `bash tools/check.sh`.
+The old fixed-forge/ingot tests were replaced by the new station and production
+route checks. Images are original SVG textures rendered with nearest filtering;
+workstations are independent scenes, not baked into the building background.
+The environment configuration is not published by project commands.

@@ -4,15 +4,15 @@ const FIRST_VISIT := 8.0
 const ARRIVAL_INTERVAL := 20.0
 const PATIENCE := 30.0
 const WALK_TIME := 2.0
-const PRICES := {"hammer": 10, "sword": 15, "axe": 25}
-const PRODUCTS := ["hammer", "sword", "axe"]
+const PRICES := {"horseshoe": 10, "sword": 15, "axe": 25}
+const PRODUCTS := ["horseshoe", "sword", "axe"]
 var queue: Array = []
 var departures: Array = []
 var until_arrival := FIRST_VISIT
 var number := 0
 var completed := 0
 var missed := 0
-var coins := 20
+var coins := 100
 var reputation := 0
 
 func step(delta: float) -> void:

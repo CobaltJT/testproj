@@ -1,14 +1,11 @@
 """Run a real ENet host and two clients; fail on errors, nonzero exits or timeout."""
 import os
-import sys
 from pathlib import Path
 import socket
 import subprocess
 import tempfile
 import time
 
-test_script = sys.argv[1] if len(sys.argv) > 1 else "res://tests/multiplayer.gd"
-result_label = "MARKET" if "market_multiplayer" in test_script else "MULTIPLAYER"
 root = Path(__file__).resolve().parent.parent
 with tempfile.TemporaryDirectory(prefix="hearth-lan-") as directory:
     work = Path(directory)
@@ -25,7 +22,7 @@ with tempfile.TemporaryDirectory(prefix="hearth-lan-") as directory:
                 env[f"XDG_{kind}_HOME"] = str(folder)
             log = (work / f"{role}.log").open("w+")
             args = ["godot", "--headless", "--path", str(root), "--script",
-                    test_script, "--", f"--role={role}",
+                    "res://tests/multiplayer.gd", "--", f"--role={role}",
                     f"--port={port}", "--host" if role == "host" else "--join=127.0.0.1"]
             processes.append((role, subprocess.Popen(args, env=env, stdout=log, stderr=subprocess.STDOUT), log))
             if role == "host":
@@ -42,7 +39,7 @@ with tempfile.TemporaryDirectory(prefix="hearth-lan-") as directory:
             log.seek(0)
             output = log.read()
             print(output, end="")
-            failed |= process.returncode != 0 or "ERROR:" in output or f"{result_label} RESULT {role}: 0 failures" not in output
+            failed |= process.returncode != 0 or "ERROR:" in output or f"MULTIPLAYER RESULT {role}: 0 failures" not in output
         raise SystemExit(1 if failed else 0)
     finally:
         for _, process, log in processes:

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://1njg32ogfy4d"
-path="res://.godot/imported/ingot.svg-c6b29f6b19ca2164a55905c2c6fdf1b2.ctex"
+uid="uid://choafcpvbs7wq"
+path="res://.godot/imported/horseshoe.svg-8761d7916b893aabf8e6e4fb0a2238cd.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/textures/ingot.svg"
-dest_files=["res://.godot/imported/ingot.svg-c6b29f6b19ca2164a55905c2c6fdf1b2.ctex"]
+source_file="res://assets/textures/horseshoe.svg"
+dest_files=["res://.godot/imported/horseshoe.svg-8761d7916b893aabf8e6e4fb0a2238cd.ctex"]
 
 [params]
 

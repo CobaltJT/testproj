@@ -1,0 +1,98 @@
+extends RefCounted
+const JOB = preload("res://scripts/station_job.gd")
+const PRICES := {"anvil": 20, "grinder": 25, "woodbench": 25}
+const FLOORS := [136.0, 216.0, 288.0]
+var stations: Dictionary = {}
+var pending: Dictionary = {}
+var next_id := 1
+var opened := false
+
+func snap(at: Vector2) -> Vector2:
+	var floor_y: float = FLOORS[0]
+	for y in FLOORS:
+		if absf(at.y - y) < absf(at.y - floor_y):
+			floor_y = y
+	return Vector2(snappedf(at.x, 8), floor_y)
+
+func footprint(at: Vector2) -> Rect2:
+	return Rect2(at + Vector2(-24, -40), Vector2(64, 40))
+
+func can_place(at: Vector2) -> bool:
+	if not at.is_finite() or at.y not in FLOORS or not is_equal_approx(at.x, snappedf(at.x, 8)):
+		return false
+	var rect := footprint(at)
+	if rect.position.x < 52 or rect.end.x > 428:
+		return false
+	# Keep the storefront, merchant, ladders, landing space, and mine usable.
+	var blocked: Array[Rect2] = []
+	if at.y == 136:
+		blocked = [Rect2(344, 96, 48, 40)]
+	elif at.y == 216:
+		blocked = [Rect2(52, 176, 172, 40), Rect2(344, 176, 48, 40)]
+	else:
+		blocked = [Rect2(88, 248, 48, 40), Rect2(328, 248, 100, 40)]
+	for zone in blocked:
+		if rect.intersects(zone):
+			return false
+	for station in stations.values():
+		if rect.intersects(footprint(station.at).grow(2)):
+			return false
+	return true
+
+func purchase(player: int, kind: String, economy: RefCounted, materials: RefCounted) -> bool:
+	if player <= 0 or kind not in PRICES or pending.has(player) or materials.carried_by(player) != -1 or economy.coins < PRICES[kind]:
+		return false
+	economy.coins -= PRICES[kind]
+	pending[player] = {"id": next_id, "kind": kind}
+	next_id += 1
+	return true
+
+func place(player: int, at: Vector2) -> int:
+	if not pending.has(player) or not can_place(at):
+		return -1
+	var kit: Dictionary = pending[player]
+	var job = JOB.new()
+	job.configure(kit.kind)
+	stations[kit.id] = {"kind": kit.kind, "at": at, "job": job}
+	pending.erase(player)
+	if kit.kind == "anvil":
+		opened = true
+	return kit.id
+
+func cancel(player: int, economy: RefCounted) -> bool:
+	if not pending.has(player):
+		return false
+	economy.coins += PRICES[pending[player].kind]
+	pending.erase(player)
+	return true
+
+func nearest(at: Vector2) -> int:
+	for id in stations:
+		if absf(at.x - stations[id].at.x) <= 22 and absf(at.y - stations[id].at.y) <= 6:
+			return id
+	return -1
+
+func pack(player: int, at: Vector2, materials: RefCounted) -> bool:
+	var id := nearest(at)
+	if player <= 0 or id == -1 or pending.has(player) or materials.carried_by(player) != -1 or not stations[id].job.slots.is_empty():
+		return false
+	pending[player] = {"id": id, "kind": stations[id].kind}
+	stations.erase(id)
+	return true
+
+func snapshot() -> Dictionary:
+	var result: Dictionary = {}
+	for id in stations:
+		result[id] = {"kind": stations[id].kind, "at": stations[id].at, "job": stations[id].job.snapshot()}
+	return {"stations": result, "pending": pending.duplicate(true), "next_id": next_id, "opened": opened}
+
+func restore(state: Dictionary) -> void:
+	stations.clear()
+	for id in state.stations:
+		var entry: Dictionary = state.stations[id]
+		var job = JOB.new()
+		job.restore(entry.job)
+		stations[id] = {"kind": entry.kind, "at": entry.at, "job": job}
+	pending = state.pending.duplicate(true)
+	next_id = state.next_id
+	opened = state.opened

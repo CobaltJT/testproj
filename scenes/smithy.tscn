@@ -49,7 +49,7 @@ offset_left = 25.0
 offset_top = 29.0
 theme_override_colors/font_color = Color(0.5450980392156862, 0.6039215686274509, 0.6666666666666666, 1)
 theme_override_font_sizes/font_size = 8
-text = "A DWARVEN SMITHY  /  SINGLE PLAYER"
+text = "BUILD YOUR OWN WORKSHOP"
 mouse_filter = 2
 
 [node name="Caption3" type="Label" parent="."]
@@ -57,7 +57,7 @@ offset_left = 64.0
 offset_top = 74.0
 theme_override_colors/font_color = Color(0.9176470588235294, 0.8431372549019608, 0.6901960784313725, 1)
 theme_override_font_sizes/font_size = 8
-text = "WORKSHOP & STORAGE"
+text = "WORKSHOP"
 mouse_filter = 2
 
 [node name="Caption4" type="Label" parent="."]
@@ -81,7 +81,7 @@ offset_left = 377.0
 offset_top = 167.0
 theme_override_colors/font_color = Color(0.9176470588235294, 0.8431372549019608, 0.6901960784313725, 1)
 theme_override_font_sizes/font_size = 8
-text = "FORGE"
+text = ""
 mouse_filter = 2
 
 [node name="Caption7" type="Label" parent="."]

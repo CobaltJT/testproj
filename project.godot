@@ -60,17 +60,17 @@ drop_ore={
 "events": [Object(InputEventKey,"physical_keycode":81)]
 }
 
-recipe_hammer={
+recipe_horseshoe={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"physical_keycode":49)]
 }
 
-recipe_sword={
+recipe_blade={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"physical_keycode":50)]
 }
 
-recipe_axe={
+recipe_head={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"physical_keycode":51)]
 }
@@ -78,4 +78,24 @@ recipe_axe={
 buy_wood={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"physical_keycode":66)]
+}
+
+recipe_axe={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":52)]
+}
+
+build_menu={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":4194306)]
+}
+
+cancel_build={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":4194305)]
+}
+
+pack_station={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":82)]
 }

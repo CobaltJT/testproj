@@ -8,7 +8,7 @@ Open `project.godot` in **Godot 4.6.x (standard / GDScript)** and press **F5** t
 open `scenes/smithy.tscn` and press **F6**. No plugins or external assets
 are required. From a terminal: `godot --path .`.
 
-Stage 03 adds LAN multiplayer to the building: upstairs workshop/storage, ground-floor
+Stage 04 adds the first shared task to the building: upstairs workshop/storage, ground-floor
 customer counter and forge, and a basement with ore storage and a mine entrance.
 Ladders mark planned routes. The building is an original pixel-style image texture in
 `assets/textures/smithy.svg`, displayed by a Sprite2D with nearest filtering.
@@ -21,7 +21,20 @@ does not reattach until you land or release and press a climb direction again.
 Holding Up also catches the ladder at the peak of an upward jump if still in
 reach. Down + Space detaches into a fall without an upward jump.
 Floors, ceiling, and outer walls are solid. Furniture remains background scenery.
-The whole building stays visible; task interactions come later.
+The whole building stays visible; the first task is transporting ore.
+
+## Carry ore to the forge
+
+- Descend the left ladder to the basement supply marked **[E] ORE**.
+- Press **E** nearby to pick up one piece. A small ore texture appears on the dwarf.
+- Carry it up the ladder and walk to the bin marked **[E] BIN** near the forge.
+- Press **E** to deposit it. Everyone sees the updated inventory and bin count.
+
+Each hosted session starts with **8 pieces**. You can carry one at a time, and
+must be on the station's floor and within reach. The host resolves competing
+pickup requests; the last piece cannot be awarded twice. Carried ore returns to
+the supply when its owner disconnects. A new hosted game resets all ore; no mining
+replenishment, smithing, dropping, or session persistence is included yet.
 
 ## Play together on a LAN
 
@@ -59,8 +72,9 @@ uses three independent processes on loopback, not separate physical machines.
 
 1. Complete: project and building layout.
 2. Complete: one dwarf, movement, jumping, collision, and ladders; fixed building view.
-3. **Current:** LAN host/join, independent dwarfs, and host-authoritative movement.
-4. A complete ore → smithing → customer delivery loop.
+3. Complete: LAN host/join, independent dwarfs, and host-authoritative movement.
+4. **Current:** shared ore pickup, carrying, and forge-bin deposit.
+   Smithing and customer delivery follow after review.
 5. Mining, merchants, and additional tasks, one reviewed step at a time.
 
 ## Validation
@@ -76,7 +90,9 @@ settings and cache folders.
 `bash tools/check.sh` also runs physics checks for movement, jumping, wall/floor
 collisions, both ladder routes, holding on ladders, and jumping off. It then runs
 `python3 tools/check_multiplayer.py`: one host and two clients exercising roster
-sync, independent movement, jumps, ladders, client departure, and host loss.
+sync, independent movement, jumps, ladders, the full ore transport route, client
+departure, and host loss. `tests/ore.gd` checks station reach, one-piece capacity,
+last-piece contention, duplicate deposits, disconnect returns, and snapshots.
 
 The standalone commands above check project loading and startup; they do not replace visual review.
 Generated Godot caches are ignored. No cloud configuration is published by this project.

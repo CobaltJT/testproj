@@ -2,6 +2,11 @@ extends Node
 ## ENet LAN session. Only the host simulates physics; clients send controls.
 const PLAYER = preload("res://scenes/player.tscn")
 const WORLD = preload("res://scenes/smithy.tscn")
+const ORE_STATE = preload("res://scripts/ore_state.gd")
+var ore = ORE_STATE.new()
+var stations: Node2D
+var hint: Label
+var last_interaction: Dictionary = {}
 const PORT := 24567
 var world: Node2D
 var players: Dictionary = {}
@@ -18,11 +23,17 @@ func _ready() -> void:
 	world = WORLD.instantiate()
 	add_child(world)
 	world.get_node("Player").free()
+	stations = preload("res://scenes/ore_stations.tscn").instantiate()
+	world.add_child(stations)
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var panel := PanelContainer.new()
 	panel.position = Vector2(28, 88)
 	layer.add_child(panel)
+	hint = Label.new()
+	hint.position = Vector2(48, 574)
+	hint.add_theme_font_size_override("font_size", 14)
+	layer.add_child(hint)
 	var column := VBoxContainer.new()
 	panel.add_child(column)
 	status = Label.new()
@@ -79,6 +90,8 @@ func host_game() -> void:
 	active = true
 	menu.hide()
 	leave_button.show()
+	ore = ORE_STATE.new()
+	refresh_ore()
 	spawn_player(1, Vector2(220, 216))
 	update_status()
 
@@ -106,6 +119,7 @@ func client_ready() -> void:
 	for existing in players:
 		spawn_player.rpc_id(id, existing, players[existing].position)
 	spawn_player.rpc(id, Vector2(210 + (players.size() % 6) * 22, 216))
+	receive_ore.rpc_id(id, ore.snapshot())
 
 @rpc("authority", "call_local", "reliable")
 func spawn_player(id: int, at: Vector2) -> void:
@@ -128,11 +142,17 @@ func spawn_player(id: int, at: Vector2) -> void:
 	dwarf.add_child(tag)
 	players[id] = dwarf
 	active = true
+	refresh_ore()
 	update_status()
 
 func _physics_process(_delta: float) -> void:
 	if not active or not players.has(multiplayer.get_unique_id()):
 		return
+	if Input.is_action_just_pressed("interact"):
+		if multiplayer.is_server():
+			interact_for(1)
+		else:
+			request_interaction.rpc_id(1)
 	var axis := Vector2(Input.get_axis("move_left", "move_right"), Input.get_axis("climb_up", "climb_down"))
 	var jump := Input.is_action_pressed("jump")
 	var climb := Input.is_action_pressed("climb_up") or Input.is_action_pressed("climb_down")
@@ -178,7 +198,9 @@ func receive_state(state: Array) -> void:
 
 func peer_left(id: int) -> void:
 	if multiplayer.is_server():
+		ore.release_carrier(id)
 		remove_player.rpc(id)
+		receive_ore.rpc(ore.snapshot())
 
 @rpc("authority", "call_local", "reliable")
 func remove_player(id: int) -> void:
@@ -186,6 +208,7 @@ func remove_player(id: int) -> void:
 		players[id].free()
 		players.erase(id)
 	last_input.erase(id)
+	last_interaction.erase(id)
 	update_status()
 
 func update_status() -> void:
@@ -199,6 +222,46 @@ func disconnect_game(message: String) -> void:
 		dwarf.free()
 	players.clear()
 	last_input.clear()
+	last_interaction.clear()
+	ore = ORE_STATE.new()
+	refresh_ore()
+	hint.text = ""
 	menu.show()
 	leave_button.hide()
 	status.text = message
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_interaction() -> void:
+	if multiplayer.is_server():
+		interact_for(multiplayer.get_remote_sender_id())
+
+func interact_for(id: int) -> void:
+	if not multiplayer.is_server() or not players.has(id):
+		return
+	# Position and inventory come from host state, never from a client request.
+	var now := Time.get_ticks_msec()
+	if now - last_interaction.get(id, -1000) < 150:
+		return
+	last_interaction[id] = now
+	var message: String = ore.interact(id, players[id].position)
+	receive_ore.rpc(ore.snapshot())
+	if id == 1:
+		interaction_feedback(message)
+	else:
+		interaction_feedback.rpc_id(id, message)
+
+@rpc("authority", "call_local", "reliable")
+func receive_ore(state: Dictionary) -> void:
+	ore.restore(state)
+	refresh_ore()
+
+@rpc("authority", "call_remote", "reliable")
+func interaction_feedback(message: String) -> void:
+	hint.text = message
+
+func refresh_ore() -> void:
+	stations.get_node("SupplyLabel").text = "[E] ORE: %s" % ore.available
+	stations.get_node("Supply").visible = ore.available > 0
+	stations.get_node("BinLabel").text = "[E] BIN: %s" % ore.deposited
+	for id in players:
+		players[id].get_node("CarriedOre").visible = id in ore.carriers

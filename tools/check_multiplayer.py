@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix="hearth-lan-") as directory:
             processes.append((role, subprocess.Popen(args, env=env, stdout=log, stderr=subprocess.STDOUT), log))
             if role == "host":
                 time.sleep(0.5)
-        deadline = time.monotonic() + 35
+        deadline = time.monotonic() + 60
         failed = False
         for role, process, log in processes:
             try:

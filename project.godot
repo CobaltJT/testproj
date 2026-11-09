@@ -8,9 +8,9 @@ config/features=PackedStringArray("4.6", "GL Compatibility")
 
 [display]
 window/size/viewport_width=960
-window/size/viewport_height=640
+window/size/viewport_height=720
 window/size/window_width_override=1152
-window/size/window_height_override=768
+window/size/window_height_override=864
 window/stretch/mode="canvas_items"
 
 [rendering]
@@ -58,4 +58,24 @@ throw_ore={
 drop_ore={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"physical_keycode":81)]
+}
+
+recipe_hammer={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":49)]
+}
+
+recipe_sword={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":50)]
+}
+
+recipe_axe={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":51)]
+}
+
+buy_wood={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":66)]
 }

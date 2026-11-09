@@ -161,6 +161,11 @@ func run() -> void:
 	check(hammered and session.anvil.piece == -1 and session.ore.pieces.size() == 8, "All peers see one hammer and conserved material identity")
 	if hammered:
 		check(session.ore_bodies[hammer_id()].visible and session.ore_bodies[hammer_id()].get_node("Sprite2D").texture == session.HAMMER_TEXTURE, "Physical hammer image replicates")
+	if role == "host":
+		# This long movement/crafting suite seeds a fresh, normal 30-second order for delivery.
+		session.orders = session.CUSTOMER_STATE.new()
+		session.orders.step(10)
+		session.receive_orders.rpc(session.orders.snapshot())
 	if role == "client1":
 		await walk_to(dwarf, 282)
 		await press_interact()
@@ -169,7 +174,7 @@ func run() -> void:
 		await walk_to(dwarf, 166)
 		await press_interact()
 	var served := await until(func(): return session.orders.completed == 1)
-	check(served and session.orders.coins == 10, "Customer delivery and shared coins replicate to all peers")
+	check(served and session.orders.coins == 30, "Customer delivery and shared coins replicate to all peers")
 	check(not session.ore_bodies[hammer_id()].visible and session.ore.pieces[hammer_id()].delivered, "Sold hammer is removed on every peer")
 	await walk_to(dwarf, 112)
 	Input.action_press("climb_down")

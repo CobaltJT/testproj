@@ -1,5 +1,16 @@
 extends Node
 ## ENet LAN session. Only the host simulates physics; clients send controls.
+const MERCHANT_STATE = preload("res://scripts/merchant_state.gd")
+var merchant = MERCHANT_STATE.new()
+var merchant_node: Node2D
+var merchant_label: Label
+var customer_nodes: Dictionary = {}
+var recipe_label: Label
+const EXTRA_TEXTURES = {
+	"sword": preload("res://assets/textures/sword.svg"),
+	"axe": preload("res://assets/textures/axe.svg"),
+	"wood": preload("res://assets/textures/wood.svg")
+}
 const MINING_STATE = preload("res://scripts/mining_state.gd")
 const MINE_POSITION := Vector2(390, 288)
 const MINE_OUTPUT := Vector2(344, 276)
@@ -7,7 +18,6 @@ var mining = MINING_STATE.new()
 var mining_station: Node2D
 const CUSTOMER_STATE = preload("res://scripts/customer_state.gd")
 var orders = CUSTOMER_STATE.new()
-var customer: Node2D
 var order_label: Label
 const PLAYER = preload("res://scenes/player.tscn")
 const WORLD = preload("res://scenes/smithy.tscn")
@@ -57,8 +67,8 @@ func _ready() -> void:
 	world.add_child(anvil_station)
 	mining_station = preload("res://scenes/mining_station.tscn").instantiate()
 	world.add_child(mining_station)
-	customer = preload("res://scenes/customer.tscn").instantiate()
-	world.add_child(customer)
+	merchant_node = preload("res://scenes/merchant.tscn").instantiate()
+	world.add_child(merchant_node)
 	reset_ore(false)
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -66,14 +76,24 @@ func _ready() -> void:
 	panel.position = Vector2(28, 88)
 	layer.add_child(panel)
 	hint = Label.new()
-	hint.position = Vector2(48, 574)
+	hint.position = Vector2(24, 642)
 	hint.add_theme_font_size_override("font_size", 14)
 	layer.add_child(hint)
 	order_label = Label.new()
-	order_label.position = Vector2(545, 85)
-	order_label.add_theme_font_size_override("font_size", 15)
+	order_label.position = Vector2(505, 12)
+	order_label.add_theme_font_size_override("font_size", 12)
 	layer.add_child(order_label)
+	merchant_label = Label.new()
+	merchant_label.position = Vector2(24, 686)
+	merchant_label.add_theme_font_size_override("font_size", 13)
+	layer.add_child(merchant_label)
+	recipe_label = Label.new()
+	recipe_label.position = Vector2(24, 664)
+	recipe_label.add_theme_font_size_override("font_size", 13)
+	layer.add_child(recipe_label)
 	refresh_orders()
+	refresh_merchant()
+	refresh_anvil()
 	var column := VBoxContainer.new()
 	panel.add_child(column)
 	status = Label.new()
@@ -157,13 +177,14 @@ func client_ready() -> void:
 		return
 	for existing in players:
 		spawn_player.rpc_id(id, existing, players[existing].position)
-	spawn_player.rpc(id, Vector2(210 + (players.size() % 6) * 22, 216))
+	broadcast_state("spawn_player", [id, Vector2(210 + (players.size() % 6) * 22, 216)], true)
 	receive_ore.rpc_id(id, ore.snapshot())
 	receive_ore_motion.rpc_id(id, ore_motion())
 	receive_forge.rpc_id(id, forge.snapshot())
 	receive_anvil.rpc_id(id, anvil.snapshot())
 	receive_orders.rpc_id(id, orders.snapshot())
 	receive_mining.rpc_id(id, mining.snapshot())
+	receive_merchant.rpc_id(id, merchant.snapshot())
 
 @rpc("authority", "call_local", "reliable")
 func spawn_player(id: int, at: Vector2) -> void:
@@ -192,6 +213,17 @@ func spawn_player(id: int, at: Vector2) -> void:
 func _physics_process(delta: float) -> void:
 	if not active or not players.has(multiplayer.get_unique_id()):
 		return
+	for choice in FORGE_STATE.RECIPES:
+		if Input.is_action_just_pressed("recipe_" + choice):
+			if multiplayer.is_server():
+				choose_recipe(1, choice)
+			else:
+				request_recipe.rpc_id(1, choice)
+	if Input.is_action_just_pressed("buy_wood"):
+		if multiplayer.is_server():
+			buy_wood_for(1)
+		else:
+			request_wood.rpc_id(1)
 	if Input.is_action_just_pressed("throw_ore") or Input.is_action_just_pressed("drop_ore"):
 		var drop := Input.is_action_just_pressed("drop_ore")
 		if multiplayer.is_server():
@@ -218,19 +250,22 @@ func _physics_process(delta: float) -> void:
 		step_anvil(delta)
 		step_mining(delta)
 		orders.step(delta)
+		merchant.step(delta)
 		refresh_orders()
+		refresh_merchant()
 		tick += 1
 		if tick % 3 == 0:
 			var state: Array = []
 			for id in players:
 				var dwarf = players[id]
 				state.append([id, dwarf.position, dwarf.velocity, dwarf.climbing, dwarf.sprite.flip_h])
-			receive_state.rpc(state)
-			receive_ore_motion.rpc(ore_motion())
-			receive_forge.rpc(forge.snapshot())
-			receive_anvil.rpc(anvil.snapshot())
-			receive_orders.rpc(orders.snapshot())
-			receive_mining.rpc(mining.snapshot())
+			broadcast_state("receive_state", [state], false)
+			broadcast_state("receive_ore_motion", [ore_motion()], false)
+			broadcast_state("receive_forge", [forge.snapshot()], false)
+			broadcast_state("receive_anvil", [anvil.snapshot()], false)
+			broadcast_state("receive_orders", [orders.snapshot()], false)
+			broadcast_state("receive_mining", [mining.snapshot()], false)
+			broadcast_state("receive_merchant", [merchant.snapshot()], false)
 	else:
 		send_controls.rpc_id(1, axis, jump, climb, Input.is_action_pressed("interact"))
 
@@ -263,8 +298,8 @@ func receive_state(state: Array) -> void:
 func peer_left(id: int) -> void:
 	if multiplayer.is_server():
 		release_ore(id, true)
-		remove_player.rpc(id)
-		receive_ore.rpc(ore.snapshot())
+		broadcast_state("remove_player", [id], true)
+		broadcast_state("receive_ore", [ore.snapshot()], true)
 
 @rpc("authority", "call_local", "reliable")
 func remove_player(id: int) -> void:
@@ -314,21 +349,22 @@ func interact_for(id: int) -> void:
 		else:
 			interaction_feedback.rpc_id(id, mine_hint)
 		return
-	if absf(players[id].position.x - 166) <= 30 and absf(players[id].position.y - 216) <= 6 and orders.phase == "waiting" and ore.carried_by(id) != -1:
+	if absf(players[id].position.x - 166) <= 30 and absf(players[id].position.y - 216) <= 6 and not orders.queue.is_empty() and ore.carried_by(id) != -1:
+		var requested: String = orders.queue[0].kind
 		var sold: bool = orders.deliver(id, players[id].position, ore)
-		receive_ore.rpc(ore.snapshot())
-		receive_orders.rpc(orders.snapshot())
-		var reply := "Hammer delivered! +10 shared coins." if sold else "This customer needs one finished hammer."
+		broadcast_state("receive_ore", [ore.snapshot()], true)
+		broadcast_state("receive_orders", [orders.snapshot()], false)
+		var reply := "%s delivered! +%s coins, +1 reputation." % [requested.capitalize(), CUSTOMER_STATE.PRICES[requested]] if sold else "Front customer wants a %s. Later orders cannot be served first." % requested
 		if id == 1:
 			interaction_feedback(reply)
 		else:
 			interaction_feedback.rpc_id(id, reply)
 		return
 	if near_anvil(players[id]) and ore.carried_by(id) != -1:
-		var loaded: bool = anvil.load_ingot(id, ore)
-		receive_ore.rpc(ore.snapshot())
-		receive_anvil.rpc(anvil.snapshot())
-		var feedback := "Ingot loaded. Hold E for 5 seconds to make a hammer." if loaded else "Anvil needs a carried ingot and an empty job slot."
+		var loaded: bool = anvil.load_material(id, ore)
+		broadcast_state("receive_ore", [ore.snapshot()], true)
+		broadcast_state("receive_anvil", [anvil.snapshot()], false)
+		var feedback := "Loaded. %s recipe: hold E once all ingredients are present." % anvil.recipe.capitalize() if loaded else "This recipe needs %s; loaded ingredients cannot be replaced." % ("one ingot and one wood" if anvil.recipe == "axe" else "one ingot")
 		if id == 1:
 			interaction_feedback(feedback)
 		else:
@@ -338,10 +374,10 @@ func interact_for(id: int) -> void:
 	if near_forge(players[id]):
 		message = "Hold E with empty hands to forge an ingot (5 seconds)."
 	elif near_anvil(players[id]):
-		message = "Hold E with empty hands to make a hammer (5 seconds)." if anvil.piece != -1 else "Bring a carried ingot and press E to load the anvil."
+		message = "Hold E to work (5 seconds). Load both ingredients for an axe." if anvil.piece != -1 or anvil.wood_piece != -1 else "Choose 1: hammer, 2: sword, 3: axe. E loads an ingredient."
 	if id in ore.carriers:
 		message = "F: throw · Q: drop · E at anvil: load an ingot"
-	elif not near_forge(players[id]) and not (near_anvil(players[id]) and anvil.piece != -1):
+	elif not near_forge(players[id]) and not (near_anvil(players[id]) and (anvil.piece != -1 or anvil.wood_piece != -1)):
 		var nearest := -1
 		var distance := 24.0
 		for piece_id in ore_bodies:
@@ -354,7 +390,7 @@ func interact_for(id: int) -> void:
 		if nearest != -1 and ore.pickup(id, nearest):
 			message = "Picked up %s. F: throw · Q: drop" % ore.pieces[nearest].kind
 
-	receive_ore.rpc(ore.snapshot())
+	broadcast_state("receive_ore", [ore.snapshot()], true)
 	if id == 1:
 		interaction_feedback(message)
 	else:
@@ -402,7 +438,9 @@ func reset_ore(simulate: bool) -> void:
 	mining = MINING_STATE.new()
 	refresh_mining()
 	orders = CUSTOMER_STATE.new()
+	merchant = MERCHANT_STATE.new()
 	refresh_orders()
+	refresh_merchant()
 	anvil = FORGE_STATE.new()
 	anvil.output_kind = "hammer"
 	refresh_anvil()
@@ -432,8 +470,8 @@ func release_ore(id: int, drop: bool) -> void:
 	position_ore(body, at, motion)
 	body.angular_velocity = direction * 6 if not drop else 0
 	throw_grace[piece_id] = [id, Time.get_ticks_msec() + 300]
-	receive_ore.rpc(ore.snapshot())
-	receive_ore_motion.rpc(ore_motion())
+	broadcast_state("receive_ore", [ore.snapshot()], true)
+	broadcast_state("receive_ore_motion", [ore_motion()], false)
 
 func ore_motion() -> Array:
 	var result: Array = []
@@ -476,7 +514,7 @@ func step_ore() -> void:
 				body.linear_velocity = Vector2(-body.linear_velocity.x * 0.4, -70)
 				break
 	if changed:
-		receive_ore.rpc(ore.snapshot())
+		broadcast_state("receive_ore", [ore.snapshot()], true)
 
 func position_ore(body: RigidBody2D, at: Vector2, motion: Vector2) -> void:
 	body.freeze = false
@@ -504,9 +542,9 @@ func step_forge(delta: float) -> void:
 		position_ore(body, OUTPUT_POSITION, Vector2(0, 20))
 		body.angular_velocity = 0
 	if result.started != -1 or result.finished != -1:
-		receive_ore.rpc(ore.snapshot())
-		receive_ore_motion.rpc(ore_motion())
-		receive_forge.rpc(forge.snapshot())
+		broadcast_state("receive_ore", [ore.snapshot()], true)
+		broadcast_state("receive_ore_motion", [ore_motion()], false)
+		broadcast_state("receive_forge", [forge.snapshot()], false)
 	refresh_forge()
 
 @rpc("authority", "call_remote", "reliable")
@@ -524,6 +562,8 @@ func refresh_forge() -> void:
 	forge_station.get_node("WorkLabel").text = text
 
 func material_texture(kind: String) -> Texture2D:
+	if EXTRA_TEXTURES.has(kind):
+		return EXTRA_TEXTURES[kind]
 	if kind == "hammer":
 		return HAMMER_TEXTURE
 	return INGOT_TEXTURE if kind == "ingot" else ORE_TEXTURE
@@ -543,9 +583,9 @@ func step_anvil(delta: float) -> void:
 		var body: RigidBody2D = ore_bodies[result.finished]
 		position_ore(body, TOOL_OUTPUT, Vector2(0, 20))
 		body.angular_velocity = 0
-		receive_ore.rpc(ore.snapshot())
-		receive_ore_motion.rpc(ore_motion())
-		receive_anvil.rpc(anvil.snapshot())
+		broadcast_state("receive_ore", [ore.snapshot()], true)
+		broadcast_state("receive_ore_motion", [ore_motion()], false)
+		broadcast_state("receive_anvil", [anvil.snapshot()], false)
 	refresh_anvil()
 
 @rpc("authority", "call_remote", "reliable")
@@ -555,10 +595,20 @@ func receive_anvil(state: Dictionary) -> void:
 
 func refresh_anvil() -> void:
 	anvil_station.get_node("Progress").value = anvil.progress
-	var text := "E: LOAD INGOT"
-	if anvil.piece != -1:
-		text = "%s %.1f/5s" % ["WORK" if anvil.worker != 0 else "PAUSED", anvil.progress]
+	var text: String = anvil.recipe.to_upper()
+	if anvil.piece != -1 or anvil.wood_piece != -1:
+		if anvil.piece == -1:
+			text += " · NEED INGOT"
+		elif anvil.recipe == "axe" and anvil.wood_piece == -1:
+			text += " · NEED WOOD"
+		else:
+			text += " · %s %.1f/5s" % ["WORK" if anvil.worker != 0 else "PAUSED", anvil.progress]
+	else:
+		text += " · E: LOAD"
 	anvil_station.get_node("WorkLabel").text = text
+	if recipe_label != null:
+		recipe_label.visible = active
+		recipe_label.text = "Anvil: 1 Hammer (ingot) · 2 Sword (ingot) · 3 Axe (ingot + wood) · Selected: %s" % anvil.recipe
 
 @rpc("authority", "call_remote", "reliable")
 func receive_orders(state: Dictionary) -> void:
@@ -566,25 +616,40 @@ func receive_orders(state: Dictionary) -> void:
 	refresh_orders()
 
 func refresh_orders() -> void:
-	customer.visible = active and orders.phase != "away"
-	var x := 120.0
-	if orders.phase == "arriving":
-		x = lerpf(70, 120, 1.0 - orders.timer / CUSTOMER_STATE.WALK_TIME)
-	elif orders.phase == "leaving":
-		x = lerpf(120, 70, 1.0 - orders.timer / CUSTOMER_STATE.WALK_TIME)
-	customer.position = Vector2(x, 216)
-	customer.get_node("Sprite2D").flip_h = orders.phase == "leaving"
-	customer.get_node("Request").text = "THANK YOU!" if orders.phase == "leaving" else "1 HAMMER"
+	var live: Dictionary = {}
+	for i in range(orders.queue.size()):
+		var order: Dictionary = orders.queue[i]
+		var target := 120.0 - i * 20
+		var at := lerpf(70, target, minf(1, order.age / CUSTOMER_STATE.WALK_TIME))
+		show_customer(order.id, Vector2(at, 216), "%s %ss" % [order.kind.to_upper(), ceili(order.remaining)], false)
+		live[order.id] = true
+	for departure in orders.departures:
+		var at := lerpf(70, departure.x, departure.remaining / CUSTOMER_STATE.WALK_TIME)
+		show_customer(departure.id, Vector2(at, 216), "THANKS!" if departure.served else "TOO LATE!", true)
+		live[departure.id] = true
+	for id in customer_nodes.keys():
+		if not live.has(id):
+			customer_nodes[id].free()
+			customer_nodes.erase(id)
 	if order_label != null:
 		order_label.visible = active
-		var request := "Next customer in %ss" % ceili(orders.timer)
-		if orders.phase == "arriving":
-			request = "Customer arriving: 1 hammer"
-		elif orders.phase == "waiting":
-			request = "Order #%s: 1 hammer · E at counter" % orders.number
-		elif orders.phase == "leaving":
-			request = "Order completed! +10 coins"
-		order_label.text = "%s\nCoins: %s · Orders served: %s" % [request, orders.coins, orders.completed]
+		var text := "Coins: %s · Reputation: %s · Served: %s · Missed: %s" % [orders.coins, orders.reputation, orders.completed, orders.missed]
+		for i in range(orders.queue.size()):
+			var order: Dictionary = orders.queue[i]
+			text += "\n%s #%s: %s · %ss · %sg" % ["FRONT" if i == 0 else "QUEUED", order.id, order.kind.capitalize(), ceili(order.remaining), CUSTOMER_STATE.PRICES[order.kind]]
+		text += "\nNext arrival: %ss · E at counter serves FRONT only" % ceili(orders.until_arrival)
+		order_label.text = text
+
+func show_customer(id: int, at: Vector2, request: String, leaving: bool) -> void:
+	if not customer_nodes.has(id):
+		var node := preload("res://scenes/customer.tscn").instantiate()
+		world.add_child(node)
+		customer_nodes[id] = node
+	var node: Node2D = customer_nodes[id]
+	node.visible = active
+	node.position = at
+	node.get_node("Sprite2D").flip_h = leaving
+	node.get_node("Request").text = request
 
 func create_ore_body(id: int, simulate: bool, at: Vector2) -> RigidBody2D:
 	var body: RigidBody2D = ORE_BODY.instantiate()
@@ -611,9 +676,9 @@ func step_mining(delta: float) -> void:
 		var piece_id: int = ore.add_mined_ore()
 		var body := create_ore_body(piece_id, true, MINE_OUTPUT)
 		position_ore(body, MINE_OUTPUT, Vector2(0, 20))
-		receive_ore.rpc(ore.snapshot())
-		receive_ore_motion.rpc(ore_motion())
-		receive_mining.rpc(mining.snapshot())
+		broadcast_state("receive_ore", [ore.snapshot()], true)
+		broadcast_state("receive_ore_motion", [ore_motion()], false)
+		broadcast_state("receive_mining", [mining.snapshot()], false)
 	refresh_mining()
 
 @rpc("authority", "call_remote", "reliable")
@@ -627,3 +692,64 @@ func refresh_mining() -> void:
 	if mining.progress > 0:
 		text = "%s %.1f/3s" % ["MINING" if mining.worker != 0 else "PAUSED", mining.progress]
 	mining_station.get_node("WorkLabel").text = text
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_recipe(choice: String) -> void:
+	if multiplayer.is_server():
+		choose_recipe(multiplayer.get_remote_sender_id(), choice)
+
+func choose_recipe(id: int, choice: String) -> void:
+	if not multiplayer.is_server() or not players.has(id) or not near_anvil(players[id]):
+		return
+	if anvil.select_recipe(choice):
+		broadcast_state("receive_anvil", [anvil.snapshot()], false)
+		refresh_anvil()
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_wood() -> void:
+	if multiplayer.is_server():
+		buy_wood_for(multiplayer.get_remote_sender_id())
+
+func buy_wood_for(id: int) -> void:
+	if not multiplayer.is_server() or not players.has(id):
+		return
+	var piece_id: int = merchant.buy(id, players[id].position, orders, ore)
+	if piece_id == -1:
+		var message := "B buys wood: stand by the merchant with empty hands, 5 coins and stock available."
+		if id == 1:
+			interaction_feedback(message)
+		else:
+			interaction_feedback.rpc_id(id, message)
+		return
+	var body := create_ore_body(piece_id, true, Vector2(222, 202))
+	position_ore(body, Vector2(222, 202), Vector2(0, 20))
+	broadcast_state("receive_ore", [ore.snapshot()], true)
+	broadcast_state("receive_ore_motion", [ore_motion()], false)
+	broadcast_state("receive_orders", [orders.snapshot()], false)
+	broadcast_state("receive_merchant", [merchant.snapshot()], false)
+	refresh_orders()
+	refresh_merchant()
+
+@rpc("authority", "call_remote", "reliable")
+func receive_merchant(state: Dictionary) -> void:
+	merchant.restore(state)
+	refresh_merchant()
+
+func refresh_merchant() -> void:
+	merchant_node.visible = active and merchant.remaining > 0
+	if merchant_label != null:
+		merchant_label.visible = active
+		merchant_label.text = "Merchant: B buys wood for 5 coins · Stock: %s · Leaves in %ss" % [merchant.stock, ceili(merchant.remaining)] if merchant.remaining > 0 else "Merchant returns in %ss · Wood costs 5 coins (B nearby)" % ceili(merchant.until_visit)
+
+func broadcast_state(method: String, arguments: Array, apply_local: bool = false) -> void:
+	if apply_local:
+		callv(method, arguments)
+	# ENet may still list a closing peer while its channels have been released.
+	# Preserve local transactions and send only to peers with a live connection.
+	var transport := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	if transport == null:
+		return
+	for id in multiplayer.get_peers():
+		var peer: ENetPacketPeer = transport.get_peer(id)
+		if peer != null and peer.get_state() == ENetPacketPeer.STATE_CONNECTED and peer.get_channels() > 0:
+			callv("rpc_id", [id, method] + arguments)

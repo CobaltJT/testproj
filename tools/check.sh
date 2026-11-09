@@ -21,4 +21,7 @@ godot --headless --path . --script res://tests/customers.gd
 godot --headless --path . --script res://tests/customers_physics.gd
 godot --headless --path . --script res://tests/mining.gd
 godot --headless --path . --script res://tests/mining_physics.gd
+godot --headless --path . --script res://tests/economy.gd
+godot --headless --path . --script res://tests/market_physics.gd
 python3 tools/check_multiplayer.py
+python3 tools/check_multiplayer.py res://tests/market_multiplayer.gd

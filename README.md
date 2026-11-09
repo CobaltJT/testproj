@@ -8,7 +8,7 @@ Open `project.godot` in **Godot 4.6.x (standard / GDScript)** and press **F5** t
 open `scenes/smithy.tscn` and press **F6**. No plugins or external assets
 are required. From a terminal: `godot --path .`.
 
-Stage 08 adds basic shared mining to the building: upstairs workshop/storage, ground-floor
+Stage 09 adds multiple products, trading, timed queues, and reputation to the building: upstairs workshop/storage, ground-floor
 customer counter and forge, and a basement with ore storage and a mine entrance.
 Ladders mark planned routes. The building is an original pixel-style image texture in
 `assets/textures/smithy.svg`, displayed by a Sprite2D with nearest filtering.
@@ -59,38 +59,61 @@ game resets all materials and crafting progress. Mining replenishes ore during a
 Holding E after completion starts another job if ore remains. Ingots do not count
 as raw ore and cannot be smelted again by throwing them into the ore bin. Paused
 jobs survive worker disconnects. Late joiners receive material kinds, progress,
-worker status, and output positions. The first anvil recipe is a hammer; customers request finished hammers at the counter.
+worker status, and output positions. The anvil makes finished products, and customers request specific items at the counter.
 
-## Shape an ingot into a hammer
+## Produce hammers, swords, and axes
 
-1. Pick up a finished ingot from the forge output tray with **E**.
-2. Carry it to the central anvil and press **E** to load it. Raw ore and finished
-   tools are rejected, and an occupied anvil cannot take a second item.
-3. With empty hands, **hold E for five seconds** beside the anvil. Releasing E,
-   moving away, jumping, or getting hit pauses the job. Another dwarf can resume.
-4. A physical hammer appears on the small tray to the right of the anvil.
-   Pick it up, carry it, throw it with **F**, or drop it with **Q**.
+Stand at the central anvil and choose a shared recipe while the station is empty:
 
-One worker advances each station at a time. Loading consumes the carried ingot
-into the shared job; completion transforms that same material into one hammer.
-Paused jobs survive worker departures. The forge and anvil can operate in parallel.
-Hammers are products for now, with no tool action; deliver them to waiting customers at the counter.
+| Key | Product | Ingredients | Work | Sale price |
+| --- | --- | --- | --- | --- |
+| **1** | Hammer | 1 ingot | 5 seconds | 10 coins |
+| **2** | Sword | 1 ingot | 5 seconds | 15 coins |
+| **3** | Axe | 1 ingot + 1 wood | 5 seconds | 25 coins |
 
-## Serve customer orders
+Carry each ingredient to the anvil and press **E** to load it. Axe ingredients
+can be loaded in either order and by different players. The selected recipe locks
+when the first ingredient is loaded. Wrong or duplicate inputs stay in your hands.
+Axe work cannot advance until both ingredients are present.
 
-The first customer arrives about **8 seconds** after hosting, walks from the door
-and waits beside the left counter. Each customer requests **one hammer**, with no
-deadline. Make a hammer, pick it up, stand at the counter, and press **E** to
-hand it over. Everyone earns **10 shared coins** and the orders-served count rises.
+Hold **E** with empty hands to work. Release, move away, jump, or get hit to pause;
+another dwarf can resume. Only one worker advances progress at normal speed.
+A finished product falls onto the right-hand tray. All products can be picked up,
+carried, dropped, or thrown, and cannot be smelted again in the ore bin.
+The forge and anvil can operate in parallel. Products have no tool action yet.
 
-The host checks your carried item and your position. Raw ore, ingots, distant
-interactions, and duplicate deliveries cannot spend a product or award coins.
-The sold hammer is removed. A served customer leaves, and the next visit starts
-**15 seconds after departure**. Customers and earnings synchronize for all players,
-including late joiners. New hosted sessions reset orders and coins.
+## Buy wood from the visiting merchant
 
-For this first version there is one patient customer at a time, one recipe, no
-penalties, and no spending system. Eight ore pieces are available initially; mining provides more whenever needed.
+The team starts with **20 shared coins**. A purple-clothed merchant first visits
+at **12 seconds**, stays for **20 seconds**, and returns every **45 seconds** on a
+fixed schedule. Each visit offers **4 wood**, costing **5 coins each**.
+
+Stand beside the merchant (between the counter and anvil), with empty hands,
+and press **B** once per purchase. Paid wood appears as a physical log nearby.
+Pick it up with E, carry it to the anvil, drop it, or throw it like ore.
+Only the merchant supplies wood; mining still produces ore. Purchases are checked
+by the host for range, floor, presence, stock, funds, and free hands. Shared coins
+cannot go negative. Each axe consumes exactly one log on completion.
+
+## Serve timed customer orders
+
+The first customer arrives at **8 seconds**, then a new customer arrives every
+**20 seconds**, regardless of the existing queue. Requests rotate through hammer,
+sword, and axe. Each customer has **30 seconds from arrival**, including walking
+in and waiting behind others. They do not receive a fresh timer at the front.
+
+The HUD lists the front request, queued requests, remaining patience, and prices.
+Carry the exact product to the left counter and press **E** to serve **only the
+front customer**. Later customers cannot be served out of order. Correct delivery
+removes the product, earns its sale price, and gives **+1 shared reputation**.
+Each customer who runs out of patience leaves and costs **1 reputation**. There
+is no coin fine; reputation can fall below zero. The next queued customer advances.
+
+Coins, reputation, queues, deadlines, selected recipes, partially loaded
+ingredients, merchant stock, and physical items synchronize with clients and
+late joiners. A new hosted game resets the economy, reputation, clocks, and
+materials. There is no persistence, reputation-based difficulty, or shop upgrade
+system yet.
 
 ## Mine more ore
 
@@ -147,8 +170,9 @@ uses three independent processes on loopback, not separate physical machines.
 5. Complete: five-second shared forge job, pausing, handoff, and physical ingots.
 6. Complete: load an ingot, work the anvil, and produce a physical hammer.
 7. Complete: patient customer orders, hammer delivery, and shared coins.
-8. **Current:** three-second mining cycles, shared progress, and physical ore output.
-9. Balance, more recipes, and merchants after review.
+8. Complete: three-second mining cycles, shared progress, and physical ore output.
+9. **Current:** three products, merchant wood, front-only timed queues, and reputation.
+10. Balance and further systems after review.
 
 ## Validation
 
@@ -180,11 +204,14 @@ The standalone commands above check project loading and startup; they do not rep
 Generated Godot caches are ignored. No cloud configuration is published by this project.
 
 Customer checks in `tests/customers.gd` and `tests/customers_physics.gd` cover
-arrival, patient waiting, wrong items, reach, competing deliveries, rewards,
-departure, snapshots, E interactions, and session reset. The three-process test
-finishes the production chain with a real client delivery and shared earnings.
+regular arrivals, exact patience, front-only service, rewards, expiry penalties,
+queue advancement, E interactions, and reset. Mining checks cover exact timing,
+contention, pauses, handoffs, disconnects, new IDs, physics, pickup, and throwing.
 
-Mining tests in `tests/mining.gd` and `tests/mining_physics.gd` check exact
-extraction time, contention, pauses, handoffs, worker disconnects, unique IDs,
-physical output, pickup, throwing, and reset. The three-process test verifies
-shared extraction and client pickup of a newly created ore body.
+`tests/economy.gd` checks all recipes, both axe loading orders, ingredient locking,
+wood consumption, merchant visits, stock, funds, and simultaneous purchase rules.
+`python3 tools/check_multiplayer.py res://tests/market_multiplayer.gd` runs a
+separate host and two clients through competing purchases, client-selected
+recipes, cooperative axe loading, sword production, front-only delivery,
+reputation gain/loss, and a real client disconnect/rejoin with state restoration.
+Both network suites are included in `bash tools/check.sh`.

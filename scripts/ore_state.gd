@@ -5,7 +5,7 @@ var pieces: Dictionary = {}
 
 func _init() -> void:
 	for id in range(INITIAL_ORE):
-		pieces[id] = {"owner": 0, "stored": false, "processing": false, "kind": "ore", "delivered": false}
+		pieces[id] = {"owner": 0, "stored": false, "processing": false, "kind": "ore", "delivered": false, "consumed": false}
 
 var available: int:
 	get:
@@ -36,7 +36,7 @@ func carried_by(player: int) -> int:
 	return -1
 
 func is_loose(id: int) -> bool:
-	return pieces.has(id) and pieces[id].owner == 0 and not pieces[id].stored and not pieces[id].processing and not pieces[id].delivered
+	return pieces.has(id) and pieces[id].owner == 0 and not pieces[id].stored and not pieces[id].processing and not pieces[id].delivered and not pieces[id].consumed
 
 func pickup(player: int, id: int) -> bool:
 	if player <= 0 or carried_by(player) != -1 or not is_loose(id):
@@ -81,8 +81,11 @@ func finish_hammer(id: int) -> void:
 		pieces[id].kind = "hammer"
 
 func add_mined_ore() -> int:
+	return add_material("ore")
+
+func add_material(kind: String) -> int:
 	var id := 0
 	for existing in pieces:
 		id = maxi(id, existing + 1)
-	pieces[id] = {"owner": 0, "stored": false, "processing": false, "kind": "ore", "delivered": false}
+	pieces[id] = {"owner": 0, "stored": false, "processing": false, "kind": kind, "delivered": false, "consumed": false}
 	return id

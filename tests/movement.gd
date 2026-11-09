@@ -94,6 +94,7 @@ func run() -> void:
 		await frames(2)
 		check(player.climbing, "Attach before jump while holding " + direction)
 		await hold("jump", 1)
+		check(not player.climbing and (player.velocity.y > 0 if direction == "climb_down" else player.velocity.y < 0), "Down + Jump drops; Up + Jump launches: " + direction)
 		await frames(8)
 		check(not player.climbing and player.ladder_jump_locked, "Holding %s after jump does not reattach" % direction)
 		Input.action_release(direction)
@@ -109,15 +110,36 @@ func run() -> void:
 	Input.action_press("climb_up")
 	await frames(2)
 	await hold("jump", 1)
+	await frames(8)
+	check(not player.climbing and player.velocity.y < 0, "Held Up stays detached during jump ascent")
+	var caught_at_apex := false
+	for i in range(25):
+		await frames(1)
+		if player.climbing:
+			caught_at_apex = true
+			break
+	check(caught_at_apex and player.position.y > 163 and player.position.y < 170, "Held Up catches ladder at jump apex")
+	Input.action_release("climb_up")
+	await frames(1)
+	player.position = Vector2(368, 190)
+	player.velocity = Vector2.ZERO
+	player.climbing = false
+	Input.action_press("climb_down")
+	await frames(2)
+	var drop_start := player.position.y
+	await hold("jump", 1)
+	await frames(5)
+	check(not player.climbing and player.position.y > drop_start, "Held Down continues falling after detach")
 	var landed := false
 	for i in range(100):
 		await frames(1)
 		if player.is_on_floor():
 			landed = true
 			break
-	check(landed and not player.ladder_jump_locked, "Landing clears jump lock with climb still held")
+	check(landed and not player.ladder_jump_locked, "Landing clears drop lock with Down still held")
 	await frames(2)
-	check(player.climbing, "Held climb works again after landing")
+	check(player.climbing, "Held Down works again after landing")
+	Input.action_release("climb_down")
 	Input.action_release("climb_up")
 	player.position = Vector2(112, 260)
 	player.velocity = Vector2.ZERO

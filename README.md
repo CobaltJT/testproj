@@ -18,6 +18,8 @@ editor; there is no runtime drawing script. Walk with **A/D** or **Left/Right**,
 leaving the ladder width or pressing jump detaches. Upward movement stops at the
 top, where you can move sideways onto a landing. Attaching never centers the dwarf. After jumping off, holding a climb direction
 does not reattach until you land or release and press a climb direction again.
+Holding Up also catches the ladder at the peak of an upward jump if still in
+reach. Down + Space detaches into a fall without an upward jump.
 Floors, ceiling, and outer walls are solid. Furniture remains background scenery.
 The whole building stays visible; interactions and networking come later.
 

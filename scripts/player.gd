@@ -16,6 +16,9 @@ func _physics_process(delta: float) -> void:
 	var vertical := Input.get_axis("climb_up", "climb_down")
 	if not Input.is_action_pressed("climb_up") and not Input.is_action_pressed("climb_down"):
 		ladder_jump_locked = false
+	# A held Up can catch the ladder as an upward jump reaches its apex.
+	if ladder_jump_locked and vertical < 0 and velocity.y < 0 and velocity.y + GRAVITY * delta >= 0:
+		ladder_jump_locked = false
 	if not climbing and not ladder_jump_locked and not Input.is_action_just_pressed("jump") and not is_zero_approx(vertical):
 		for i in range(LADDERS.size()):
 			var ladder := LADDERS[i]
@@ -31,7 +34,7 @@ func _physics_process(delta: float) -> void:
 		if Input.is_action_just_pressed("jump"):
 			climbing = false
 			ladder_jump_locked = true
-			velocity.y = JUMP_SPEED
+			velocity.y = CLIMB_SPEED if vertical > 0 else JUMP_SPEED
 		else:
 			# Limit vertical travel without snapping; clear the floor collision margin
 			# at the top so horizontal movement can reach the landing.

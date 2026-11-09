@@ -1,6 +1,32 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Texture2D" path="res://assets/textures/smithy.svg" id="1"]
+
+[ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2"]
+
+[sub_resource type="RectangleShape2D" id="UpperLeft"]
+size = Vector2(304, 8)
+
+[sub_resource type="RectangleShape2D" id="UpperRight"]
+size = Vector2(48, 8)
+
+[sub_resource type="RectangleShape2D" id="GroundLeft"]
+size = Vector2(48, 8)
+
+[sub_resource type="RectangleShape2D" id="GroundRight"]
+size = Vector2(304, 8)
+
+[sub_resource type="RectangleShape2D" id="Cellar"]
+size = Vector2(384, 8)
+
+[sub_resource type="RectangleShape2D" id="LeftWall"]
+size = Vector2(8, 230)
+
+[sub_resource type="RectangleShape2D" id="RightWall"]
+size = Vector2(8, 230)
+
+[sub_resource type="RectangleShape2D" id="Ceiling"]
+size = Vector2(384, 5)
 
 [node name="Smithy" type="Node2D"]
 scale = Vector2(2, 2)
@@ -23,7 +49,7 @@ offset_left = 25.0
 offset_top = 29.0
 theme_override_colors/font_color = Color(0.5450980392156862, 0.6039215686274509, 0.6666666666666666, 1)
 theme_override_font_sizes/font_size = 8
-text = "A DWARVEN SMITHY  /  BUILDING STUDY"
+text = "A DWARVEN SMITHY  /  SINGLE PLAYER"
 mouse_filter = 2
 
 [node name="Caption3" type="Label" parent="."]
@@ -79,5 +105,42 @@ offset_left = 24.0
 offset_top = 305.0
 theme_override_colors/font_color = Color(0.6039215686274509, 0.6549019607843137, 0.6980392156862745, 1)
 theme_override_font_sizes/font_size = 8
-text = "STAGE 01  /  Layout preview - movement and LAN co-op come next"
+text = "A/D or arrows: walk  |  Space: jump  |  W/S or up/down: ladders"
 mouse_filter = 2
+
+[node name="Collision" type="StaticBody2D" parent="."]
+
+[node name="UpperLeft" type="CollisionShape2D" parent="Collision"]
+position = Vector2(200.0, 140.0)
+shape = SubResource("UpperLeft")
+
+[node name="UpperRight" type="CollisionShape2D" parent="Collision"]
+position = Vector2(408.0, 140.0)
+shape = SubResource("UpperRight")
+
+[node name="GroundLeft" type="CollisionShape2D" parent="Collision"]
+position = Vector2(72.0, 220.0)
+shape = SubResource("GroundLeft")
+
+[node name="GroundRight" type="CollisionShape2D" parent="Collision"]
+position = Vector2(280.0, 220.0)
+shape = SubResource("GroundRight")
+
+[node name="Cellar" type="CollisionShape2D" parent="Collision"]
+position = Vector2(240.0, 292.0)
+shape = SubResource("Cellar")
+
+[node name="LeftWall" type="CollisionShape2D" parent="Collision"]
+position = Vector2(48.0, 181.0)
+shape = SubResource("LeftWall")
+
+[node name="RightWall" type="CollisionShape2D" parent="Collision"]
+position = Vector2(432.0, 181.0)
+shape = SubResource("RightWall")
+
+[node name="Ceiling" type="CollisionShape2D" parent="Collision"]
+position = Vector2(240.0, 68.5)
+shape = SubResource("Ceiling")
+
+[node name="Player" parent="." instance=ExtResource("2")]
+position = Vector2(220, 216)

@@ -1,0 +1,20 @@
+; Open this file in Godot 4.6 or newer.
+config_version=5
+
+[application]
+config/name="Hearth & Hammer"
+run/main_scene="res://scenes/smithy.tscn"
+config/features=PackedStringArray("4.6", "GL Compatibility")
+
+[display]
+window/size/viewport_width=960
+window/size/viewport_height=640
+window/size/window_width_override=1152
+window/size/window_height_override=768
+window/stretch/mode="canvas_items"
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+textures/default_filters/use_nearest_mipmap_filter=false
+textures/canvas_textures/default_texture_filter=0
+environment/defaults/default_clear_color=Color(0.067, 0.078, 0.102, 1)

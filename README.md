@@ -16,7 +16,8 @@ Captions are separate Label nodes in the scene. Edit the SVG in an image/vector
 editor; there is no runtime drawing script. Walk with **A/D** or **Left/Right**, jump with **Space**, and climb with
 **W/S** or **Up/Down** while at a ladder. Release to hold on a ladder. Move horizontally or diagonally while attached;
 leaving the ladder width or pressing jump detaches. Upward movement stops at the
-top, where you can move sideways onto a landing. Attaching never centers the dwarf.
+top, where you can move sideways onto a landing. Attaching never centers the dwarf. After jumping off, holding a climb direction
+does not reattach until you land or release and press a climb direction again.
 Floors, ceiling, and outer walls are solid. Furniture remains background scenery.
 The whole building stays visible; interactions and networking come later.
 

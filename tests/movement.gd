@@ -83,6 +83,42 @@ func run() -> void:
 	check(player.climbing and absf(player.position.y - stopped) < 1, "Release input holds position on ladder")
 	await hold("jump", 1)
 	check(not player.climbing and player.velocity.y < 0, "Jump detaches from ladder")
+	for direction in ["climb_up", "climb_down"]:
+		Input.action_release("climb_up")
+		Input.action_release("climb_down")
+		await frames(1)
+		player.position = Vector2(368, 190)
+		player.velocity = Vector2.ZERO
+		player.climbing = false
+		Input.action_press(direction)
+		await frames(2)
+		check(player.climbing, "Attach before jump while holding " + direction)
+		await hold("jump", 1)
+		await frames(8)
+		check(not player.climbing and player.ladder_jump_locked, "Holding %s after jump does not reattach" % direction)
+		Input.action_release(direction)
+		await frames(1)
+		await hold(direction, 1)
+		check(player.climbing, "Release and re-press %s reattaches in midair" % direction)
+	Input.action_release("climb_up")
+	Input.action_release("climb_down")
+	await frames(1)
+	player.position = Vector2(368, 190)
+	player.velocity = Vector2.ZERO
+	player.climbing = false
+	Input.action_press("climb_up")
+	await frames(2)
+	await hold("jump", 1)
+	var landed := false
+	for i in range(100):
+		await frames(1)
+		if player.is_on_floor():
+			landed = true
+			break
+	check(landed and not player.ladder_jump_locked, "Landing clears jump lock with climb still held")
+	await frames(2)
+	check(player.climbing, "Held climb works again after landing")
+	Input.action_release("climb_up")
 	player.position = Vector2(112, 260)
 	player.velocity = Vector2.ZERO
 	player.climbing = false

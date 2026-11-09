@@ -8,12 +8,15 @@ const CLIMB_SPEED := 110.0
 const LADDERS: Array[Rect2] = [Rect2(352, 136, 32, 80), Rect2(96, 216, 32, 72)]
 var climbing := false
 var active_ladder := -1
+var ladder_jump_locked := false
 @onready var sprite: Sprite2D = $Sprite2D
 
 func _physics_process(delta: float) -> void:
 	var horizontal := Input.get_axis("move_left", "move_right")
 	var vertical := Input.get_axis("climb_up", "climb_down")
-	if not climbing and not is_zero_approx(vertical):
+	if not Input.is_action_pressed("climb_up") and not Input.is_action_pressed("climb_down"):
+		ladder_jump_locked = false
+	if not climbing and not ladder_jump_locked and not Input.is_action_just_pressed("jump") and not is_zero_approx(vertical):
 		for i in range(LADDERS.size()):
 			var ladder := LADDERS[i]
 			if position.x >= ladder.position.x and position.x <= ladder.end.x and position.y >= ladder.position.y - 3 and position.y <= ladder.end.y + 1:
@@ -27,6 +30,7 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector2(horizontal * SPEED, vertical * CLIMB_SPEED)
 		if Input.is_action_just_pressed("jump"):
 			climbing = false
+			ladder_jump_locked = true
 			velocity.y = JUMP_SPEED
 		else:
 			# Limit vertical travel without snapping; clear the floor collision margin
@@ -45,6 +49,8 @@ func _physics_process(delta: float) -> void:
 	if not is_zero_approx(horizontal):
 		sprite.flip_h = horizontal < 0
 	move_and_slide()
+	if is_on_floor():
+		ladder_jump_locked = false
 
 	if climbing:
 		var ladder := LADDERS[active_ladder]

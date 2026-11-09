@@ -161,6 +161,16 @@ func run() -> void:
 	check(hammered and session.anvil.piece == -1 and session.ore.pieces.size() == 8, "All peers see one hammer and conserved material identity")
 	if hammered:
 		check(session.ore_bodies[hammer_id()].visible and session.ore_bodies[hammer_id()].get_node("Sprite2D").texture == session.HAMMER_TEXTURE, "Physical hammer image replicates")
+	if role == "client1":
+		await walk_to(dwarf, 282)
+		await press_interact()
+		var carrying_product := await until(func(): return id in session.ore.carriers)
+		check(carrying_product, "Client collects finished hammer for delivery")
+		await walk_to(dwarf, 166)
+		await press_interact()
+	var served := await until(func(): return session.orders.completed == 1)
+	check(served and session.orders.coins == 10, "Customer delivery and shared coins replicate to all peers")
+	check(not session.ore_bodies[hammer_id()].visible and session.ore.pieces[hammer_id()].delivered, "Sold hammer is removed on every peer")
 	await walk_to(dwarf, 200)
 	if role == "host":
 		# Let the last thrower return to the waiting area, then create an impact.

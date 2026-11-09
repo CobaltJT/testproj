@@ -8,7 +8,7 @@ Open `project.godot` in **Godot 4.6.x (standard / GDScript)** and press **F5** t
 open `scenes/smithy.tscn` and press **F6**. No plugins or external assets
 are required. From a terminal: `godot --path .`.
 
-Stage 06 adds the first anvil recipe to the building: upstairs workshop/storage, ground-floor
+Stage 07 adds customers and shared earnings to the building: upstairs workshop/storage, ground-floor
 customer counter and forge, and a basement with ore storage and a mine entrance.
 Ladders mark planned routes. The building is an original pixel-style image texture in
 `assets/textures/smithy.svg`, displayed by a Sprite2D with nearest filtering.
@@ -59,7 +59,7 @@ game resets all materials and forge progress. Mining replenishment and persisten
 Holding E after completion starts another job if ore remains. Ingots do not count
 as raw ore and cannot be smelted again by throwing them into the ore bin. Paused
 jobs survive worker disconnects. Late joiners receive material kinds, progress,
-worker status, and output positions. The first anvil recipe is a hammer; customer orders come later.
+worker status, and output positions. The first anvil recipe is a hammer; customers request finished hammers at the counter.
 
 ## Shape an ingot into a hammer
 
@@ -74,7 +74,24 @@ worker status, and output positions. The first anvil recipe is a hammer; custome
 One worker advances each station at a time. Loading consumes the carried ingot
 into the shared job; completion transforms that same material into one hammer.
 Paused jobs survive worker departures. The forge and anvil can operate in parallel.
-Hammers are products for now, with no tool action or customer delivery yet.
+Hammers are products for now, with no tool action; deliver them to waiting customers at the counter.
+
+## Serve customer orders
+
+The first customer arrives about **8 seconds** after hosting, walks from the door
+and waits beside the left counter. Each customer requests **one hammer**, with no
+deadline. Make a hammer, pick it up, stand at the counter, and press **E** to
+hand it over. Everyone earns **10 shared coins** and the orders-served count rises.
+
+The host checks your carried item and your position. Raw ore, ingots, distant
+interactions, and duplicate deliveries cannot spend a product or award coins.
+The sold hammer is removed. A served customer leaves, and the next visit starts
+**15 seconds after departure**. Customers and earnings synchronize for all players,
+including late joiners. New hosted sessions reset orders and coins.
+
+For this first version there is one patient customer at a time, one recipe, no
+penalties, and no spending system. The existing eight starting ore pieces remain
+the finite supply; further replenishment is a later stage.
 
 ## Play together on a LAN
 
@@ -115,8 +132,9 @@ uses three independent processes on loopback, not separate physical machines.
 3. Complete: LAN host/join, independent dwarfs, and host-authoritative movement.
 4. Complete: physical ore, pickup, carrying, throwing, knockback, and bin capture.
 5. Complete: five-second shared forge job, pausing, handoff, and physical ingots.
-6. **Current:** load an ingot, work the anvil, and produce a physical hammer.
-7. Customer orders, more recipes, mining, and merchants after review.
+6. Complete: load an ingot, work the anvil, and produce a physical hammer.
+7. **Current:** patient customer orders, hammer delivery, and shared coins.
+8. More recipes, mining, and merchants after review.
 
 ## Validation
 
@@ -146,3 +164,8 @@ test continues from the forge to a shared anvil job and replicated hammer.
 
 The standalone commands above check project loading and startup; they do not replace visual review.
 Generated Godot caches are ignored. No cloud configuration is published by this project.
+
+Customer checks in `tests/customers.gd` and `tests/customers_physics.gd` cover
+arrival, patient waiting, wrong items, reach, competing deliveries, rewards,
+departure, snapshots, E interactions, and session reset. The three-process test
+finishes the production chain with a real client delivery and shared earnings.

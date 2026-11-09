@@ -1,5 +1,9 @@
 extends Node
 ## ENet LAN session. Only the host simulates physics; clients send controls.
+const CUSTOMER_STATE = preload("res://scripts/customer_state.gd")
+var orders = CUSTOMER_STATE.new()
+var customer: Node2D
+var order_label: Label
 const PLAYER = preload("res://scenes/player.tscn")
 const WORLD = preload("res://scenes/smithy.tscn")
 const ORE_STATE = preload("res://scripts/ore_state.gd")
@@ -46,6 +50,8 @@ func _ready() -> void:
 	world.add_child(forge_station)
 	anvil_station = preload("res://scenes/anvil_station.tscn").instantiate()
 	world.add_child(anvil_station)
+	customer = preload("res://scenes/customer.tscn").instantiate()
+	world.add_child(customer)
 	reset_ore(false)
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -56,6 +62,11 @@ func _ready() -> void:
 	hint.position = Vector2(48, 574)
 	hint.add_theme_font_size_override("font_size", 14)
 	layer.add_child(hint)
+	order_label = Label.new()
+	order_label.position = Vector2(545, 85)
+	order_label.add_theme_font_size_override("font_size", 15)
+	layer.add_child(order_label)
+	refresh_orders()
 	var column := VBoxContainer.new()
 	panel.add_child(column)
 	status = Label.new()
@@ -144,6 +155,7 @@ func client_ready() -> void:
 	receive_ore_motion.rpc_id(id, ore_motion())
 	receive_forge.rpc_id(id, forge.snapshot())
 	receive_anvil.rpc_id(id, anvil.snapshot())
+	receive_orders.rpc_id(id, orders.snapshot())
 
 @rpc("authority", "call_local", "reliable")
 func spawn_player(id: int, at: Vector2) -> void:
@@ -196,6 +208,8 @@ func _physics_process(delta: float) -> void:
 				work_held[id] = false
 		step_forge(delta)
 		step_anvil(delta)
+		orders.step(delta)
+		refresh_orders()
 		tick += 1
 		if tick % 3 == 0:
 			var state: Array = []
@@ -206,6 +220,7 @@ func _physics_process(delta: float) -> void:
 			receive_ore_motion.rpc(ore_motion())
 			receive_forge.rpc(forge.snapshot())
 			receive_anvil.rpc(anvil.snapshot())
+			receive_orders.rpc(orders.snapshot())
 	else:
 		send_controls.rpc_id(1, axis, jump, climb, Input.is_action_pressed("interact"))
 
@@ -282,6 +297,16 @@ func interact_for(id: int) -> void:
 	if now - last_interaction.get(id, -1000) < 150:
 		return
 	last_interaction[id] = now
+	if absf(players[id].position.x - 166) <= 30 and absf(players[id].position.y - 216) <= 6 and orders.phase == "waiting" and ore.carried_by(id) != -1:
+		var sold: bool = orders.deliver(id, players[id].position, ore)
+		receive_ore.rpc(ore.snapshot())
+		receive_orders.rpc(orders.snapshot())
+		var reply := "Hammer delivered! +10 shared coins." if sold else "This customer needs one finished hammer."
+		if id == 1:
+			interaction_feedback(reply)
+		else:
+			interaction_feedback.rpc_id(id, reply)
+		return
 	if near_anvil(players[id]) and ore.carried_by(id) != -1:
 		var loaded: bool = anvil.load_ingot(id, ore)
 		receive_ore.rpc(ore.snapshot())
@@ -354,6 +379,8 @@ func reset_ore(simulate: bool) -> void:
 	hit_cooldowns.clear()
 	ore = ORE_STATE.new()
 	forge = FORGE_STATE.new()
+	orders = CUSTOMER_STATE.new()
+	refresh_orders()
 	anvil = FORGE_STATE.new()
 	anvil.output_kind = "hammer"
 	refresh_anvil()
@@ -517,3 +544,29 @@ func refresh_anvil() -> void:
 	if anvil.piece != -1:
 		text = "%s %.1f/5s" % ["WORK" if anvil.worker != 0 else "PAUSED", anvil.progress]
 	anvil_station.get_node("WorkLabel").text = text
+
+@rpc("authority", "call_remote", "reliable")
+func receive_orders(state: Dictionary) -> void:
+	orders.restore(state)
+	refresh_orders()
+
+func refresh_orders() -> void:
+	customer.visible = active and orders.phase != "away"
+	var x := 120.0
+	if orders.phase == "arriving":
+		x = lerpf(70, 120, 1.0 - orders.timer / CUSTOMER_STATE.WALK_TIME)
+	elif orders.phase == "leaving":
+		x = lerpf(120, 70, 1.0 - orders.timer / CUSTOMER_STATE.WALK_TIME)
+	customer.position = Vector2(x, 216)
+	customer.get_node("Sprite2D").flip_h = orders.phase == "leaving"
+	customer.get_node("Request").text = "THANK YOU!" if orders.phase == "leaving" else "1 HAMMER"
+	if order_label != null:
+		order_label.visible = active
+		var request := "Next customer in %ss" % ceili(orders.timer)
+		if orders.phase == "arriving":
+			request = "Customer arriving: 1 hammer"
+		elif orders.phase == "waiting":
+			request = "Order #%s: 1 hammer · E at counter" % orders.number
+		elif orders.phase == "leaving":
+			request = "Order completed! +10 coins"
+		order_label.text = "%s\nCoins: %s · Orders served: %s" % [request, orders.coins, orders.completed]

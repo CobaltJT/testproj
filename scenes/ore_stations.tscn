@@ -1,16 +1,18 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=6 format=3]
 [ext_resource type="Texture2D" path="res://assets/textures/ore.svg" id="1"]
 [ext_resource type="Texture2D" path="res://assets/textures/ore_bin.svg" id="2"]
+[sub_resource type="RectangleShape2D" id="Side"]
+size = Vector2(3, 17)
+[sub_resource type="RectangleShape2D" id="Bottom"]
+size = Vector2(28, 3)
+[sub_resource type="RectangleShape2D" id="Catch"]
+size = Vector2(18, 10)
 [node name="OreStations" type="Node2D"]
-[node name="Supply" type="Sprite2D" parent="."]
-position = Vector2(238, 281)
-texture_filter = 1
-texture = ExtResource("1")
 [node name="SupplyLabel" type="Label" parent="."]
 offset_left = 205.0
 offset_top = 250.0
 theme_override_font_sizes/font_size = 8
-text = "[E] ORE: 8"
+text = "E: PICK UP ORE"
 mouse_filter = 2
 [node name="Bin" type="Sprite2D" parent="."]
 position = Vector2(310, 207)
@@ -20,5 +22,24 @@ texture = ExtResource("2")
 offset_left = 281.0
 offset_top = 178.0
 theme_override_font_sizes/font_size = 8
-text = "[E] BIN: 0"
+text = "THROW IN: 0"
 mouse_filter = 2
+
+[node name="BinWalls" type="StaticBody2D" parent="."]
+collision_layer = 8
+collision_mask = 4
+[node name="Left" type="CollisionShape2D" parent="BinWalls"]
+position = Vector2(297.5, 207.5)
+shape = SubResource("Side")
+[node name="Right" type="CollisionShape2D" parent="BinWalls"]
+position = Vector2(322.5, 207.5)
+shape = SubResource("Side")
+[node name="Bottom" type="CollisionShape2D" parent="BinWalls"]
+position = Vector2(310, 214.5)
+shape = SubResource("Bottom")
+[node name="BinCatch" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 4
+[node name="Shape" type="CollisionShape2D" parent="BinCatch"]
+position = Vector2(310, 204)
+shape = SubResource("Catch")

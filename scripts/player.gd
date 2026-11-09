@@ -6,6 +6,8 @@ const JUMP_SPEED := -300.0
 const GRAVITY := 1000.0
 const CLIMB_SPEED := 110.0
 const LADDERS: Array[Rect2] = [Rect2(352, 136, 32, 80), Rect2(96, 216, 32, 72)]
+var knockback_x := 0.0
+var hit_stun := 0.0
 var networked := false
 var controls := Vector2.ZERO
 var jump_held := false
@@ -19,6 +21,7 @@ var ladder_jump_locked := false
 func _physics_process(delta: float) -> void:
 	if networked and not multiplayer.is_server():
 		return
+	hit_stun = maxf(0, hit_stun - delta)
 	var horizontal := controls.x if networked else Input.get_axis("move_left", "move_right")
 	var vertical := controls.y if networked else Input.get_axis("climb_up", "climb_down")
 	var jump_pressed := (jump_held and not previous_jump) if networked else Input.is_action_just_pressed("jump")
@@ -29,7 +32,7 @@ func _physics_process(delta: float) -> void:
 	# A held Up can catch the ladder as an upward jump reaches its apex.
 	if ladder_jump_locked and vertical < 0 and velocity.y < 0 and velocity.y + GRAVITY * delta >= 0:
 		ladder_jump_locked = false
-	if not climbing and not ladder_jump_locked and not jump_pressed and not is_zero_approx(vertical):
+	if hit_stun == 0 and not climbing and not ladder_jump_locked and not jump_pressed and not is_zero_approx(vertical):
 		for i in range(LADDERS.size()):
 			var ladder := LADDERS[i]
 			if position.x >= ladder.position.x and position.x <= ladder.end.x and position.y >= ladder.position.y - 3 and position.y <= ladder.end.y + 1:
@@ -61,6 +64,8 @@ func _physics_process(delta: float) -> void:
 			velocity.y = JUMP_SPEED
 	if not is_zero_approx(horizontal):
 		sprite.flip_h = horizontal < 0
+	velocity.x += knockback_x
+	knockback_x = move_toward(knockback_x, 0, 700 * delta)
 	move_and_slide()
 	if is_on_floor():
 		ladder_jump_locked = false
@@ -69,3 +74,10 @@ func _physics_process(delta: float) -> void:
 		var ladder := LADDERS[active_ladder]
 		if position.x < ladder.position.x or position.x > ladder.end.x:
 			climbing = false
+
+func apply_ore_hit(impulse: Vector2) -> void:
+	climbing = false
+	ladder_jump_locked = true
+	hit_stun = 0.25
+	knockback_x = clampf(impulse.x, -260, 260)
+	velocity.y = minf(velocity.y, -100.0)

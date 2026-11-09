@@ -50,3 +50,12 @@ interact={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"physical_keycode":69)]
 }
+
+throw_ore={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":70)]
+}
+drop_ore={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":81)]
+}

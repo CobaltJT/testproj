@@ -3,7 +3,11 @@ extends Node
 const PLAYER = preload("res://scenes/player.tscn")
 const WORLD = preload("res://scenes/smithy.tscn")
 const ORE_STATE = preload("res://scripts/ore_state.gd")
+const ORE_BODY = preload("res://scenes/ore_piece.tscn")
 var ore = ORE_STATE.new()
+var ore_bodies: Dictionary = {}
+var throw_grace: Dictionary = {}
+var hit_cooldowns: Dictionary = {}
 var stations: Node2D
 var hint: Label
 var last_interaction: Dictionary = {}
@@ -25,6 +29,7 @@ func _ready() -> void:
 	world.get_node("Player").free()
 	stations = preload("res://scenes/ore_stations.tscn").instantiate()
 	world.add_child(stations)
+	reset_ore(false)
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var panel := PanelContainer.new()
@@ -90,8 +95,7 @@ func host_game() -> void:
 	active = true
 	menu.hide()
 	leave_button.show()
-	ore = ORE_STATE.new()
-	refresh_ore()
+	reset_ore(true)
 	spawn_player(1, Vector2(220, 216))
 	update_status()
 
@@ -120,6 +124,7 @@ func client_ready() -> void:
 		spawn_player.rpc_id(id, existing, players[existing].position)
 	spawn_player.rpc(id, Vector2(210 + (players.size() % 6) * 22, 216))
 	receive_ore.rpc_id(id, ore.snapshot())
+	receive_ore_motion.rpc_id(id, ore_motion())
 
 @rpc("authority", "call_local", "reliable")
 func spawn_player(id: int, at: Vector2) -> void:
@@ -148,6 +153,12 @@ func spawn_player(id: int, at: Vector2) -> void:
 func _physics_process(_delta: float) -> void:
 	if not active or not players.has(multiplayer.get_unique_id()):
 		return
+	if Input.is_action_just_pressed("throw_ore") or Input.is_action_just_pressed("drop_ore"):
+		var drop := Input.is_action_just_pressed("drop_ore")
+		if multiplayer.is_server():
+			release_ore(1, drop)
+		else:
+			request_throw.rpc_id(1, drop)
 	if Input.is_action_just_pressed("interact"):
 		if multiplayer.is_server():
 			interact_for(1)
@@ -157,6 +168,7 @@ func _physics_process(_delta: float) -> void:
 	var jump := Input.is_action_pressed("jump")
 	var climb := Input.is_action_pressed("climb_up") or Input.is_action_pressed("climb_down")
 	if multiplayer.is_server():
+		step_ore()
 		apply_controls(1, axis, jump, climb)
 		for id in last_input:
 			if Time.get_ticks_msec() - last_input[id] > 500 and players.has(id):
@@ -168,6 +180,7 @@ func _physics_process(_delta: float) -> void:
 				var dwarf = players[id]
 				state.append([id, dwarf.position, dwarf.velocity, dwarf.climbing, dwarf.sprite.flip_h])
 			receive_state.rpc(state)
+			receive_ore_motion.rpc(ore_motion())
 	else:
 		send_controls.rpc_id(1, axis, jump, climb)
 
@@ -198,7 +211,7 @@ func receive_state(state: Array) -> void:
 
 func peer_left(id: int) -> void:
 	if multiplayer.is_server():
-		ore.release_carrier(id)
+		release_ore(id, true)
 		remove_player.rpc(id)
 		receive_ore.rpc(ore.snapshot())
 
@@ -223,8 +236,7 @@ func disconnect_game(message: String) -> void:
 	players.clear()
 	last_input.clear()
 	last_interaction.clear()
-	ore = ORE_STATE.new()
-	refresh_ore()
+	reset_ore(false)
 	hint.text = ""
 	menu.show()
 	leave_button.hide()
@@ -243,7 +255,22 @@ func interact_for(id: int) -> void:
 	if now - last_interaction.get(id, -1000) < 150:
 		return
 	last_interaction[id] = now
-	var message: String = ore.interact(id, players[id].position)
+	var message := "E: pick up nearby ore · F: throw · Q: drop"
+	if id in ore.carriers:
+		message = "F: throw toward the bin · Q: drop"
+	else:
+		var nearest := -1
+		var distance := 24.0
+		for piece_id in ore_bodies:
+			if not ore.is_loose(piece_id):
+				continue
+			var offset: Vector2 = world.to_local(ore_bodies[piece_id].global_position) - (players[id].position - Vector2(0, 8))
+			if absf(offset.y) <= 18 and offset.length() < distance:
+				distance = offset.length()
+				nearest = piece_id
+		if nearest != -1 and ore.pickup(id, nearest):
+			message = "Ore picked up. F: throw · Q: drop"
+
 	receive_ore.rpc(ore.snapshot())
 	if id == 1:
 		interaction_feedback(message)
@@ -260,8 +287,108 @@ func interaction_feedback(message: String) -> void:
 	hint.text = message
 
 func refresh_ore() -> void:
-	stations.get_node("SupplyLabel").text = "[E] ORE: %s" % ore.available
-	stations.get_node("Supply").visible = ore.available > 0
-	stations.get_node("BinLabel").text = "[E] BIN: %s" % ore.deposited
+	stations.get_node("SupplyLabel").text = "E: PICK UP · LOOSE: %s" % ore.available
+	stations.get_node("BinLabel").text = "THROW IN: %s" % ore.deposited
+	for piece_id in ore_bodies:
+		var body: RigidBody2D = ore_bodies[piece_id]
+		var loose: bool = ore.is_loose(piece_id)
+		body.visible = loose
+		body.freeze = not loose or not (active and multiplayer.is_server())
+		body.collision_layer = 4 if loose and multiplayer.is_server() else 0
+		body.collision_mask = 13 if loose and multiplayer.is_server() else 0
 	for id in players:
 		players[id].get_node("CarriedOre").visible = id in ore.carriers
+
+func reset_ore(simulate: bool) -> void:
+	for body in ore_bodies.values():
+		body.free()
+	ore_bodies.clear()
+	throw_grace.clear()
+	hit_cooldowns.clear()
+	ore = ORE_STATE.new()
+	for id in ore.pieces:
+		var body: RigidBody2D = ORE_BODY.instantiate()
+		body.name = "Ore_%s" % id
+		world.add_child(body)
+		body.global_position = world.to_global(Vector2(210 + id * 8, 281 - (id % 2) * 3))
+		body.freeze = not simulate
+		body.collision_layer = 4 if simulate else 0
+		body.collision_mask = 13 if simulate else 0
+		ore_bodies[id] = body
+	refresh_ore()
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_throw(drop: bool) -> void:
+	if multiplayer.is_server():
+		release_ore(multiplayer.get_remote_sender_id(), drop)
+
+func release_ore(id: int, drop: bool) -> void:
+	if not multiplayer.is_server() or not players.has(id):
+		return
+	var piece_id: int = ore.release_carrier(id)
+	if piece_id == -1:
+		return
+	var dwarf = players[id]
+	var direction := -1.0 if dwarf.sprite.flip_h else 1.0
+	var body: RigidBody2D = ore_bodies[piece_id]
+	# Release within the dwarf's footprint so a wall cannot swallow the ore.
+	var at: Vector2 = dwarf.position + Vector2(direction * 2, -18 if not drop else -7)
+	var motion := Vector2(direction * 280, -180) if not drop else Vector2(direction * 25, 0)
+	position_ore(body, at, motion)
+	body.angular_velocity = direction * 6 if not drop else 0
+	throw_grace[piece_id] = [id, Time.get_ticks_msec() + 300]
+	receive_ore.rpc(ore.snapshot())
+	receive_ore_motion.rpc(ore_motion())
+
+func ore_motion() -> Array:
+	var result: Array = []
+	for id in ore_bodies:
+		if ore.is_loose(id):
+			var body: RigidBody2D = ore_bodies[id]
+			result.append([id, body.global_position, body.rotation, body.linear_velocity])
+	return result
+
+@rpc("authority", "call_remote", "unreliable_ordered", 2)
+func receive_ore_motion(state: Array) -> void:
+	for item in state:
+		if ore_bodies.has(item[0]):
+			var body: RigidBody2D = ore_bodies[item[0]]
+			body.global_position = item[1]
+			body.rotation = item[2]
+			body.linear_velocity = item[3]
+
+func step_ore() -> void:
+	var changed := false
+	var catch_area: Area2D = stations.get_node("BinCatch")
+	for piece_id in ore_bodies:
+		if not ore.is_loose(piece_id):
+			continue
+		var body: RigidBody2D = ore_bodies[piece_id]
+		if catch_area.overlaps_body(body) and body.linear_velocity.y >= 0:
+			changed = ore.store(piece_id) or changed
+			continue
+		if body.linear_velocity.length() < 110:
+			continue
+		for id in players:
+			var now := Time.get_ticks_msec()
+			var grace: Array = throw_grace.get(piece_id, [0, 0])
+			if (grace[0] == id and now < grace[1]) or now < hit_cooldowns.get(Vector2i(piece_id, id), 0):
+				continue
+			var hurtbox := Rect2(players[id].global_position - Vector2(20, 54), Vector2(40, 62))
+			if hurtbox.has_point(body.global_position):
+				players[id].apply_ore_hit(body.linear_velocity * 0.7)
+				hit_cooldowns[Vector2i(piece_id, id)] = now + 400
+				body.linear_velocity = Vector2(-body.linear_velocity.x * 0.4, -70)
+				break
+	if changed:
+		receive_ore.rpc(ore.snapshot())
+
+func position_ore(body: RigidBody2D, at: Vector2, motion: Vector2) -> void:
+	body.freeze = false
+	body.sleeping = false
+	body.rotation = 0
+	body.global_position = world.to_global(at)
+	body.linear_velocity = motion
+	# Update the physics transform as well when releasing a formerly frozen body.
+	PhysicsServer2D.body_set_state(body.get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM, body.global_transform)
+	PhysicsServer2D.body_set_state(body.get_rid(), PhysicsServer2D.BODY_STATE_LINEAR_VELOCITY, motion)

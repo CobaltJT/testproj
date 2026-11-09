@@ -12,4 +12,5 @@ godot --headless --path . --editor --import --quit
 godot --headless --path . --quit-after 10
 godot --headless --path . --script res://tests/movement.gd
 godot --headless --path . --script res://tests/ore.gd
+godot --headless --path . --script res://tests/ore_physics.gd
 python3 tools/check_multiplayer.py

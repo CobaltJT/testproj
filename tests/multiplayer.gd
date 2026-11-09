@@ -89,14 +89,41 @@ func run() -> void:
 	var carried_up := await until(func(): return dwarf.position.y <= 215.8, 180)
 	Input.action_release("climb_up")
 	check(carried_up and id in session.ore.carriers, "Ore stays carried while climbing basement ladder")
-	await walk_to(dwarf, 310)
-	await press_interact()
-	var deposited := await until(func(): return id not in session.ore.carriers)
-	check(deposited and session.ore.deposited > 0 and not dwarf.get_node("CarriedOre").visible, "E deposits ore and clears carried texture")
+	await walk_to(dwarf, 200)
+	var turn := 0 if role == "host" else (1 if role == "client1" else 2)
+	var ready_to_throw := await until(func(): return session.ore.deposited >= turn, 900)
+	await frames(40)
+	await walk_to(dwarf, 260)
+	Input.action_press("throw_ore")
+	await frames(2)
+	Input.action_release("throw_ore")
+	var released := await until(func(): return id not in session.ore.carriers)
+	check(released and not dwarf.get_node("CarriedOre").visible, "F releases carried ore into shared physics")
+	var deposited := await until(func(): return session.ore.deposited >= turn + 1, 240)
+	check(ready_to_throw and deposited, "Physical throw lands inside the bin")
+	await walk_to(dwarf, 200)
 	check(session.ore.available + session.ore.deposited + session.ore.carriers.size() == 8, "All peers conserve the shared ore total")
 	var shared_total := await until(func(): return session.ore.deposited == 3 and session.ore.carriers.is_empty())
-	check(shared_total and session.stations.get_node("BinLabel").text == "[E] BIN: 3", "Every peer sees all three deposits and the same bin count")
+	check(shared_total and session.stations.get_node("BinLabel").text == "THROW IN: 3", "Every peer sees all three deposits and the same bin count")
+	if role == "host":
+		# Let the last thrower return to the waiting area, then create an impact.
+		await frames(90)
+		var loose_id := -1
+		for piece_id in session.ore.pieces:
+			if session.ore.is_loose(piece_id):
+				loose_id = piece_id
+				break
+		session.ore.pickup(1, loose_id)
+		session.refresh_ore()
+		dwarf.position = Vector2(220, 216)
+		dwarf.velocity = Vector2.ZERO
+		dwarf.sprite.flip_h = false
+		session.release_ore(1, false)
+		session.throw_grace.erase(loose_id)
+	var saw_knockback := await until(func(): return session.players.has(1) and session.players[1].position.x > 228, 300)
+	check(saw_knockback, "Host ore impact displacement replicates to every peer")
 	if role == "client1":
+		await frames(15)
 		session.disconnect_game("Test leave")
 		check(session.players.is_empty() and session.menu.visible, "Leave clears scene and restores menu")
 	elif role == "host":

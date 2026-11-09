@@ -23,18 +23,26 @@ reach. Down + Space detaches into a fall without an upward jump.
 Floors, ceiling, and outer walls are solid. Furniture remains background scenery.
 The whole building stays visible; the first task is transporting ore.
 
-## Carry ore to the forge
+## Throw ore into the forge bin
 
-- Descend the left ladder to the basement supply marked **[E] ORE**.
-- Press **E** nearby to pick up one piece. A small ore texture appears on the dwarf.
-- Carry it up the ladder and walk to the bin marked **[E] BIN** near the forge.
-- Press **E** to deposit it. Everyone sees the updated inventory and bin count.
+- The basement starts with **8 individual physics ore pieces**.
+- **E** picks up the nearest loose piece within reach; carry one at a time.
+- **F** throws in the dwarf's facing direction, with an upward arc.
+- **Q** gently drops the carried piece.
+- Aim throws into the open top of the ground-floor bin. A good starting position
+  is roughly 50 pixels left of the bin (on the 480-pixel world canvas), facing right.
+  **E no longer deposits ore.**
 
-Each hosted session starts with **8 pieces**. You can carry one at a time, and
-must be on the station's floor and within reach. The host resolves competing
-pickup requests; the last piece cannot be awarded twice. Carried ore returns to
-the supply when its owner disconnects. A new hosted game resets all ore; no mining
-replenishment, smithing, dropping, or session persistence is included yet.
+Loose ore falls, bounces, and settles against floors, walls, other ore, and the
+bin. Missed throws remain in the world and can be picked up again. Fast-moving
+ore hits knock dwarfs back, including off ladders; the thrower gets a short grace
+period to avoid hitting themselves immediately. There is no health damage yet.
+The bin stores each piece once and updates the shared count.
+
+The host owns physics, pickup decisions, impacts, and bin capture; clients receive
+ore transforms and inventories. Late joiners receive loose, carried, and stored
+ore state. Disconnecting drops carried ore at the dwarf's location. A new hosted
+game resets all ore. Mining replenishment, smithing, and persistence come later.
 
 ## Play together on a LAN
 
@@ -73,7 +81,7 @@ uses three independent processes on loopback, not separate physical machines.
 1. Complete: project and building layout.
 2. Complete: one dwarf, movement, jumping, collision, and ladders; fixed building view.
 3. Complete: LAN host/join, independent dwarfs, and host-authoritative movement.
-4. **Current:** shared ore pickup, carrying, and forge-bin deposit.
+4. **Current:** physical ore, pickup, carrying, throwing, knockback, and bin capture.
    Smithing and customer delivery follow after review.
 5. Mining, merchants, and additional tasks, one reviewed step at a time.
 
@@ -92,7 +100,9 @@ collisions, both ladder routes, holding on ladders, and jumping off. It then run
 `python3 tools/check_multiplayer.py`: one host and two clients exercising roster
 sync, independent movement, jumps, ladders, the full ore transport route, client
 departure, and host loss. `tests/ore.gd` checks station reach, one-piece capacity,
-last-piece contention, duplicate deposits, disconnect returns, and snapshots.
+piece contention, duplicate capture, identity conservation, and snapshots.
+`tests/ore_physics.gd` checks settling, drops, thrown bin capture, missed throws,
+impact knockback, and drops on disconnect.
 
 The standalone commands above check project loading and startup; they do not replace visual review.
 Generated Godot caches are ignored. No cloud configuration is published by this project.

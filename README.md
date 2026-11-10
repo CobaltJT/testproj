@@ -18,6 +18,7 @@ Press **Tab** or click **Build** to open the catalog:
 | Anvil | 20 | Shape ore; assemble axe heads and shafts |
 | Grinder | 25 | Sharpen unfinished swords |
 | Woodworking bench | 25 | Turn purchased wood into shafts |
+| Forge with attached bin | 25 | Collect thrown ore and smelt ingots |
 
 Buy with empty hands, then move the mouse and **left-click a green preview** to
 place the kit on a floor. Placement snaps to an 8-pixel grid. Red previews mean
@@ -36,8 +37,9 @@ Once open, the clocks keep running even while stations are being rearranged.
 
 ## Produce goods
 
-Metal is now worked **directly from ore**. There is no separate smelter, ingot
-step, or preinstalled ore bin. Carry each ingredient to a station and press **E**
+Metal can be worked **directly from ore**, preserving the anvil-only horseshoe
+route. You can also purchase a **forge with its attached ore bin** and smelt
+ingots; anvils accept ingots in place of ore for horseshoes, blades, and heads. Carry each ingredient to a station and press **E**
 to load it, then **hold E with empty hands for five seconds** to work. Release,
 move away, jump, or get knocked back to pause; another dwarf can continue.
 Helpers never multiply work speed. Outputs drop onto each station's right tray.
@@ -60,6 +62,20 @@ Grinders and woodworking benches have fixed recipes. Assembly ingredients may
 be supplied in either order and by different players. Loaded recipes lock until
 the job finishes. Wrong and duplicate inputs stay in your hands. A shaft is
 consumed once when the axe is assembled; unfinished parts cannot fulfill orders.
+
+## Forge and included ore bin
+
+The forge costs **25 coins including its bin**. Buy and place it through the same
+Tab catalog as other stations. It is not preinstalled. Throw ore into the open
+bin on the forge's left, then stand beside the forge and **hold E for five seconds**
+to smelt one ore into a physical ingot on the right output tray. E does not deposit
+ore directly. The bin can queue multiple ore pieces and rejects other materials.
+
+Releasing E pauses the smelt; another dwarf can continue. Holding E processes the
+next queued ore. Anvils accept the resulting ingots as alternatives to raw ore.
+The forge and bin are one station: purchase, placement, relocation, and refund
+apply to both. A forge can only be packed when its bin and active job are empty.
+Bin contents, smelting progress, and ingot outputs synchronize for late joiners.
 
 ## Move and handle items
 
@@ -120,6 +136,7 @@ Godot's writable settings in temporary folders, imports and starts the project,
 and runs:
 
 - Movement, ladder, collision, loose-item physics, and knockback checks.
+- Forge/bin collection, queueing, smelting, relocation, ingot use, and snapshots.
 - Material identity, purchase/placement validation, recipe routes, exact work
   duration, loading rules, handoffs, packing, relocation, refunds, and snapshots.
 - Actual catalog-button, placement-click, recipe, work, customer and mining inputs.

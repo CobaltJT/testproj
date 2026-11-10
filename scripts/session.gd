@@ -22,7 +22,8 @@ const EXTRA_TEXTURES = {
 	"wood": preload("res://assets/textures/wood.svg"),
 	"dull_sword": preload("res://assets/textures/dull_sword.svg"),
 	"axe_head": preload("res://assets/textures/axe_head.svg"),
-	"shaft": preload("res://assets/textures/shaft.svg")
+	"shaft": preload("res://assets/textures/shaft.svg"),
+	"ingot": preload("res://assets/textures/ingot.svg")
 }
 const MINING_STATE = preload("res://scripts/mining_state.gd")
 const MINE_POSITION := Vector2(390, 288)
@@ -399,10 +400,22 @@ func receive_ore_motion(state: Array) -> void:
 			body.linear_velocity = item[3]
 
 func step_ore() -> void:
+	var collected := false
 	for piece_id in ore_bodies:
 		if not ore.is_loose(piece_id):
 			continue
 		var body: RigidBody2D = ore_bodies[piece_id]
+		var stored := false
+		if body.linear_velocity.y >= 0:
+			for station_id in workshop.stations:
+				var entry: Dictionary = workshop.stations[station_id]
+				if entry.kind == "forge" and station_nodes.has(station_id) and station_nodes[station_id].get_node("BinCatch").overlaps_body(body):
+					stored = entry.job.store_ore(piece_id, ore)
+					if stored:
+						collected = true
+						break
+		if stored:
+			continue
 		if body.linear_velocity.length() < 110:
 			continue
 		for id in players:
@@ -416,6 +429,11 @@ func step_ore() -> void:
 				hit_cooldowns[Vector2i(piece_id, id)] = now + 400
 				body.linear_velocity = Vector2(-body.linear_velocity.x * 0.4, -70)
 				break
+
+	if collected:
+		broadcast_state("receive_ore", [ore.snapshot()], true)
+		broadcast_state("receive_workshop", [workshop.snapshot()])
+		refresh_workshop()
 
 func position_ore(body: RigidBody2D, at: Vector2, motion: Vector2) -> void:
 	body.freeze = false
@@ -595,10 +613,10 @@ func interact_for(id: int) -> void:
 		var station_id: int = workshop.nearest(dwarf.position)
 		if carried != -1 and station_id != -1:
 			var job = workshop.stations[station_id].job
-			message = "Ingredient loaded. Hold E with empty hands to work." if job.load_material(id, ore) else "Wrong or duplicate ingredient for this station recipe."
+			message = "Ingredient loaded. Hold E with empty hands to work." if job.load_material(id, ore) else ("Throw ore into the attached forge bin, then hold E to smelt." if job.kind == "forge" else "Wrong or duplicate ingredient for this station recipe.")
 			broadcast_state("receive_workshop", [workshop.snapshot()])
 			refresh_workshop()
-		elif carried == -1 and (station_id == -1 or workshop.stations[station_id].job.slots.is_empty()):
+		elif carried == -1 and (station_id == -1 or workshop.stations[station_id].job.slots.is_empty() and workshop.stations[station_id].job.ore_queue.is_empty()):
 			var nearest := -1
 			var distance := 24.0
 			for piece_id in ore_bodies:
@@ -729,7 +747,7 @@ func init_build_ui(layer: CanvasLayer) -> void:
 	column.add_child(title)
 	for kind in WORKSHOP_STATE.PRICES:
 		var button := Button.new()
-		button.text = "%s · %s coins" % [kind.capitalize(), WORKSHOP_STATE.PRICES[kind]]
+		button.text = "%s · %s coins" % ["Forge + bin" if kind == "forge" else kind.capitalize(), WORKSHOP_STATE.PRICES[kind]]
 		button.focus_mode = Control.FOCUS_NONE
 		button.pressed.connect(func(): buy_station(kind))
 		column.add_child(button)

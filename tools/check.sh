@@ -19,4 +19,6 @@ godot --headless --path . --script res://tests/customers.gd
 godot --headless --path . --script res://tests/customers_physics.gd
 godot --headless --path . --script res://tests/mining.gd
 godot --headless --path . --script res://tests/mining_physics.gd
+godot --headless --path . --script res://tests/forge.gd
+godot --headless --path . --script res://tests/forge_physics.gd
 python3 tools/check_multiplayer.py

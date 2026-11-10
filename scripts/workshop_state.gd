@@ -1,6 +1,6 @@
 extends RefCounted
 const JOB = preload("res://scripts/station_job.gd")
-const PRICES := {"anvil": 20, "grinder": 25, "woodbench": 25}
+const PRICES := {"anvil": 20, "grinder": 25, "woodbench": 25, "forge": 25}
 const FLOORS := [136.0, 216.0, 288.0]
 var stations: Dictionary = {}
 var pending: Dictionary = {}
@@ -74,7 +74,7 @@ func nearest(at: Vector2) -> int:
 
 func pack(player: int, at: Vector2, materials: RefCounted) -> bool:
 	var id := nearest(at)
-	if player <= 0 or id == -1 or pending.has(player) or materials.carried_by(player) != -1 or not stations[id].job.slots.is_empty():
+	if player <= 0 or id == -1 or pending.has(player) or materials.carried_by(player) != -1 or not stations[id].job.slots.is_empty() or not stations[id].job.ore_queue.is_empty():
 		return false
 	pending[player] = {"id": id, "kind": stations[id].kind}
 	stations.erase(id)

@@ -1,17 +1,18 @@
 extends RefCounted
 const DURATION := 5.0
 const ANVIL_RECIPES := ["horseshoe", "blade", "head", "axe"]
-const INPUTS := {"horseshoe": ["ore"], "blade": ["ore"], "head": ["ore"], "axe": ["axe_head", "shaft"], "sharpen": ["dull_sword"], "shaft": ["wood"]}
-const OUTPUTS := {"horseshoe": "horseshoe", "blade": "dull_sword", "head": "axe_head", "axe": "axe", "sharpen": "sword", "shaft": "shaft"}
+const INPUTS := {"horseshoe": ["ore"], "blade": ["ore"], "head": ["ore"], "axe": ["axe_head", "shaft"], "sharpen": ["dull_sword"], "shaft": ["wood"], "smelt": ["ore"]}
+const OUTPUTS := {"horseshoe": "horseshoe", "blade": "dull_sword", "head": "axe_head", "axe": "axe", "sharpen": "sword", "shaft": "shaft", "smelt": "ingot"}
 var kind := "anvil"
 var recipe := "horseshoe"
 var slots: Dictionary = {}
 var progress := 0.0
 var worker := 0
+var ore_queue: Array[int] = []
 
 func configure(value: String) -> void:
 	kind = value
-	recipe = "sharpen" if kind == "grinder" else ("shaft" if kind == "woodbench" else "horseshoe")
+	recipe = "smelt" if kind == "forge" else ("sharpen" if kind == "grinder" else ("shaft" if kind == "woodbench" else "horseshoe"))
 
 func select(choice: String) -> bool:
 	if kind != "anvil" or choice not in ANVIL_RECIPES or not slots.is_empty():
@@ -20,12 +21,14 @@ func select(choice: String) -> bool:
 	return true
 
 func load_material(player: int, materials: RefCounted) -> bool:
-	if player <= 0:
+	if player <= 0 or kind == "forge":
 		return false
 	var id: int = materials.carried_by(player)
 	if id == -1:
 		return false
 	var ingredient: String = materials.pieces[id].kind
+	if kind == "anvil" and ingredient == "ingot":
+		ingredient = "ore"
 	if ingredient not in INPUTS[recipe] or slots.has(ingredient):
 		return false
 	materials.release_carrier(player)
@@ -42,6 +45,8 @@ func ready() -> bool:
 func step(delta: float, eligible: Array[int], materials: RefCounted) -> int:
 	if worker not in eligible:
 		worker = eligible[0] if not eligible.is_empty() else 0
+	if kind == "forge" and worker != 0 and slots.is_empty() and not ore_queue.is_empty():
+		slots["ore"] = ore_queue.pop_front()
 	if worker == 0 or not ready():
 		worker = 0
 		return -1
@@ -60,7 +65,7 @@ func step(delta: float, eligible: Array[int], materials: RefCounted) -> int:
 	return primary
 
 func snapshot() -> Dictionary:
-	return {"kind": kind, "recipe": recipe, "slots": slots.duplicate(), "progress": progress, "worker": worker}
+	return {"kind": kind, "recipe": recipe, "slots": slots.duplicate(), "progress": progress, "worker": worker, "ore_queue": ore_queue.duplicate()}
 
 func restore(state: Dictionary) -> void:
 	kind = state.kind
@@ -68,3 +73,11 @@ func restore(state: Dictionary) -> void:
 	slots = state.slots.duplicate()
 	progress = state.progress
 	worker = state.worker
+	ore_queue.assign(state.ore_queue)
+
+func store_ore(id: int, materials: RefCounted) -> bool:
+	if kind != "forge" or not materials.is_loose(id) or materials.pieces[id].kind != "ore":
+		return false
+	materials.pieces[id].processing = true
+	ore_queue.append(id)
+	return true

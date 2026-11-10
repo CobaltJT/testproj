@@ -1,7 +1,13 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=6 format=3]
 [ext_resource type="Script" path="res://scripts/station_view.gd" id="1"]
 [sub_resource type="RectangleShape2D" id="Tray"]
 size = Vector2(20, 3)
+[sub_resource type="RectangleShape2D" id="BinSide"]
+size = Vector2(2, 14)
+[sub_resource type="RectangleShape2D" id="BinBottom"]
+size = Vector2(20, 3)
+[sub_resource type="RectangleShape2D" id="BinSensor"]
+size = Vector2(10, 8)
 [node name="Workstation" type="Node2D"]
 script = ExtResource("1")
 [node name="Sprite" type="Sprite2D" parent="."]
@@ -26,3 +32,23 @@ collision_mask = 4
 [node name="Shape" type="CollisionShape2D" parent="TrayBody"]
 position = Vector2(28, -3)
 shape = SubResource("Tray")
+
+[node name="BinWalls" type="StaticBody2D" parent="."]
+collision_layer = 0
+collision_mask = 4
+[node name="Left" type="CollisionShape2D" parent="BinWalls"]
+position = Vector2(-23, -7)
+shape = SubResource("BinSide")
+[node name="Right" type="CollisionShape2D" parent="BinWalls"]
+position = Vector2(-5, -7)
+shape = SubResource("BinSide")
+[node name="Bottom" type="CollisionShape2D" parent="BinWalls"]
+position = Vector2(-14, -1.5)
+shape = SubResource("BinBottom")
+[node name="BinCatch" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 4
+monitoring = false
+[node name="Shape" type="CollisionShape2D" parent="BinCatch"]
+position = Vector2(-14, -8)
+shape = SubResource("BinSensor")

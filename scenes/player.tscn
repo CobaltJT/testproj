@@ -1,7 +1,8 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 [ext_resource type="Script" path="res://scripts/player.gd" id="1"]
 [ext_resource type="Texture2D" path="res://assets/textures/dwarf.svg" id="2"]
 [ext_resource type="Texture2D" path="res://assets/textures/ore.svg" id="3"]
+[ext_resource type="Script" path="res://scripts/follow_camera.gd" id="4"]
 [sub_resource type="RectangleShape2D" id="Body"]
 size = Vector2(12, 23)
 [node name="Player" type="CharacterBody2D"]
@@ -19,3 +20,10 @@ visible = false
 position = Vector2(9, -17)
 texture_filter = 1
 texture = ExtResource("3")
+
+[node name="FollowCamera" type="Camera2D" parent="."]
+top_level = true
+enabled = false
+position_smoothing_enabled = true
+position_smoothing_speed = 10.0
+script = ExtResource("4")

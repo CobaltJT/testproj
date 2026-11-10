@@ -5,6 +5,20 @@ Open `project.godot` and press **F5**. One player hosts; others enter that playe
 LAN IP and use the same UDP port (default **24567**). Allow that port through the
 host's LAN firewall. `127.0.0.1` is for multiple instances on one computer.
 
+## Larger map and player cameras
+
+The smithy is now **640 pixels wide** instead of 480, with about **42% more usable
+floor space** on all three levels. The right wing has solid floors, matching
+walls, and room for more stations. The existing counter, mine, and ladders remain
+in their familiar locations.
+
+Each player has a personal camera following their own dwarf, horizontally and
+between floors. The view is **96 world pixels high**, roughly **1.2 floors**,
+with smooth following and bounds at the map edges. Remote dwarfs never control
+your camera. The HUD and build catalog stay fixed on screen; station placement
+uses the camera transform. Resize the window without changing the vertical world
+coverage. The connection menu returns to an overview of the whole building.
+
 ## Build your workshop
 
 The starting building has **no workstations**. The mine, counter, ladders, door,
@@ -135,6 +149,8 @@ Run **`bash tools/check.sh`** with Godot 4.6.x and Python 3 available. It isolat
 Godot's writable settings in temporary folders, imports and starts the project,
 and runs:
 
+- Camera ownership, follow motion, floor-height framing, map bounds, resize,
+  overview restoration, zoomed placement, and new-wing floors/build areas.
 - Movement, ladder, collision, loose-item physics, and knockback checks.
 - Forge/bin collection, queueing, smelting, relocation, ingot use, and snapshots.
 - Material identity, purchase/placement validation, recipe routes, exact work
@@ -143,7 +159,8 @@ and runs:
 - Customer deadlines, front-only service, economy and reputation checks.
 - A real host and two clients exercising all station types, co-op jobs, wood
   purchases, intermediate products, deliveries, placement races, relocation,
-  refunds on disconnect, and reconnect restoration of loaded paused jobs.
+  refunds on disconnect, independent local cameras, and reconnect restoration of
+  loaded paused jobs and camera ownership.
 
 The old fixed-forge/ingot tests were replaced by the new station and production
 route checks. Images are original SVG textures rendered with nearest filtering;

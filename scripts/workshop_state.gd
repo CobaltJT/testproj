@@ -1,7 +1,8 @@
 extends RefCounted
 const JOB = preload("res://scripts/station_job.gd")
 const PRICES := {"anvil": 20, "grinder": 25, "woodbench": 25, "forge": 25}
-const FLOORS := [136.0, 216.0, 288.0]
+const MAP = preload("res://scripts/map_layout.gd")
+const FLOORS = MAP.FLOORS
 var stations: Dictionary = {}
 var pending: Dictionary = {}
 var next_id := 1
@@ -21,7 +22,7 @@ func can_place(at: Vector2) -> bool:
 	if not at.is_finite() or at.y not in FLOORS or not is_equal_approx(at.x, snappedf(at.x, 8)):
 		return false
 	var rect := footprint(at)
-	if rect.position.x < 52 or rect.end.x > 428:
+	if rect.position.x < 52 or rect.end.x > MAP.RIGHT_WALL - 4:
 		return false
 	# Keep the storefront, merchant, ladders, landing space, and mine usable.
 	var blocked: Array[Rect2] = []

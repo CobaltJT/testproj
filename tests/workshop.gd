@@ -29,6 +29,9 @@ func _initialize() -> void:
 	check(not model.purchase(1, "grinder", economy, materials), "Cannot buy a second kit while holding one")
 	for at in [Vector2(112, 216), Vector2(368, 136), Vector2(390, 288), Vector2(160, 216), Vector2(256, 200), Vector2(INF, 136), Vector2(257, 136)]:
 		check(model.place(1, at) == -1 and model.pending.has(1), "Reject blocked, off-floor, off-grid, or nonfinite placement")
+	for y in [136, 216, 288]:
+		check(model.can_place(Vector2(512, y)), "New wing supports station placement on floor %s" % y)
+	check(not model.can_place(Vector2(592, 216)), "New right wall still blocks out-of-map stations")
 	var anvil: int = model.place(1, Vector2(256, 216))
 	check(anvil > 0 and model.opened and model.stations.size() == 1, "Manual anvil placement opens workshop")
 	check(model.purchase(2, "grinder", economy, materials) and model.place(2, Vector2(256, 216)) == -1, "Overlapping placement rejected without spending again")

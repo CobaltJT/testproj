@@ -36,8 +36,11 @@ func run() -> void:
 	check(player.position.y < 205, "Jump leaves ground")
 	await frames(80)
 	check(player.is_on_floor(), "Jump lands on floor")
-	await hold("move_right", 180)
-	check(player.position.x <= 422.1, "Right wall contains dwarf")
+	player.position = Vector2(560, 216)
+	player.velocity = Vector2.ZERO
+	await frames(5)
+	await hold("move_right", 60)
+	check(player.position.x > 581 and player.position.x <= 582.1, "Expanded right wall contains moving dwarf")
 	player.position = Vector2(70, 216)
 	player.velocity = Vector2.ZERO
 	await frames(5)

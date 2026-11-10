@@ -8,16 +8,16 @@
 size = Vector2(304, 8)
 
 [sub_resource type="RectangleShape2D" id="UpperRight"]
-size = Vector2(48, 8)
+size = Vector2(208, 8)
 
 [sub_resource type="RectangleShape2D" id="GroundLeft"]
 size = Vector2(48, 8)
 
 [sub_resource type="RectangleShape2D" id="GroundRight"]
-size = Vector2(304, 8)
+size = Vector2(464, 8)
 
 [sub_resource type="RectangleShape2D" id="Cellar"]
-size = Vector2(384, 8)
+size = Vector2(544, 8)
 
 [sub_resource type="RectangleShape2D" id="LeftWall"]
 size = Vector2(8, 230)
@@ -26,7 +26,7 @@ size = Vector2(8, 230)
 size = Vector2(8, 230)
 
 [sub_resource type="RectangleShape2D" id="Ceiling"]
-size = Vector2(384, 5)
+size = Vector2(544, 5)
 
 [node name="Smithy" type="Node2D"]
 scale = Vector2(2, 2)
@@ -115,7 +115,7 @@ position = Vector2(200.0, 140.0)
 shape = SubResource("UpperLeft")
 
 [node name="UpperRight" type="CollisionShape2D" parent="Collision"]
-position = Vector2(408.0, 140.0)
+position = Vector2(488.0, 140.0)
 shape = SubResource("UpperRight")
 
 [node name="GroundLeft" type="CollisionShape2D" parent="Collision"]
@@ -123,11 +123,11 @@ position = Vector2(72.0, 220.0)
 shape = SubResource("GroundLeft")
 
 [node name="GroundRight" type="CollisionShape2D" parent="Collision"]
-position = Vector2(280.0, 220.0)
+position = Vector2(360.0, 220.0)
 shape = SubResource("GroundRight")
 
 [node name="Cellar" type="CollisionShape2D" parent="Collision"]
-position = Vector2(240.0, 292.0)
+position = Vector2(320.0, 292.0)
 shape = SubResource("Cellar")
 
 [node name="LeftWall" type="CollisionShape2D" parent="Collision"]
@@ -135,11 +135,11 @@ position = Vector2(48.0, 181.0)
 shape = SubResource("LeftWall")
 
 [node name="RightWall" type="CollisionShape2D" parent="Collision"]
-position = Vector2(432.0, 181.0)
+position = Vector2(592.0, 181.0)
 shape = SubResource("RightWall")
 
 [node name="Ceiling" type="CollisionShape2D" parent="Collision"]
-position = Vector2(240.0, 68.5)
+position = Vector2(320.0, 68.5)
 shape = SubResource("Ceiling")
 
 [node name="Player" parent="." instance=ExtResource("2")]

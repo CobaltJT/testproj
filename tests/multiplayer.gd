@@ -62,6 +62,22 @@ func run() -> void:
 		check(false, "Host and two clients connect")
 		quit(1)
 		return
+	var own_id: int = session.multiplayer.get_unique_id()
+	var own_camera: Camera2D = session.players[own_id].get_node("FollowCamera")
+	check(root.get_camera_2d() == own_camera and own_camera.enabled, "Each instance activates only its own dwarf camera")
+	for peer_id in session.players:
+		if peer_id != own_id:
+			check(not session.players[peer_id].get_node("FollowCamera").enabled, "Remote dwarf cannot take over viewport")
+	await frames(10)
+	var before: Vector2 = own_camera.get_screen_center_position()
+	var start_x: float = session.players[own_id].position.x
+	var direction := "move_left" if role == "host" else "move_right"
+	Input.action_press(direction)
+	await frames(30)
+	Input.action_release(direction)
+	await frames(10)
+	var camera_x: float = own_camera.get_screen_center_position().x
+	check(absf(session.players[own_id].position.x - start_x) > 20 and (camera_x < before.x - 20 if role == "host" else camera_x > before.x + 20), "Local camera follows real independently networked movement")
 	if role == "host": await host_scenarios()
 	else: await client_scenarios()
 	print("MULTIPLAYER RESULT ", role, ": ", failures, " failures")
@@ -310,6 +326,7 @@ func client_scenarios() -> void:
 		await frames(15)
 		session.join_game()
 		check(await until(func(): return session.players.size() == 3 and session.workshop.stations.size() == 3 and session.orders.coins == 65), "Reconnect receives layout and abandoned-kit refund")
+		check(root.get_camera_2d() == session.players[session.multiplayer.get_unique_id()].get_node("FollowCamera"), "Reconnect attaches camera to new local dwarf")
 		check(job("anvil").slots.has("ore") and is_equal_approx(job("anvil").progress, 1.25) and session.ore.pieces[8].consumed, "Reconnect preserves paused station ingredients and physical material states")
 	done("rejoin")
 	await stage("finished")

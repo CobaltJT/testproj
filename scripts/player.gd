@@ -1,11 +1,12 @@
 extends CharacterBody2D
-## Positions and ladder bounds are in the smithy's 480 x 320 local coordinates.
-## Velocity is in viewport pixels per second (the building is scaled by two).
+## Positions and ladder bounds are in shared smithy-local coordinates.
+## Velocity uses global physics pixels, independent of camera zoom (world scale 2x).
 const SPEED := 170.0
 const JUMP_SPEED := -300.0
 const GRAVITY := 1000.0
 const CLIMB_SPEED := 110.0
-const LADDERS: Array[Rect2] = [Rect2(352, 136, 32, 80), Rect2(96, 216, 32, 72)]
+const MAP = preload("res://scripts/map_layout.gd")
+const LADDERS: Array[Rect2] = MAP.LADDERS
 var knockback_x := 0.0
 var hit_stun := 0.0
 var networked := false
@@ -17,6 +18,15 @@ var climbing := false
 var active_ladder := -1
 var ladder_jump_locked := false
 @onready var sprite: Sprite2D = $Sprite2D
+
+func _ready() -> void:
+	set_camera_active(not networked)
+
+func set_camera_active(local: bool) -> void:
+	$FollowCamera.enabled = local
+	if local:
+		$FollowCamera.make_current()
+		$FollowCamera.follow_now(true)
 
 func _physics_process(delta: float) -> void:
 	if networked and not multiplayer.is_server():

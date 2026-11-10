@@ -1,5 +1,7 @@
 extends Node
 ## ENet LAN session. Only the host simulates physics; clients send controls.
+const MAP = preload("res://scripts/map_layout.gd")
+var overview_camera: Camera2D
 const WORKSHOP_STATE = preload("res://scripts/workshop_state.gd")
 const STATION_JOB = preload("res://scripts/station_job.gd")
 const STATION_SCENE = preload("res://scenes/workstation.tscn")
@@ -61,6 +63,13 @@ func _ready() -> void:
 	world = WORLD.instantiate()
 	add_child(world)
 	world.get_node("Player").free()
+	overview_camera = Camera2D.new()
+	overview_camera.name = "OverviewCamera"
+	overview_camera.top_level = true
+	world.add_child(overview_camera)
+	get_viewport().size_changed.connect(update_overview)
+	update_overview()
+	overview_camera.make_current()
 	mining_station = preload("res://scenes/mining_station.tscn").instantiate()
 	world.add_child(mining_station)
 	merchant_node = preload("res://scenes/merchant.tscn").instantiate()
@@ -195,6 +204,7 @@ func spawn_player(id: int, at: Vector2) -> void:
 	dwarf.collision_mask = 1
 	world.add_child(dwarf)
 	var local := id == multiplayer.get_unique_id()
+	dwarf.set_camera_active(local)
 	dwarf.get_node("Sprite2D").modulate = Color.WHITE if local else Color.from_hsv(fmod(id * 0.137, 1.0), 0.45, 1.0)
 	var tag := Label.new()
 	tag.text = "YOU" if local else ("HOST" if id == 1 else "DWARF %s" % id)
@@ -334,6 +344,8 @@ func disconnect_game(message: String) -> void:
 	for dwarf in players.values():
 		dwarf.free()
 	players.clear()
+	overview_camera.make_current()
+	update_overview()
 	last_input.clear()
 	last_interaction.clear()
 	reset_ore(false)
@@ -843,3 +855,11 @@ func sync_build() -> void:
 	refresh_orders()
 	broadcast_state("receive_workshop", [workshop.snapshot()])
 	broadcast_state("receive_orders", [orders.snapshot()])
+
+func update_overview() -> void:
+	var size := get_viewport().get_visible_rect().size
+	var factor := minf(size.x / (MAP.WIDTH * MAP.SCALE), (size.y - 80) / (MAP.HEIGHT * MAP.SCALE))
+	overview_camera.zoom = Vector2.ONE * maxf(factor, 0.01)
+	overview_camera.global_position = Vector2(MAP.WIDTH, MAP.HEIGHT) * MAP.SCALE / 2.0
+	if not active:
+		overview_camera.force_update_scroll()

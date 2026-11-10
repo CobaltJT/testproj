@@ -99,3 +99,13 @@ pack_station={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"physical_keycode":82)]
 }
+
+accept_order={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":89)]
+}
+
+reject_order={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":78)]
+}

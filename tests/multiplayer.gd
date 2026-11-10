@@ -155,7 +155,7 @@ func host_scenarios() -> void:
 	carry(c2, 2)
 	move_peer(c1, Vector2(166, 216))
 	move_peer(c2, Vector2(166, 216))
-	session.orders.queue = [{"id": 101, "kind": "sword", "remaining": 30.0, "age": 2.0}, {"id": 102, "kind": "axe", "remaining": 30.0, "age": 2.0}]
+	session.orders.queue = [{"id": 101, "kind": "sword", "remaining": 10.0, "age": 2.0, "accepted": false}, {"id": 102, "kind": "axe", "remaining": 10.0, "age": 2.0, "accepted": false}]
 	session.orders.number = 102
 	session.orders.until_arrival = 20
 	session.orders.reputation = 0
@@ -169,8 +169,8 @@ func host_scenarios() -> void:
 	check(await until(func(): return session.orders.completed == 1), "Finished sharpened sword sells")
 	sync.begin.rpc("sell_axe")
 	check(await until(func(): return session.orders.completed == 2), "Assembled axe sells next")
-	check(session.orders.coins == 65 and session.orders.reputation == 2, "Correct item rewards reach shared economy")
-	session.orders.queue = [{"id": 103, "kind": "horseshoe", "remaining": 0.5, "age": 29.5}]
+	check(session.orders.coins == 65 and session.orders.reputation == 4, "Correct item rewards reach shared economy")
+	session.orders.queue = [{"id": 103, "kind": "horseshoe", "remaining": 0.5, "age": 29.5, "accepted": true}]
 	session.orders.step(0.5)
 	broadcast()
 	sync.begin.rpc("expire")
@@ -278,11 +278,17 @@ func client_scenarios() -> void:
 	check(session.orders.completed == 0, "Front-only order enforced")
 	done("wrong")
 	await stage("sell_sword")
-	if role == "client1": await press("interact")
+	if role == "client1":
+		await press("accept_order")
+		check(await until(func(): return not session.orders.queue.is_empty() and session.orders.queue[0].accepted), "Remote acceptance replicated")
+		await press("interact")
 	await stage("sell_axe")
-	if role == "client2": await press("interact")
+	if role == "client2":
+		await press("accept_order")
+		check(await until(func(): return not session.orders.queue.is_empty() and session.orders.queue[0].accepted), "Next remote acceptance replicated")
+		await press("interact")
 	await stage("expire")
-	check(session.orders.coins == 65 and session.orders.reputation == 1, "Shared rewards and expiry penalty replicated")
+	check(session.orders.coins == 65 and session.orders.reputation == -2, "Shared rewards and expiry penalty replicated")
 	done("expire")
 	await stage("move")
 	if role == "client1":

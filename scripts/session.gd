@@ -219,6 +219,14 @@ func spawn_player(id: int, at: Vector2) -> void:
 func _physics_process(delta: float) -> void:
 	if not active or not players.has(multiplayer.get_unique_id()):
 		return
+	if Input.is_action_just_pressed("accept_order") or Input.is_action_just_pressed("reject_order"):
+		if not orders.queue.is_empty():
+			var order_id: int = orders.queue[0].id
+			var accept := Input.is_action_just_pressed("accept_order")
+			if multiplayer.is_server():
+				decide_order_for(1, order_id, accept)
+			else:
+				request_order_decision.rpc_id(1, order_id, accept)
 	for choice in STATION_JOB.ANVIL_RECIPES:
 		if Input.is_action_just_pressed("recipe_" + choice):
 			if multiplayer.is_server():
@@ -473,11 +481,11 @@ func refresh_orders() -> void:
 		var order: Dictionary = orders.queue[i]
 		var target := 120.0 - i * 20
 		var at := lerpf(70, target, minf(1, order.age / CUSTOMER_STATE.WALK_TIME))
-		show_customer(order.id, Vector2(at, 216), "%s %ss" % [order.kind.to_upper(), ceili(order.remaining)], false)
+		show_customer(order.id, Vector2(at, 216), "%s: %s %ss" % ["DELIVER" if order.accepted else ("DECIDE" if i == 0 else "WAIT"), order.kind.to_upper(), ceili(order.remaining)], false)
 		live[order.id] = true
 	for departure in orders.departures:
 		var at := lerpf(70, departure.x, departure.remaining / CUSTOMER_STATE.WALK_TIME)
-		show_customer(departure.id, Vector2(at, 216), "THANKS!" if departure.served else "TOO LATE!", true)
+		show_customer(departure.id, Vector2(at, 216), {"fulfilled": "THANKS!", "rejected": "DECLINED", "unanswered": "NO ANSWER", "failed": "TOO LATE!"}.get(departure.reason, "BYE!"), true)
 		live[departure.id] = true
 	for id in customer_nodes.keys():
 		if not live.has(id):
@@ -485,10 +493,11 @@ func refresh_orders() -> void:
 			customer_nodes.erase(id)
 	if order_label != null:
 		order_label.visible = active
-		var text := "Coins: %s · Reputation: %s · Served: %s · Missed: %s" % [orders.coins, orders.reputation, orders.completed, orders.missed]
+		var text := "Coins: %s · Reputation: %s · Served: %s · Failed: %s · Declined: %s" % [orders.coins, orders.reputation, orders.completed, orders.missed, orders.rejected]
 		for i in range(orders.queue.size()):
 			var order: Dictionary = orders.queue[i]
-			text += "\n%s #%s: %s · %ss · %sg" % ["FRONT" if i == 0 else "QUEUED", order.id, order.kind.capitalize(), ceili(order.remaining), CUSTOMER_STATE.PRICES[order.kind]]
+			var phase := "DELIVER" if order.accepted else ("Y accept / N reject" if i == 0 else "waiting for counter")
+			text += "\n%s #%s: %s · %s · %ss · %sg" % ["FRONT" if i == 0 else "QUEUED", order.id, order.kind.capitalize(), phase, ceili(order.remaining), CUSTOMER_STATE.PRICES[order.kind]]
 		text += "\nNext arrival: %ss · E serves FRONT only" % ceili(orders.until_arrival) if workshop.opened else "\nPlace an anvil to open the workshop. Tab: build catalog"
 		order_label.text = text
 
@@ -618,7 +627,7 @@ func interact_for(id: int) -> void:
 	elif absf(dwarf.position.x - 166) <= 30 and absf(dwarf.position.y - 216) <= 6 and not orders.queue.is_empty() and carried != -1:
 		var product: String = orders.queue[0].kind
 		var sold: bool = orders.deliver(id, dwarf.position, ore)
-		message = "%s delivered! +%s coins, +1 reputation." % [product.capitalize(), CUSTOMER_STATE.PRICES[product]] if sold else "Front customer needs a %s." % product
+		message = "%s delivered! +%s coins, +2 reputation." % [product.capitalize(), CUSTOMER_STATE.PRICES[product]] if sold else ("Y: accept or N: reject this request first." if not orders.queue[0].accepted else "Front customer needs a %s." % product)
 		broadcast_state("receive_orders", [orders.snapshot()])
 		refresh_orders()
 	else:
@@ -863,3 +872,19 @@ func update_overview() -> void:
 	overview_camera.global_position = Vector2(MAP.WIDTH, MAP.HEIGHT) * MAP.SCALE / 2.0
 	if not active:
 		overview_camera.force_update_scroll()
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_order_decision(order_id: int, accept: bool) -> void:
+	if multiplayer.is_server():
+		decide_order_for(multiplayer.get_remote_sender_id(), order_id, accept)
+
+func decide_order_for(id: int, order_id: int, accept: bool) -> void:
+	if not multiplayer.is_server() or not players.has(id):
+		return
+	var changed: bool = orders.decide(id, players[id].position, order_id, accept)
+	var message := "Request accepted: deliver within 30 seconds (+2 reputation)." if accept else "Request rejected: -3 reputation."
+	if not changed:
+		message = "Decide on the front request at the counter. Already accepted or stale requests cannot be rejected."
+	feedback_for(id, message)
+	broadcast_state("receive_orders", [orders.snapshot()])
+	refresh_orders()

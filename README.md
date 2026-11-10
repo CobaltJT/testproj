@@ -122,14 +122,17 @@ by the host for stock, funds, position, and free hands.
 
 After the shop opens, the first customer arrives at 8 seconds, then one arrives
 every 20 seconds independently of the queue. Requests rotate through horseshoe,
-sword, and axe. Every customer has **30 seconds from arrival**, including walking
-in and queuing. Advancing to the front does not restart that timer.
+sword, and axe. At the counter, press **Y** to accept or **N** to reject the
+front customer's request within **10 seconds**. This decision timer starts once
+they reach the front; queued customers retain their full decision window.
+Rejecting or leaving a request unanswered costs **3 reputation**.
 
-Carry the exact finished product to the left counter and press **E**. Only the
-**front customer** can be served. Horseshoes sell for **10 coins**, swords for
-**15**, and axes for **25**. Delivery gives **+1 shared reputation**. Every expired
-order costs **1 reputation** and no coins. The HUD shows specific requests,
-patience, coins, and reputation. Reputation can fall below zero.
+Accepting starts a separate **30-second** fulfilment timer. Carry the exact
+finished product to the left counter and press **E**. Only the **front customer**
+can be served. Horseshoes sell for **10 coins**, swords for **15**, and axes for
+**25**. Timely delivery gives **+2 shared reputation**; failing an accepted order
+costs **6 reputation**. Accepted orders cannot be rejected. The HUD shows each
+request's phase, timer, coins, and reputation, which can fall below zero.
 
 ## Multiplayer and scope
 

@@ -1,54 +1,88 @@
 extends RefCounted
-## Host-only queue. Patience starts on arrival, including time behind others.
+## Front-only service: decide within 10 seconds, then fulfill within 30 seconds.
 const FIRST_VISIT := 8.0
 const ARRIVAL_INTERVAL := 20.0
+const DECISION_TIME := 10.0
 const PATIENCE := 30.0
 const WALK_TIME := 2.0
 const PRICES := {"horseshoe": 10, "sword": 15, "axe": 25}
 const PRODUCTS := ["horseshoe", "sword", "axe"]
+const REJECT_PENALTY := 3
+const FAIL_PENALTY := 6
+const SUCCESS_REWARD := 2
 var queue: Array = []
 var departures: Array = []
 var until_arrival := FIRST_VISIT
 var number := 0
 var completed := 0
 var missed := 0
+var rejected := 0
+var unanswered := 0
 var coins := 100
 var reputation := 0
 
+func at_counter(player: int, at: Vector2) -> bool:
+	return player > 0 and at.is_finite() and absf(at.x - 166) <= 30 and absf(at.y - 216) <= 6
+
 func step(delta: float) -> void:
-	# Advance through event boundaries, preserving the schedule even after a long frame.
+	# Process each clock boundary so large steps agree with normal physics ticks.
 	var left := maxf(0, delta)
 	while left > 0.000001:
 		var advance := minf(left, until_arrival)
-		for order in queue:
-			advance = minf(advance, order.remaining)
+		var ticking := false
+		if not queue.is_empty():
+			var first: Dictionary = queue[0]
+			ticking = first.accepted or first.age >= WALK_TIME - 0.000001
+			advance = minf(advance, first.remaining if ticking else WALK_TIME - first.age)
 		for departure in departures:
 			departure.remaining -= advance
 		departures = departures.filter(func(entry): return entry.remaining > 0)
+		if ticking:
+			queue[0].remaining -= advance
 		for order in queue:
-			order.remaining -= advance
 			order.age += advance
 		until_arrival -= advance
 		left -= advance
-		for i in range(queue.size() - 1, -1, -1):
-			if queue[i].remaining <= 0.000001:
-				depart(queue[i], i, false)
-				queue.remove_at(i)
+		if not queue.is_empty() and queue[0].remaining <= 0.000001:
+			var expired: Dictionary = queue.pop_front()
+			if expired.accepted:
 				missed += 1
-				reputation -= 1
+				reputation -= FAIL_PENALTY
+				depart(expired, 0, false, "failed")
+			else:
+				rejected += 1
+				unanswered += 1
+				reputation -= REJECT_PENALTY
+				depart(expired, 0, false, "unanswered")
 		if until_arrival <= 0.000001:
 			number += 1
-			queue.append({"id": number, "kind": PRODUCTS[(number - 1) % PRODUCTS.size()], "remaining": PATIENCE, "age": 0.0})
+			queue.append({"id": number, "kind": PRODUCTS[(number - 1) % PRODUCTS.size()], "remaining": DECISION_TIME, "age": 0.0, "accepted": false})
 			until_arrival += ARRIVAL_INTERVAL
 
-func depart(order: Dictionary, index: int, served: bool) -> void:
-	departures.append({"id": order.id, "kind": order.kind, "remaining": WALK_TIME, "served": served, "x": 120.0 - index * 20})
+func depart(order: Dictionary, index: int, served: bool, reason: String = "fulfilled") -> void:
+	departures.append({"id": order.id, "kind": order.kind, "remaining": WALK_TIME, "served": served, "reason": reason, "x": 120.0 - index * 20})
 
-func deliver(player: int, at: Vector2, materials: RefCounted) -> bool:
-	if player <= 0 or queue.is_empty() or absf(at.x - 166) > 30 or absf(at.y - 216) > 6:
+func decide(player: int, at: Vector2, order_id: int, accept: bool) -> bool:
+	if not at_counter(player, at) or queue.is_empty():
 		return false
 	var first: Dictionary = queue[0]
-	if first.age < WALK_TIME or first.remaining <= 0:
+	if first.id != order_id or first.accepted or first.age < WALK_TIME or first.remaining <= 0:
+		return false
+	if accept:
+		first.accepted = true
+		first.remaining = PATIENCE
+	else:
+		queue.pop_front()
+		rejected += 1
+		reputation -= REJECT_PENALTY
+		depart(first, 0, false, "rejected")
+	return true
+
+func deliver(player: int, at: Vector2, materials: RefCounted) -> bool:
+	if not at_counter(player, at) or queue.is_empty():
+		return false
+	var first: Dictionary = queue[0]
+	if not first.accepted or first.remaining <= 0:
 		return false
 	var piece: int = materials.carried_by(player)
 	if piece == -1 or materials.pieces[piece].kind != first.kind:
@@ -57,13 +91,13 @@ func deliver(player: int, at: Vector2, materials: RefCounted) -> bool:
 	materials.pieces[piece].delivered = true
 	coins += PRICES[first.kind]
 	completed += 1
-	reputation += 1
+	reputation += SUCCESS_REWARD
 	depart(first, 0, true)
 	queue.pop_front()
 	return true
 
 func snapshot() -> Dictionary:
-	return {"queue": queue.duplicate(true), "departures": departures.duplicate(true), "until_arrival": until_arrival, "number": number, "completed": completed, "missed": missed, "coins": coins, "reputation": reputation}
+	return {"queue": queue.duplicate(true), "departures": departures.duplicate(true), "until_arrival": until_arrival, "number": number, "completed": completed, "missed": missed, "rejected": rejected, "unanswered": unanswered, "coins": coins, "reputation": reputation}
 
 func restore(state: Dictionary) -> void:
 	queue = state.queue.duplicate(true)
@@ -72,5 +106,7 @@ func restore(state: Dictionary) -> void:
 	number = state.number
 	completed = state.completed
 	missed = state.missed
+	rejected = state.rejected
+	unanswered = state.unanswered
 	coins = state.coins
 	reputation = state.reputation

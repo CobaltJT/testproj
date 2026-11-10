@@ -10,7 +10,7 @@ func update_view(entry: Dictionary) -> void:
 	$BinCatch.monitoring = forge
 	if forge:
 		$Label.text = "FORGE · BIN: %s" % entry.job.ore_queue.size()
-		$Label.text += "\nTHROW ORE" if entry.job.slots.is_empty() and entry.job.ore_queue.is_empty() else "\n%s %.1f/5s" % ["SMELTING" if entry.job.worker else "HOLD E", entry.job.progress]
+		$Label.text += "\nTHROW ORE" if entry.job.slots.is_empty() and entry.job.ore_queue.is_empty() else "\n%s %s%%" % ["SMELTING" if entry.job.worker else "HOLD E", roundi(entry.job.progress / entry.job.DURATION * 100)]
 		return
 	var needed: Array = []
 	for ingredient in entry.job.INPUTS[entry.job.recipe]:
@@ -20,4 +20,4 @@ func update_view(entry: Dictionary) -> void:
 	if not needed.is_empty():
 		$Label.text += "\nE: " + ", ".join(needed)
 	else:
-		$Label.text += "\n%s %.1f/5s" % ["WORK" if entry.job.worker else "PAUSED", entry.job.progress]
+		$Label.text += "\n%s %s%%" % ["WORK" if entry.job.worker else "PAUSED", roundi(entry.job.progress / entry.job.DURATION * 100)]

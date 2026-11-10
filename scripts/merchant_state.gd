@@ -23,13 +23,13 @@ func step(delta: float) -> void:
 			stock = STOCK
 			until_visit += INTERVAL
 
-func buy(player: int, at: Vector2, economy: RefCounted, materials: RefCounted) -> int:
-	if player <= 0 or remaining <= 0 or stock <= 0 or economy.coins < WOOD_PRICE:
+func buy(player: int, at: Vector2, economy: RefCounted, materials: RefCounted, cost: int = WOOD_PRICE) -> int:
+	if player <= 0 or remaining <= 0 or stock <= 0 or economy.coins < cost:
 		return -1
 	if absf(at.x - POSITION.x) > 12 or absf(at.y - POSITION.y) > 6 or materials.carried_by(player) != -1:
 		return -1
 	var id: int = materials.add_material("wood")
-	economy.coins -= WOOD_PRICE
+	economy.coins -= cost
 	stock -= 1
 	return id
 

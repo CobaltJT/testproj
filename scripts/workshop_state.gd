@@ -40,11 +40,14 @@ func can_place(at: Vector2) -> bool:
 			return false
 	return true
 
-func purchase(player: int, kind: String, economy: RefCounted, materials: RefCounted) -> bool:
-	if player <= 0 or kind not in PRICES or pending.has(player) or materials.carried_by(player) != -1 or economy.coins < PRICES[kind]:
+func purchase(player: int, kind: String, economy: RefCounted, materials: RefCounted, price_multiplier: float = 1.0) -> bool:
+	if kind not in PRICES:
 		return false
-	economy.coins -= PRICES[kind]
-	pending[player] = {"id": next_id, "kind": kind}
+	var cost := maxi(1, ceili(PRICES[kind] * price_multiplier - 0.000001))
+	if player <= 0 or kind not in PRICES or pending.has(player) or materials.carried_by(player) != -1 or economy.coins < cost:
+		return false
+	economy.coins -= cost
+	pending[player] = {"id": next_id, "kind": kind, "paid": cost}
 	next_id += 1
 	return true
 
@@ -54,7 +57,7 @@ func place(player: int, at: Vector2) -> int:
 	var kit: Dictionary = pending[player]
 	var job = JOB.new()
 	job.configure(kit.kind)
-	stations[kit.id] = {"kind": kit.kind, "at": at, "job": job}
+	stations[kit.id] = {"kind": kit.kind, "at": at, "job": job, "paid": kit.paid}
 	pending.erase(player)
 	if kit.kind == "anvil":
 		opened = true
@@ -63,7 +66,7 @@ func place(player: int, at: Vector2) -> int:
 func cancel(player: int, economy: RefCounted) -> bool:
 	if not pending.has(player):
 		return false
-	economy.coins += PRICES[pending[player].kind]
+	economy.coins += pending[player].paid
 	pending.erase(player)
 	return true
 
@@ -77,14 +80,14 @@ func pack(player: int, at: Vector2, materials: RefCounted) -> bool:
 	var id := nearest(at)
 	if player <= 0 or id == -1 or pending.has(player) or materials.carried_by(player) != -1 or not stations[id].job.slots.is_empty() or not stations[id].job.ore_queue.is_empty():
 		return false
-	pending[player] = {"id": id, "kind": stations[id].kind}
+	pending[player] = {"id": id, "kind": stations[id].kind, "paid": stations[id].paid}
 	stations.erase(id)
 	return true
 
 func snapshot() -> Dictionary:
 	var result: Dictionary = {}
 	for id in stations:
-		result[id] = {"kind": stations[id].kind, "at": stations[id].at, "job": stations[id].job.snapshot()}
+		result[id] = {"kind": stations[id].kind, "at": stations[id].at, "job": stations[id].job.snapshot(), "paid": stations[id].paid}
 	return {"stations": result, "pending": pending.duplicate(true), "next_id": next_id, "opened": opened}
 
 func restore(state: Dictionary) -> void:
@@ -93,7 +96,7 @@ func restore(state: Dictionary) -> void:
 		var entry: Dictionary = state.stations[id]
 		var job = JOB.new()
 		job.restore(entry.job)
-		stations[id] = {"kind": entry.kind, "at": entry.at, "job": job}
+		stations[id] = {"kind": entry.kind, "at": entry.at, "job": job, "paid": entry.paid}
 	pending = state.pending.duplicate(true)
 	next_id = state.next_id
 	opened = state.opened

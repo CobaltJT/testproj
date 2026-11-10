@@ -62,7 +62,7 @@ func step(delta: float) -> void:
 func depart(order: Dictionary, index: int, served: bool, reason: String = "fulfilled") -> void:
 	departures.append({"id": order.id, "kind": order.kind, "remaining": WALK_TIME, "served": served, "reason": reason, "x": 120.0 - index * 20})
 
-func decide(player: int, at: Vector2, order_id: int, accept: bool) -> bool:
+func decide(player: int, at: Vector2, order_id: int, accept: bool, rejection_cost: int = REJECT_PENALTY) -> bool:
 	if not at_counter(player, at) or queue.is_empty():
 		return false
 	var first: Dictionary = queue[0]
@@ -74,11 +74,11 @@ func decide(player: int, at: Vector2, order_id: int, accept: bool) -> bool:
 	else:
 		queue.pop_front()
 		rejected += 1
-		reputation -= REJECT_PENALTY
+		reputation -= rejection_cost
 		depart(first, 0, false, "rejected")
 	return true
 
-func deliver(player: int, at: Vector2, materials: RefCounted) -> bool:
+func deliver(player: int, at: Vector2, materials: RefCounted, sale_multiplier: float = 1.0) -> bool:
 	if not at_counter(player, at) or queue.is_empty():
 		return false
 	var first: Dictionary = queue[0]
@@ -89,7 +89,7 @@ func deliver(player: int, at: Vector2, materials: RefCounted) -> bool:
 		return false
 	materials.release_carrier(player)
 	materials.pieces[piece].delivered = true
-	coins += PRICES[first.kind]
+	coins += ceili(PRICES[first.kind] * sale_multiplier - 0.000001)
 	completed += 1
 	reputation += SUCCESS_REWARD
 	depart(first, 0, true)

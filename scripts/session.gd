@@ -1,5 +1,12 @@
 extends Node
 ## ENet LAN session. Only the host simulates physics; clients send controls.
+const PROGRESSION = preload("res://scripts/progression_state.gd")
+var progression = PROGRESSION.new()
+var progression_label: Label
+var skill_summary: Label
+var skill_buttons: Dictionary = {}
+var station_buttons: Dictionary = {}
+var catalog_tabs: TabContainer
 const MAP = preload("res://scripts/map_layout.gd")
 var overview_camera: Camera2D
 const WORKSHOP_STATE = preload("res://scripts/workshop_state.gd")
@@ -98,7 +105,12 @@ func _ready() -> void:
 	layer.add_child(recipe_label)
 	refresh_orders()
 	refresh_merchant()
+	progression_label = Label.new()
+	progression_label.position = Vector2(24, 608)
+	progression_label.add_theme_font_size_override("font_size", 14)
+	layer.add_child(progression_label)
 	init_build_ui(layer)
+	refresh_progression()
 	refresh_workshop()
 	var column := VBoxContainer.new()
 	panel.add_child(column)
@@ -190,6 +202,7 @@ func client_ready() -> void:
 	receive_orders.rpc_id(id, orders.snapshot())
 	receive_mining.rpc_id(id, mining.snapshot())
 	receive_merchant.rpc_id(id, merchant.snapshot())
+	receive_progression.rpc_id(id, progression.snapshot())
 
 @rpc("authority", "call_local", "reliable")
 func spawn_player(id: int, at: Vector2) -> void:
@@ -212,7 +225,9 @@ func spawn_player(id: int, at: Vector2) -> void:
 	tag.add_theme_font_size_override("font_size", 7)
 	dwarf.add_child(tag)
 	players[id] = dwarf
+	progression.add(id)
 	active = true
+	refresh_progression()
 	refresh_ore()
 	update_status()
 
@@ -337,6 +352,8 @@ func remove_player(id: int) -> void:
 	if players.has(id):
 		players[id].free()
 		players.erase(id)
+	progression.dwarfs.erase(id)
+	refresh_progression()
 	last_input.erase(id)
 	work_held.erase(id)
 	last_interaction.erase(id)
@@ -497,8 +514,8 @@ func refresh_orders() -> void:
 		for i in range(orders.queue.size()):
 			var order: Dictionary = orders.queue[i]
 			var phase := "DELIVER" if order.accepted else ("Y accept / N reject" if i == 0 else "waiting for counter")
-			text += "\n%s #%s: %s · %s · %ss · %sg" % ["FRONT" if i == 0 else "QUEUED", order.id, order.kind.capitalize(), phase, ceili(order.remaining), CUSTOMER_STATE.PRICES[order.kind]]
-		text += "\nNext arrival: %ss · E serves FRONT only" % ceili(orders.until_arrival) if workshop.opened else "\nPlace an anvil to open the workshop. Tab: build catalog"
+			text += "\n%s #%s: %s · %s · %ss · %sg" % ["FRONT" if i == 0 else "QUEUED", order.id, order.kind.capitalize(), phase, ceili(order.remaining), progression.sale_price(multiplayer.get_unique_id(), CUSTOMER_STATE.PRICES[order.kind])]
+		text += "\nNext arrival: %ss · E serves FRONT only" % ceili(orders.until_arrival) if workshop.opened else "\nPlace an anvil to open the workshop. Tab: build & skills"
 		order_label.text = text
 
 func show_customer(id: int, at: Vector2, request: String, leaving: bool) -> void:
@@ -533,7 +550,9 @@ func step_mining(delta: float) -> void:
 		if not workshop.pending.has(id) and work_held.get(id, false) and near_mine(dwarf) and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
 			eligible.append(id)
 	eligible.sort()
-	if mining.step(delta, eligible):
+	var worker: int = mining.worker if mining.worker in eligible else (eligible[0] if not eligible.is_empty() else 0)
+	if mining.step(delta * progression.speed(worker, "mining"), eligible):
+		award_exp(worker, "mining")
 		var piece_id: int = ore.add_mined_ore()
 		var body := create_ore_body(piece_id, true, MINE_OUTPUT)
 		position_ore(body, MINE_OUTPUT, Vector2(0, 20))
@@ -549,9 +568,10 @@ func receive_mining(state: Dictionary) -> void:
 
 func refresh_mining() -> void:
 	mining_station.get_node("Progress").value = mining.progress
-	var text := "HOLD E: MINE · 3s"
+	var duration: float = MINING_STATE.DURATION / progression.speed(mining.worker if mining.worker != 0 else multiplayer.get_unique_id(), "mining")
+	var text := "HOLD E: MINE · %.1fs" % duration
 	if mining.progress > 0:
-		text = "%s %.1f/3s" % ["MINING" if mining.worker != 0 else "PAUSED", mining.progress]
+		text = "%s %s%% · %.1fs per ore" % ["MINING" if mining.worker != 0 else "PAUSED", roundi(mining.progress / MINING_STATE.DURATION * 100), duration]
 	mining_station.get_node("WorkLabel").text = text
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -568,9 +588,9 @@ func request_wood() -> void:
 func buy_wood_for(id: int) -> void:
 	if not multiplayer.is_server() or not players.has(id):
 		return
-	var piece_id: int = merchant.buy(id, players[id].position, orders, ore)
+	var piece_id: int = merchant.buy(id, players[id].position, orders, ore, progression.purchase_price(id, MERCHANT_STATE.WOOD_PRICE))
 	if piece_id == -1:
-		var message := "B buys wood: stand by the merchant with empty hands, 5 coins and stock available."
+		var message := "B buys wood: stand by the merchant with empty hands, %s coins and stock available." % progression.purchase_price(id, MERCHANT_STATE.WOOD_PRICE)
 		if id == 1:
 			interaction_feedback(message)
 		else:
@@ -594,7 +614,7 @@ func refresh_merchant() -> void:
 	merchant_node.visible = active and merchant.remaining > 0
 	if merchant_label != null:
 		merchant_label.visible = active
-		merchant_label.text = "Merchant: B buys wood for 5 coins · Stock: %s · Leaves in %ss" % [merchant.stock, ceili(merchant.remaining)] if merchant.remaining > 0 else "Merchant returns in %ss · Wood costs 5 coins (B nearby)" % ceili(merchant.until_visit)
+		merchant_label.text = "Merchant: B buys wood for %s coins · Stock: %s · Leaves in %ss" % [progression.purchase_price(multiplayer.get_unique_id(), MERCHANT_STATE.WOOD_PRICE), merchant.stock, ceili(merchant.remaining)] if merchant.remaining > 0 else "Merchant returns in %ss · Wood costs %s coins (B nearby)" % [ceili(merchant.until_visit), progression.purchase_price(multiplayer.get_unique_id(), MERCHANT_STATE.WOOD_PRICE)]
 
 func broadcast_state(method: String, arguments: Array, apply_local: bool = false) -> void:
 	if apply_local:
@@ -623,11 +643,13 @@ func interact_for(id: int) -> void:
 	var carried: int = ore.carried_by(id)
 	var message := "E: pick up/load · Hold E: work · Tab: build · R: pack idle station"
 	if near_mine(dwarf):
-		message = "Hold E with empty hands to mine ore (3 seconds)."
+		message = "Hold E with empty hands to mine ore. Prospector speeds up extraction."
 	elif absf(dwarf.position.x - 166) <= 30 and absf(dwarf.position.y - 216) <= 6 and not orders.queue.is_empty() and carried != -1:
 		var product: String = orders.queue[0].kind
-		var sold: bool = orders.deliver(id, dwarf.position, ore)
-		message = "%s delivered! +%s coins, +2 reputation." % [product.capitalize(), CUSTOMER_STATE.PRICES[product]] if sold else ("Y: accept or N: reject this request first." if not orders.queue[0].accepted else "Front customer needs a %s." % product)
+		var sold: bool = orders.deliver(id, dwarf.position, ore, 1.0 + 0.1 * progression.rank(id, "sales"))
+		message = "%s delivered! +%s coins, +2 reputation." % [product.capitalize(), progression.sale_price(id, CUSTOMER_STATE.PRICES[product])] if sold else ("Y: accept or N: reject this request first." if not orders.queue[0].accepted else "Front customer needs a %s." % product)
+		if sold:
+			award_exp(id, "delivery")
 		broadcast_state("receive_orders", [orders.snapshot()])
 		refresh_orders()
 	else:
@@ -683,6 +705,8 @@ func reset_ore(simulate: bool) -> void:
 	throw_grace.clear()
 	hit_cooldowns.clear()
 	ore = ORE_STATE.new()
+	progression = PROGRESSION.new()
+	refresh_progression()
 	workshop = WORKSHOP_STATE.new()
 	refresh_workshop()
 	mining = MINING_STATE.new()
@@ -714,8 +738,11 @@ func step_workstations(delta: float) -> void:
 			if work_held.get(id, false) and workshop.nearest(dwarf.position) == station_id and not workshop.pending.has(id) and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
 				eligible.append(id)
 		eligible.sort()
-		var output: int = entry.job.step(delta, eligible, ore)
+		var worker: int = entry.job.worker if entry.job.worker in eligible else (eligible[0] if not eligible.is_empty() else 0)
+		var specialty := "woodworking" if entry.kind == "woodbench" else "smithing"
+		var output: int = entry.job.step(delta * progression.speed(worker, specialty), eligible, ore)
 		if output != -1:
+			award_exp(worker, "crafting")
 			position_ore(ore_bodies[output], entry.at + Vector2(28, -18), Vector2(0, 20))
 			ore_bodies[output].angular_velocity = 0
 			changed = true
@@ -743,7 +770,7 @@ func refresh_workshop() -> void:
 		station_nodes[id].update_view(workshop.stations[id])
 	if recipe_label != null:
 		recipe_label.visible = active
-		recipe_label.text = "Tab: buy/place · R: pack idle station · Anvil: 1 Horseshoe  2 Blade  3 Axe head  4 Assemble axe"
+		recipe_label.text = "Tab: build / skills · R: pack idle station · Anvil: 1 Horseshoe  2 Blade  3 Axe head  4 Assemble axe"
 	if build_button != null:
 		build_button.visible = active
 
@@ -753,33 +780,65 @@ func init_build_ui(layer: CanvasLayer) -> void:
 	world.add_child(build_ghost)
 	build_ghost.hide()
 	build_button = Button.new()
-	build_button.text = "Build [Tab]"
+	build_button.text = "Build / Skills [Tab]"
 	build_button.position = Vector2(820, 642)
 	build_button.pressed.connect(func(): catalog.visible = not catalog.visible)
 	build_button.focus_mode = Control.FOCUS_NONE
 	layer.add_child(build_button)
 	catalog = PanelContainer.new()
-	catalog.position = Vector2(600, 320)
+	catalog.position = Vector2(500, 160)
+	catalog.custom_minimum_size = Vector2(730, 430)
 	layer.add_child(catalog)
+	catalog_tabs = TabContainer.new()
+	catalog.add_child(catalog_tabs)
 	var column := VBoxContainer.new()
-	catalog.add_child(column)
+	column.name = "Build"
+	catalog_tabs.add_child(column)
 	var title := Label.new()
 	title.text = "Buy a workstation (empty hands)"
 	column.add_child(title)
 	for kind in WORKSHOP_STATE.PRICES:
 		var button := Button.new()
-		button.text = "%s · %s coins" % ["Forge + bin" if kind == "forge" else kind.capitalize(), WORKSHOP_STATE.PRICES[kind]]
 		button.focus_mode = Control.FOCUS_NONE
 		button.pressed.connect(func(): buy_station(kind))
 		column.add_child(button)
+		station_buttons[kind] = button
 	var help := Label.new()
-	help.text = "After buying: click a green floor preview.\nRed: blocked. Esc: cancel/refund kit.\nR beside an empty station: pack/move."
+	help.text = "After buying: click a green floor preview.\nRed: blocked. Esc: cancel/refund kit.\nR beside an empty station: pack/move.\nTAB closes this menu; the game continues while it is open."
 	help.add_theme_font_size_override("font_size", 12)
 	column.add_child(help)
-	var close := Button.new()
-	close.text = "Close"
-	close.pressed.connect(func(): catalog.hide())
-	column.add_child(close)
+	var skills := VBoxContainer.new()
+	skills.name = "Skills"
+	catalog_tabs.add_child(skills)
+	skill_summary = Label.new()
+	skills.add_child(skill_summary)
+	var branches := HBoxContainer.new()
+	branches.add_theme_constant_override("separation", 16)
+	skills.add_child(branches)
+	for branch in ["Craft", "Trade"]:
+		var path := VBoxContainer.new()
+		path.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		branches.add_child(path)
+		var heading := Label.new()
+		heading.text = branch + " · each rank costs 1 skill point"
+		path.add_child(heading)
+		for key in PROGRESSION.SKILLS:
+			var definition: Dictionary = PROGRESSION.SKILLS[key]
+			if definition.branch != branch:
+				continue
+			var button := Button.new()
+			button.focus_mode = Control.FOCUS_NONE
+			button.pressed.connect(func(): buy_skill(key))
+			path.add_child(button)
+			skill_buttons[key] = button
+			var detail := Label.new()
+			detail.text = definition.effect.replace("anvil, grinder and forge", "metalwork")
+			detail.add_theme_font_size_override("font_size", 12)
+			path.add_child(detail)
+	var help_skills := Label.new()
+	help_skills.text = "Complete mining: +2 EXP · Station work: +3 EXP · Delivery: +5 EXP\nEXP goes to the completing worker. Progress lasts for this session.\nPurchase prices round up to whole coins. Unanswered requests still cost 3 reputation."
+	help_skills.add_theme_font_size_override("font_size", 12)
+	skills.add_child(help_skills)
 	catalog.hide()
 
 func _process(_delta: float) -> void:
@@ -820,7 +879,7 @@ func request_station(kind: String) -> void:
 func purchase_for(id: int, kind: String) -> void:
 	if not multiplayer.is_server() or not players.has(id):
 		return
-	if not workshop.purchase(id, kind, orders, ore):
+	if not workshop.purchase(id, kind, orders, ore, 1.0 - 0.1 * progression.rank(id, "purchasing")):
 		feedback_for(id, "Cannot buy: check coins, empty hands, and any unplaced kit.")
 	sync_build()
 
@@ -881,10 +940,71 @@ func request_order_decision(order_id: int, accept: bool) -> void:
 func decide_order_for(id: int, order_id: int, accept: bool) -> void:
 	if not multiplayer.is_server() or not players.has(id):
 		return
-	var changed: bool = orders.decide(id, players[id].position, order_id, accept)
-	var message := "Request accepted: deliver within 30 seconds (+2 reputation)." if accept else "Request rejected: -3 reputation."
+	var changed: bool = orders.decide(id, players[id].position, order_id, accept, progression.reject_cost(id))
+	var message := "Request accepted: deliver within 30 seconds (+2 reputation)." if accept else "Request rejected: -%s reputation." % progression.reject_cost(id)
 	if not changed:
 		message = "Decide on the front request at the counter. Already accepted or stale requests cannot be rejected."
 	feedback_for(id, message)
 	broadcast_state("receive_orders", [orders.snapshot()])
 	refresh_orders()
+
+func award_exp(id: int, task: String) -> void:
+	if not multiplayer.is_server() or not players.has(id):
+		return
+	if progression.award(id, task):
+		feedback_for(id, "Level %s! +1 skill point. TAB → Skills" % progression.dwarfs[id].level)
+	sync_progression()
+
+func sync_progression() -> void:
+	refresh_progression()
+	broadcast_state("receive_progression", [progression.snapshot()])
+
+@rpc("authority", "call_remote", "reliable")
+func receive_progression(state: Dictionary) -> void:
+	progression.restore(state)
+	refresh_progression()
+	refresh_merchant()
+	refresh_mining()
+
+func buy_skill(skill: String) -> void:
+	if multiplayer.is_server():
+		purchase_skill_for(1, skill)
+	else:
+		request_skill.rpc_id(1, skill)
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_skill(skill: String) -> void:
+	if multiplayer.is_server():
+		purchase_skill_for(multiplayer.get_remote_sender_id(), skill)
+
+func purchase_skill_for(id: int, skill: String) -> void:
+	if not multiplayer.is_server() or not players.has(id):
+		return
+	var bought: bool = progression.buy(id, skill)
+	feedback_for(id, "Skill upgraded: %s" % PROGRESSION.SKILLS[skill].title if bought else "Cannot upgrade: check points, prerequisites and maximum rank.")
+	sync_progression()
+	refresh_merchant()
+	refresh_orders()
+	refresh_mining()
+
+func refresh_progression() -> void:
+	for id in players:
+		players[id].walking_multiplier = progression.speed(id, "walking")
+	var local := multiplayer.get_unique_id()
+	if progression_label == null:
+		return
+	progression_label.visible = active
+	var text := "Level 1 · EXP 0 / 10 · 0 skill points · TAB: Skills"
+	if progression.dwarfs.has(local):
+		var dwarf: Dictionary = progression.dwarfs[local]
+		text = "Level %s · EXP %s / %s · %s skill points · TAB: Skills" % [dwarf.level, dwarf.exp, progression.required(dwarf.level), dwarf.points]
+	progression_label.text = text
+	if skill_summary != null:
+		skill_summary.text = text
+	for key in skill_buttons:
+		var definition: Dictionary = PROGRESSION.SKILLS[key]
+		var prerequisite: String = "" if definition.parent == "" else "← " + PROGRESSION.SKILLS[definition.parent].title + " · "
+		skill_buttons[key].text = "%s%s [%s/%s] +" % [prerequisite, definition.title, progression.rank(local, key), definition.max]
+		skill_buttons[key].disabled = not progression.can_buy(local, key)
+	for kind in station_buttons:
+		station_buttons[kind].text = "%s · %s coins" % ["Forge + bin" if kind == "forge" else kind.capitalize(), progression.purchase_price(local, WORKSHOP_STATE.PRICES[kind])]

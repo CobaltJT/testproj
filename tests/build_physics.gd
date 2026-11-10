@@ -45,7 +45,7 @@ func run() -> void:
 	await press("build_menu")
 	check(session.catalog.visible, "Tab opens build catalog")
 	# Exercise the actual catalog button connection, not just the data model.
-	session.catalog.get_child(0).get_child(1).pressed.emit()
+	session.station_buttons["anvil"].pressed.emit()
 	await frames(5)
 	check(session.orders.coins == 80 and session.build_ghost.visible and not session.catalog.visible, "Catalog purchase gives placement preview and reserves coins")
 	await click(Vector2(112, 216))

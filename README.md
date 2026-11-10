@@ -26,7 +26,7 @@ The starting building has **no workstations**. The mine, counter, ladders, door,
 walls, and floors are fixed. You start with **100 shared coins** and eight loose
 ore pieces in the basement.
 
-Press **Tab** or click **Build** to open the catalog:
+Press **Tab** or click **Build / Skills** to open the menu. Its **Build** tab offers:
 
 | Station | Cost | Purpose |
 | --- | --- | --- |
@@ -133,6 +133,40 @@ can be served. Horseshoes sell for **10 coins**, swords for **15**, and axes for
 **25**. Timely delivery gives **+2 shared reputation**; failing an accepted order
 costs **6 reputation**. Accepted orders cannot be rejected. The HUD shows each
 request's phase, timer, coins, and reputation, which can fall below zero.
+
+## Player progression
+
+Every dwarf starts at level 1. Completing a mining cycle earns **2 EXP**, station
+work earns **3 EXP**, and delivering an accepted order earns **5 EXP**. Work EXP
+goes to the worker who finishes the cycle, including after a handoff. Picking up,
+buying, loading, placing, and rejecting do not grant EXP.
+
+The first level needs **10 EXP**, then **15**, **20**, and so on (5 more per level).
+Each level grants **one skill point**; surplus EXP carries forward. Open **TAB →
+Skills** to see personal EXP, available points, prerequisites, and ranks. Each
+rank costs one point. Buying a branch root unlocks its child skills:
+
+| Branch | Skill | Effect per rank | Maximum ranks |
+| --- | --- | --- | --- |
+| Craft root | Sure-footed | +10% horizontal movement speed | 3 |
+| Requires Sure-footed | Metalworker | +20% anvil, grinder, forge work speed | 3 |
+| Requires Sure-footed | Prospector | +20% mining speed | 3 |
+| Requires Sure-footed | Woodworker | +20% woodbench speed | 3 |
+| Trade root | Bargainer | −10% workstation and merchant wood prices | 3 |
+| Requires Bargainer | Salesperson | +10% delivery sale prices | 3 |
+| Requires Bargainer | Diplomat | −1 reputation lost on explicit rejection | 2 |
+
+Speed bonuses add to the base rate: one work rank makes a 5-second job take
+5 / 1.2 = **4.17 seconds**. The current worker supplies the bonus; helpers do not
+stack speed. Trade bonuses use the buyer, seller, or rejecting dwarf's skills,
+while coins and reputation remain shared. Coin prices round up; kit refunds
+return the original amount paid, including after packing or disconnecting.
+Diplomat does not reduce the 3-point penalty for leaving a request unanswered or
+the 6-point penalty for failing an accepted order.
+
+The menu does not pause gameplay. Progression is per connected dwarf for the
+current session; leaving and rejoining creates a fresh level-1 dwarf. Other
+players keep their progress. There is no disk save yet.
 
 ## Multiplayer and scope
 

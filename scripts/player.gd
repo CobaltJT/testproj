@@ -7,6 +7,7 @@ const GRAVITY := 1000.0
 const CLIMB_SPEED := 110.0
 const MAP = preload("res://scripts/map_layout.gd")
 const LADDERS: Array[Rect2] = MAP.LADDERS
+var walking_multiplier := 1.0
 var knockback_x := 0.0
 var hit_stun := 0.0
 var networked := false
@@ -53,7 +54,7 @@ func _physics_process(delta: float) -> void:
 				break
 	if climbing:
 		var ladder := LADDERS[active_ladder]
-		velocity = Vector2(horizontal * SPEED, vertical * CLIMB_SPEED)
+		velocity = Vector2(horizontal * SPEED * walking_multiplier, vertical * CLIMB_SPEED)
 		if jump_pressed:
 			climbing = false
 			ladder_jump_locked = true
@@ -67,7 +68,7 @@ func _physics_process(delta: float) -> void:
 				(ladder.end.y - position.y) * pixels_per_unit / delta)
 
 	else:
-		velocity.x = horizontal * SPEED
+		velocity.x = horizontal * SPEED * walking_multiplier
 		if not is_on_floor():
 			velocity.y += GRAVITY * delta
 		if jump_pressed and is_on_floor():

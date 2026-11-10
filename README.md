@@ -13,7 +13,8 @@ walls, and room for more stations. The existing counter, mine, and ladders remai
 in their familiar locations.
 
 Each player has a personal camera following their own dwarf, horizontally and
-between floors. The view is **96 world pixels high**, roughly **1.2 floors**,
+between floors. The default resolution is **1280×720**. The view is **160 world pixels high**,
+roughly **two floors**,
 with smooth following and bounds at the map edges. Remote dwarfs never control
 your camera. The HUD and build catalog stay fixed on screen; station placement
 uses the camera transform. Resize the window without changing the vertical world

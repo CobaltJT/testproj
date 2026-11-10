@@ -6,5 +6,5 @@ const SCALE := 2.0
 const RIGHT_WALL := 592.0
 const FLOORS := [136.0, 216.0, 288.0]
 const LADDERS: Array[Rect2] = [Rect2(352, 136, 32, 80), Rect2(96, 216, 32, 72)]
-const CAMERA_HEIGHT := 96.0 # 1.2 of the standard 80-pixel floor spacing.
+const CAMERA_HEIGHT := 160.0 # Two standard 80-pixel floors.
 const CAMERA_ABOVE_FEET := 32.0

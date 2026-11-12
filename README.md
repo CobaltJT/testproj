@@ -47,8 +47,8 @@ station and press **R** to pack it, then place it elsewhere or press Esc to refu
 it. Loaded or working stations cannot be packed. Disconnecting refunds an
 unplaced kit; placed stations belong to the whole team and remain.
 
-The first anvil placement opens the shop and starts customer and merchant clocks.
-Once open, the clocks keep running even while stations are being rearranged.
+Place stations during preparation, then use **Open shop** to start the day.
+Station placement itself does not start customer or merchant clocks.
 
 ## Produce goods
 
@@ -118,6 +118,31 @@ and the ground-floor build area, with empty hands, and press **B** per purchase.
 Pick up the physical wood and take it to a woodworking bench. Buying is checked
 by the host for stock, funds, position, and free hands.
 
+## Daily cycle
+
+Each new session begins on **Day 1, Morning**. Morning lasts until any connected
+player presses **Open shop**. There are no customer arrivals or merchant visits,
+and the mine is closed. Players can prepare, rearrange stations, and craft.
+
+**Shop hours last 120 seconds.** The mine opens, customers arrive first after
+8 seconds and then every 20 seconds, and merchants follow their normal visit
+schedule. The HUD shows the shared day, phase, and time until closing.
+
+At closing, **Evening** begins: no new customers appear, the merchant leaves,
+and the mine closes. Existing requests retain their decision and fulfilment
+timers. Players can continue crafting and serving the queue. Once all customers
+have left, including their departure animations, a shared daily summary appears:
+customer count, served requests, failed accepted requests, rejected/unanswered
+requests, money gained from sales, money spent on purchases, and refunds.
+Starting funds are excluded; purchases and refunds are reported separately.
+
+The summary blocks gameplay actions. Any player can press **Close summary ·
+Next morning**. Everyone fades to black, then into the following morning.
+Stations, pending kits, resources, paused work, coins, reputation, EXP, and skills
+remain. Daily statistics start fresh. The host owns phase changes and timers;
+joining clients receive the current phase and any active report. Stale or
+duplicate transition requests cannot skip phases or open the next day.
+
 ## Customers and reputation
 
 After the shop opens, the first customer arrives at 8 seconds, then one arrives
@@ -178,7 +203,7 @@ interpolation remain future work. Verification uses one host and two clients on
 loopback; separate-computer LAN play still needs user testing.
 
 Leave returns to the menu. Host departure ends the session. New hosted games
-reset stations, resources, budget, reputation, and clocks. No persistence,
+reset stations, resources, budget, reputation, day, and clocks. No persistence,
 upgrades, dedicated servers, internet matchmaking, or separate mine level yet.
 
 ## Validation

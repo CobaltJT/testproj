@@ -17,6 +17,7 @@ func run() -> void:
 	session = load("res://scenes/session.tscn").instantiate()
 	root.add_child(session)
 	session.host_game()
+	session.advance_day()
 	session.workshop.opened = true
 	session.orders.step(8)
 	session.orders.step(2)

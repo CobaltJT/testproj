@@ -15,6 +15,7 @@ func run() -> void:
 	session = load("res://scenes/session.tscn").instantiate()
 	root.add_child(session)
 	session.host_game()
+	session.advance_day()
 	await frames(5)
 	Input.action_press("build_menu")
 	await frames(2)

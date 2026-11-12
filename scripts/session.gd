@@ -7,6 +7,17 @@ var skill_summary: Label
 var skill_buttons: Dictionary = {}
 var station_buttons: Dictionary = {}
 var catalog_tabs: TabContainer
+const DAY_STATE = preload("res://scripts/day_state.gd")
+var cycle = DAY_STATE.new()
+var day_label: Label
+var open_button: Button
+var day_popup: PanelContainer
+var day_summary: Label
+var next_day_button: Button
+var blackout: ColorRect
+var last_day_phase := "morning"
+var fade_tween: Tween
+var day_tick := 0
 const MAP = preload("res://scripts/map_layout.gd")
 var overview_camera: Camera2D
 const WORKSHOP_STATE = preload("res://scripts/workshop_state.gd")
@@ -110,6 +121,7 @@ func _ready() -> void:
 	progression_label.add_theme_font_size_override("font_size", 14)
 	layer.add_child(progression_label)
 	init_build_ui(layer)
+	init_day_ui(layer)
 	refresh_progression()
 	refresh_workshop()
 	var column := VBoxContainer.new()
@@ -203,6 +215,7 @@ func client_ready() -> void:
 	receive_mining.rpc_id(id, mining.snapshot())
 	receive_merchant.rpc_id(id, merchant.snapshot())
 	receive_progression.rpc_id(id, progression.snapshot())
+	receive_day.rpc_id(id, cycle.snapshot())
 
 @rpc("authority", "call_local", "reliable")
 func spawn_player(id: int, at: Vector2) -> void:
@@ -233,6 +246,25 @@ func spawn_player(id: int, at: Vector2) -> void:
 
 func _physics_process(delta: float) -> void:
 	if not active or not players.has(multiplayer.get_unique_id()):
+		return
+	if multiplayer.is_server():
+		var previous_phase: String = cycle.phase
+		cycle.step(delta, orders, merchant)
+		if previous_phase != cycle.phase:
+			broadcast_state("receive_orders", [orders.snapshot()])
+			broadcast_state("receive_merchant", [merchant.snapshot()])
+			refresh_orders()
+			refresh_merchant()
+			refresh_mining()
+		day_tick += 1
+		if day_tick % 3 == 0:
+			broadcast_state("receive_day", [cycle.snapshot()])
+	refresh_day()
+	if cycle.phase in ["summary", "transition"]:
+		if multiplayer.is_server():
+			for id in players:
+				apply_controls(id, Vector2.ZERO, false, false)
+				work_held[id] = false
 		return
 	if Input.is_action_just_pressed("accept_order") or Input.is_action_just_pressed("reject_order"):
 		if not orders.queue.is_empty():
@@ -290,9 +322,6 @@ func _physics_process(delta: float) -> void:
 				work_held[id] = false
 		step_workstations(delta)
 		step_mining(delta)
-		if workshop.opened:
-			orders.step(delta)
-			merchant.step(delta)
 		refresh_orders()
 		refresh_merchant()
 		tick += 1
@@ -317,7 +346,7 @@ func apply_controls(id: int, axis: Vector2, jump: bool, climb: bool) -> void:
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
 func send_controls(axis: Vector2, jump: bool, climb: bool, work: bool) -> void:
-	if not multiplayer.is_server() or not axis.is_finite():
+	if not multiplayer.is_server() or not axis.is_finite() or cycle.phase in ["summary", "transition"]:
 		return
 	var id := multiplayer.get_remote_sender_id()
 	if not players.has(id):
@@ -398,7 +427,7 @@ func interaction_feedback(message: String) -> void:
 
 @rpc("any_peer", "call_remote", "reliable")
 func request_throw(drop: bool) -> void:
-	if multiplayer.is_server():
+	if multiplayer.is_server() and cycle.phase not in ["summary", "transition"]:
 		release_ore(multiplayer.get_remote_sender_id(), drop)
 
 func release_ore(id: int, drop: bool) -> void:
@@ -515,7 +544,7 @@ func refresh_orders() -> void:
 			var order: Dictionary = orders.queue[i]
 			var phase := "DELIVER" if order.accepted else ("Y accept / N reject" if i == 0 else "waiting for counter")
 			text += "\n%s #%s: %s · %s · %ss · %sg" % ["FRONT" if i == 0 else "QUEUED", order.id, order.kind.capitalize(), phase, ceili(order.remaining), progression.sale_price(multiplayer.get_unique_id(), CUSTOMER_STATE.PRICES[order.kind])]
-		text += "\nNext arrival: %ss · E serves FRONT only" % ceili(orders.until_arrival) if workshop.opened else "\nPlace an anvil to open the workshop. Tab: build & skills"
+		text += "\nNext arrival: %ss · E serves FRONT only" % ceili(orders.until_arrival) if cycle.phase == "shop" else "\nShop closed to new arrivals · E serves FRONT only"
 		order_label.text = text
 
 func show_customer(id: int, at: Vector2, request: String, leaving: bool) -> void:
@@ -544,6 +573,10 @@ func near_mine(dwarf: CharacterBody2D) -> bool:
 	return absf(dwarf.position.x - MINE_POSITION.x) <= 20 and absf(dwarf.position.y - MINE_POSITION.y) <= 6
 
 func step_mining(delta: float) -> void:
+	if cycle.phase != "shop":
+		mining.worker = 0
+		refresh_mining()
+		return
 	var eligible: Array[int] = []
 	for id in players:
 		var dwarf = players[id]
@@ -570,6 +603,9 @@ func refresh_mining() -> void:
 	mining_station.get_node("Progress").value = mining.progress
 	var duration: float = MINING_STATE.DURATION / progression.speed(mining.worker if mining.worker != 0 else multiplayer.get_unique_id(), "mining")
 	var text := "HOLD E: MINE · %.1fs" % duration
+	if cycle.phase != "shop":
+		mining_station.get_node("WorkLabel").text = "MINE CLOSED"
+		return
 	if mining.progress > 0:
 		text = "%s %s%% · %.1fs per ore" % ["MINING" if mining.worker != 0 else "PAUSED", roundi(mining.progress / MINING_STATE.DURATION * 100), duration]
 	mining_station.get_node("WorkLabel").text = text
@@ -586,7 +622,7 @@ func request_wood() -> void:
 		buy_wood_for(multiplayer.get_remote_sender_id())
 
 func buy_wood_for(id: int) -> void:
-	if not multiplayer.is_server() or not players.has(id):
+	if not multiplayer.is_server() or not players.has(id) or cycle.phase != "shop":
 		return
 	var piece_id: int = merchant.buy(id, players[id].position, orders, ore, progression.purchase_price(id, MERCHANT_STATE.WOOD_PRICE))
 	if piece_id == -1:
@@ -614,6 +650,9 @@ func refresh_merchant() -> void:
 	merchant_node.visible = active and merchant.remaining > 0
 	if merchant_label != null:
 		merchant_label.visible = active
+		if cycle.phase != "shop":
+			merchant_label.text = "Merchant visits during shop hours."
+			return
 		merchant_label.text = "Merchant: B buys wood for %s coins · Stock: %s · Leaves in %ss" % [progression.purchase_price(multiplayer.get_unique_id(), MERCHANT_STATE.WOOD_PRICE), merchant.stock, ceili(merchant.remaining)] if merchant.remaining > 0 else "Merchant returns in %ss · Wood costs %s coins (B nearby)" % [ceili(merchant.until_visit), progression.purchase_price(multiplayer.get_unique_id(), MERCHANT_STATE.WOOD_PRICE)]
 
 func broadcast_state(method: String, arguments: Array, apply_local: bool = false) -> void:
@@ -633,7 +672,7 @@ func material_texture(kind: String) -> Texture2D:
 	return EXTRA_TEXTURES.get(kind, ORE_TEXTURE)
 
 func interact_for(id: int) -> void:
-	if not multiplayer.is_server() or not players.has(id) or workshop.pending.has(id):
+	if not multiplayer.is_server() or not players.has(id) or workshop.pending.has(id) or cycle.phase in ["summary", "transition"]:
 		return
 	var now := Time.get_ticks_msec()
 	if now - last_interaction.get(id, -1000) < 150:
@@ -643,7 +682,7 @@ func interact_for(id: int) -> void:
 	var carried: int = ore.carried_by(id)
 	var message := "E: pick up/load · Hold E: work · Tab: build · R: pack idle station"
 	if near_mine(dwarf):
-		message = "Hold E with empty hands to mine ore. Prospector speeds up extraction."
+		message = "Mine closed until shop hours." if cycle.phase != "shop" else "Hold E with empty hands to mine ore. Prospector speeds up extraction."
 	elif absf(dwarf.position.x - 166) <= 30 and absf(dwarf.position.y - 216) <= 6 and not orders.queue.is_empty() and carried != -1:
 		var product: String = orders.queue[0].kind
 		var sold: bool = orders.deliver(id, dwarf.position, ore, 1.0 + 0.1 * progression.rank(id, "sales"))
@@ -712,6 +751,8 @@ func reset_ore(simulate: bool) -> void:
 	mining = MINING_STATE.new()
 	refresh_mining()
 	orders = CUSTOMER_STATE.new()
+	cycle = DAY_STATE.new()
+	refresh_day()
 	merchant = MERCHANT_STATE.new()
 	refresh_orders()
 	refresh_merchant()
@@ -721,7 +762,7 @@ func reset_ore(simulate: bool) -> void:
 	refresh_ore()
 
 func choose_recipe(id: int, choice: String) -> void:
-	if not multiplayer.is_server() or not players.has(id):
+	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
 		return
 	var station_id: int = workshop.nearest(players[id].position)
 	if station_id != -1 and workshop.stations[station_id].job.select(choice):
@@ -845,7 +886,7 @@ func _process(_delta: float) -> void:
 	if build_ghost == null:
 		return
 	var id := multiplayer.get_unique_id()
-	var carrying_kit: bool = active and workshop.pending.has(id)
+	var carrying_kit: bool = active and cycle.phase not in ["summary", "transition"] and workshop.pending.has(id)
 	build_ghost.visible = carrying_kit
 	if carrying_kit:
 		catalog.hide()
@@ -877,7 +918,7 @@ func request_station(kind: String) -> void:
 		purchase_for(multiplayer.get_remote_sender_id(), kind)
 
 func purchase_for(id: int, kind: String) -> void:
-	if not multiplayer.is_server() or not players.has(id):
+	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
 		return
 	if not workshop.purchase(id, kind, orders, ore, 1.0 - 0.1 * progression.rank(id, "purchasing")):
 		feedback_for(id, "Cannot buy: check coins, empty hands, and any unplaced kit.")
@@ -889,7 +930,7 @@ func request_place(at: Vector2) -> void:
 		place_for(multiplayer.get_remote_sender_id(), at)
 
 func place_for(id: int, at: Vector2) -> void:
-	if not multiplayer.is_server() or not players.has(id):
+	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
 		return
 	if workshop.place(id, at) == -1:
 		feedback_for(id, "Blocked placement: keep paths, fixed fixtures, and other stations clear.")
@@ -901,7 +942,7 @@ func request_cancel_build() -> void:
 		cancel_build_for(multiplayer.get_remote_sender_id())
 
 func cancel_build_for(id: int) -> void:
-	if not multiplayer.is_server() or not players.has(id):
+	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
 		return
 	workshop.cancel(id, orders)
 	sync_build()
@@ -912,7 +953,7 @@ func request_pack() -> void:
 		pack_for(multiplayer.get_remote_sender_id())
 
 func pack_for(id: int) -> void:
-	if not multiplayer.is_server() or not players.has(id):
+	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
 		return
 	if not workshop.pack(id, players[id].position, ore):
 		feedback_for(id, "Only empty, idle stations can be packed; keep your hands free.")
@@ -938,7 +979,7 @@ func request_order_decision(order_id: int, accept: bool) -> void:
 		decide_order_for(multiplayer.get_remote_sender_id(), order_id, accept)
 
 func decide_order_for(id: int, order_id: int, accept: bool) -> void:
-	if not multiplayer.is_server() or not players.has(id):
+	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
 		return
 	var changed: bool = orders.decide(id, players[id].position, order_id, accept, progression.reject_cost(id))
 	var message := "Request accepted: deliver within 30 seconds (+2 reputation)." if accept else "Request rejected: -%s reputation." % progression.reject_cost(id)
@@ -949,7 +990,7 @@ func decide_order_for(id: int, order_id: int, accept: bool) -> void:
 	refresh_orders()
 
 func award_exp(id: int, task: String) -> void:
-	if not multiplayer.is_server() or not players.has(id):
+	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
 		return
 	if progression.award(id, task):
 		feedback_for(id, "Level %s! +1 skill point. TAB → Skills" % progression.dwarfs[id].level)
@@ -978,7 +1019,7 @@ func request_skill(skill: String) -> void:
 		purchase_skill_for(multiplayer.get_remote_sender_id(), skill)
 
 func purchase_skill_for(id: int, skill: String) -> void:
-	if not multiplayer.is_server() or not players.has(id):
+	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
 		return
 	var bought: bool = progression.buy(id, skill)
 	feedback_for(id, "Skill upgraded: %s" % PROGRESSION.SKILLS[skill].title if bought else "Cannot upgrade: check points, prerequisites and maximum rank.")
@@ -1008,3 +1049,100 @@ func refresh_progression() -> void:
 		skill_buttons[key].disabled = not progression.can_buy(local, key)
 	for kind in station_buttons:
 		station_buttons[kind].text = "%s · %s coins" % ["Forge + bin" if kind == "forge" else kind.capitalize(), progression.purchase_price(local, WORKSHOP_STATE.PRICES[kind])]
+
+func init_day_ui(layer: CanvasLayer) -> void:
+	day_label = Label.new()
+	day_label.position = Vector2(24, 12)
+	layer.add_child(day_label)
+	open_button = Button.new()
+	open_button.position = Vector2(24, 44)
+	open_button.text = "Open shop · Start shop hours"
+	open_button.focus_mode = Control.FOCUS_NONE
+	open_button.pressed.connect(advance_day)
+	layer.add_child(open_button)
+	# A full-screen blocker makes the shared summary modal.
+	var modal := Control.new()
+	modal.name = "DayModal"
+	modal.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	modal.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(modal)
+	var shade := ColorRect.new()
+	shade.name = "Shade"
+	shade.color = Color(0, 0, 0, 0.7)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	modal.add_child(shade)
+	day_popup = PanelContainer.new()
+	day_popup.position = Vector2(430, 160)
+	day_popup.custom_minimum_size = Vector2(420, 350)
+	modal.add_child(day_popup)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 16)
+	day_popup.add_child(column)
+	day_summary = Label.new()
+	column.add_child(day_summary)
+	next_day_button = Button.new()
+	next_day_button.text = "Close summary · Next morning"
+	next_day_button.focus_mode = Control.FOCUS_NONE
+	next_day_button.pressed.connect(advance_day)
+	column.add_child(next_day_button)
+	blackout = ColorRect.new()
+	blackout.color = Color(0, 0, 0, 0)
+	blackout.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	blackout.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(blackout)
+	refresh_day()
+
+func advance_day() -> void:
+	if multiplayer.is_server():
+		advance_day_for(1, cycle.day)
+	else:
+		request_day_advance.rpc_id(1, cycle.day)
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_day_advance(expected_day: int) -> void:
+	if multiplayer.is_server():
+		advance_day_for(multiplayer.get_remote_sender_id(), expected_day)
+
+func advance_day_for(id: int, expected_day: int) -> void:
+	if not multiplayer.is_server() or not players.has(id):
+		return
+	if cycle.advance(expected_day):
+		broadcast_state("receive_day", [cycle.snapshot()])
+		refresh_day()
+		refresh_orders()
+		refresh_mining()
+
+@rpc("authority", "call_remote", "reliable")
+func receive_day(state: Dictionary) -> void:
+	cycle.restore(state)
+	refresh_day()
+	refresh_orders()
+	refresh_mining()
+
+func refresh_day() -> void:
+	if day_label == null:
+		return
+	day_label.visible = active
+	day_label.text = "Day %s · %s%s" % [cycle.day, cycle.phase.capitalize(), " · %ss until closing" % ceili(cycle.remaining) if cycle.phase == "shop" else ""]
+	open_button.visible = active and cycle.phase == "morning"
+	day_popup.get_parent().visible = active and cycle.phase == "summary"
+	if cycle.phase in ["summary", "transition"]:
+		catalog.hide()
+		build_ghost.hide()
+	if cycle.phase == "summary":
+		var report: Dictionary = cycle.summary
+		day_summary.text = "Day %s complete\n\nCustomers: %s\nServed requests: %s\nFailed requests: %s\nRejected / unanswered: %s\nMoney gained: %s\nMoney spent: %s\nRefunds: %s" % [cycle.day, report.customers, report.served, report.failed, report.rejected, report.earned, report.spent, report.refunds]
+	if cycle.phase == "transition":
+		if fade_tween != null:
+			fade_tween.kill()
+		blackout.color.a = clampf(cycle.fade / DAY_STATE.FADE_DURATION, 0, 1)
+	elif cycle.phase == "morning" and last_day_phase == "transition":
+		blackout.color.a = 1
+		fade_tween = create_tween()
+		fade_tween.tween_property(blackout, "color:a", 0.0, DAY_STATE.FADE_DURATION)
+	elif not active:
+		if fade_tween != null:
+			fade_tween.kill()
+		blackout.color.a = 0
+	blackout.visible = active
+	last_day_phase = cycle.phase

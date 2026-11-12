@@ -47,6 +47,7 @@ func purchase(player: int, kind: String, economy: RefCounted, materials: RefCoun
 	if player <= 0 or kind not in PRICES or pending.has(player) or materials.carried_by(player) != -1 or economy.coins < cost:
 		return false
 	economy.coins -= cost
+	economy.spent += cost
 	pending[player] = {"id": next_id, "kind": kind, "paid": cost}
 	next_id += 1
 	return true
@@ -67,6 +68,7 @@ func cancel(player: int, economy: RefCounted) -> bool:
 	if not pending.has(player):
 		return false
 	economy.coins += pending[player].paid
+	economy.refunds += pending[player].paid
 	pending.erase(player)
 	return true
 

@@ -18,17 +18,20 @@ var completed := 0
 var missed := 0
 var rejected := 0
 var unanswered := 0
+var earned := 0
+var spent := 0
+var refunds := 0
 var coins := 100
 var reputation := 0
 
 func at_counter(player: int, at: Vector2) -> bool:
 	return player > 0 and at.is_finite() and absf(at.x - 166) <= 30 and absf(at.y - 216) <= 6
 
-func step(delta: float) -> void:
+func step(delta: float, arrivals: bool = true) -> void:
 	# Process each clock boundary so large steps agree with normal physics ticks.
 	var left := maxf(0, delta)
 	while left > 0.000001:
-		var advance := minf(left, until_arrival)
+		var advance := minf(left, until_arrival) if arrivals else left
 		var ticking := false
 		if not queue.is_empty():
 			var first: Dictionary = queue[0]
@@ -41,7 +44,8 @@ func step(delta: float) -> void:
 			queue[0].remaining -= advance
 		for order in queue:
 			order.age += advance
-		until_arrival -= advance
+		if arrivals:
+			until_arrival -= advance
 		left -= advance
 		if not queue.is_empty() and queue[0].remaining <= 0.000001:
 			var expired: Dictionary = queue.pop_front()
@@ -54,7 +58,7 @@ func step(delta: float) -> void:
 				unanswered += 1
 				reputation -= REJECT_PENALTY
 				depart(expired, 0, false, "unanswered")
-		if until_arrival <= 0.000001:
+		if arrivals and until_arrival <= 0.000001:
 			number += 1
 			queue.append({"id": number, "kind": PRODUCTS[(number - 1) % PRODUCTS.size()], "remaining": DECISION_TIME, "age": 0.0, "accepted": false})
 			until_arrival += ARRIVAL_INTERVAL
@@ -89,7 +93,9 @@ func deliver(player: int, at: Vector2, materials: RefCounted, sale_multiplier: f
 		return false
 	materials.release_carrier(player)
 	materials.pieces[piece].delivered = true
-	coins += ceili(PRICES[first.kind] * sale_multiplier - 0.000001)
+	var reward := ceili(PRICES[first.kind] * sale_multiplier - 0.000001)
+	coins += reward
+	earned += reward
 	completed += 1
 	reputation += SUCCESS_REWARD
 	depart(first, 0, true)
@@ -97,9 +103,12 @@ func deliver(player: int, at: Vector2, materials: RefCounted, sale_multiplier: f
 	return true
 
 func snapshot() -> Dictionary:
-	return {"queue": queue.duplicate(true), "departures": departures.duplicate(true), "until_arrival": until_arrival, "number": number, "completed": completed, "missed": missed, "rejected": rejected, "unanswered": unanswered, "coins": coins, "reputation": reputation}
+	return {"earned": earned, "spent": spent, "refunds": refunds, "queue": queue.duplicate(true), "departures": departures.duplicate(true), "until_arrival": until_arrival, "number": number, "completed": completed, "missed": missed, "rejected": rejected, "unanswered": unanswered, "coins": coins, "reputation": reputation}
 
 func restore(state: Dictionary) -> void:
+	earned = state.earned
+	spent = state.spent
+	refunds = state.refunds
 	queue = state.queue.duplicate(true)
 	departures = state.departures.duplicate(true)
 	until_arrival = state.until_arrival

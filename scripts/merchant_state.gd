@@ -30,6 +30,7 @@ func buy(player: int, at: Vector2, economy: RefCounted, materials: RefCounted, c
 		return -1
 	var id: int = materials.add_material("wood")
 	economy.coins -= cost
+	economy.spent += cost
 	stock -= 1
 	return id
 

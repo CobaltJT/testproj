@@ -180,26 +180,26 @@ func make_help() -> void:
 	help_layer.add_child(shade)
 	help_panel = PanelContainer.new()
 	help_panel.add_theme_stylebox_override("panel", skin())
-	help_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	help_panel.offset_left = 48
-	help_panel.offset_right = -48
-	help_panel.offset_top = 38
-	help_panel.offset_bottom = -38
+	help_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	help_panel.offset_left = -500
+	help_panel.offset_right = 500
+	help_panel.offset_top = -210
+	help_panel.offset_bottom = 210
 	help_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	help_layer.add_child(help_panel)
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 14)
 	help_panel.add_child(column)
-	column.add_child(label("HEARTH & HAMMER · FIELD GUIDE", 23))
-	column.add_child(label("Hold F1 to read · Release to return · Gameplay continues", 14))
+	column.add_child(label("HEARTH & HAMMER · CONTROLS", 23))
+	column.add_child(label("Release F1 to close", 14))
 	var grid := HBoxContainer.new()
 	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	grid.add_theme_constant_override("separation", 24)
 	column.add_child(grid)
 	var guides := [
-		"[b]MOVEMENT & HANDS[/b]\nA/D or arrows: walk\nSpace: jump / release ladder\nW/S or up/down: climb\n\nE: pick up nearby loose objects first\nE with an item: load / store / deliver\nF: throw · Q: drop\nOne item in hand at a time\n\n[b]BUILDING & SKILLS[/b]\nTab: Workshop menu\nBuy, then click a green floor preview\nRed preview: blocked\nEsc: close / refund unplaced kit\nR: pack an empty, idle placeable\n\nTab → Skills: spend skill points\nMining +2 EXP · Crafting +3 EXP\nEach delivered item +5 EXP\nLevel costs: 10, 15, 20 EXP, etc.\nEach level grants one skill point",
-		"[b]CRAFTING & MINING[/b]\nE: load · Hold E empty-handed: work\nMove / jump / release E to pause\nHelpers do not stack work speed\nForge: throw raw ore into its bin\nHold E to smelt an iron ingot\nAnvils require ingots, not raw ore\n\nAnvil recipes: 1 horseshoe · 2 blade\n3 axe head · 4 assemble axe\nGrinder: unfinished blade → sword\nWoodbench: wood → shaft\nAxe assembly: axe head + shaft\n\nBasement shaft: three mine levels\nTwo veins per level · Hold E to mine\nMining only during shop hours\n\n[b]STORAGE[/b]\nE: store / retrieve selected product\nT: cycle product in fixed storage\nIntermediate bins catch thrown parts\nFinished shelves require manual E\nMovable parts bin: E pick up, F/Q move\nG: withdraw a part from a loose bin",
-		"[b]SHOP & CUSTOMERS[/b]\nMorning: prepare, then Open shop\nShop hours: 120 seconds\nEvening: finish remaining customers\nOnly the front customer can be served\nAmber: decide · Green: accepted\nY: accept · N: reject (10 seconds)\nAccepted orders: 30 seconds to finish\nE: deliver one matching item\nFull order +2 reputation\nReject / unanswered −3 · Failed −6\nB near purple merchant: buy wood\n\n[b]ELEVATOR & RAILS[/b]\nTab → Transport: buy upgrades / rails\nUpgrade elevator top to bottom\nAt a landing, W/S calls the lift\nOn its platform, W/S travels a stop\nRails must extend existing tracks\nC: couple / release nearby cart\nA/D: push · Jump: release\nCart moves first, then player at its edge\nE: load / withdraw ore · 25 ore per cart\nPark cart on lift to change floors"
+		"[b]MOVEMENT[/b]\nA/D or arrows: move\nW/S or up/down: climb / elevator\nSpace: jump\n\n[b]INTERACTION[/b]\nE: pick up / interact\nHold E: work / mine\nF: throw\nQ: drop\nG: take part from movable bin",
+		"[b]WORKSHOP[/b]\nTab: menu\nLeft click: place\nEsc: close / cancel\nR: pack empty placeable\n\n[b]ANVIL RECIPES[/b]\n1: horseshoe\n2: blade\n3: axe head\n4: assemble axe",
+		"[b]CUSTOMERS & TRADE[/b]\nY: accept order\nN: reject order\nB: buy wood\n\n[b]STORAGE & CARTS[/b]\nT: select stored product\nC: couple / release cart\nA/D: push cart\nSpace: release cart"
 	]
 	for text in guides:
 		var guide := RichTextLabel.new()

@@ -248,9 +248,9 @@ completed or failed requests, unanswered expiry, shop opening/closing and new
 days. Shared event notifications are queued, and joining players do not replay
 historical events. Detailed action feedback remains in the F1 guide.
 
-**Hold F1** for the complete controls and gameplay field guide; release it to
-return to the uncluttered view. It covers movement, crafting recipes, mining,
-storage, customers, skills, building, rails, carts and elevators. It does not
+**Hold F1** for a compact control reference; release it to close. It lists
+movement, interaction, workshop, recipe, storage, customer, cart and elevator
+keys without the longer gameplay explanations. It does not
 pause the game. Connection details and recent detailed feedback live there too.
 
 Map control captions and debug-style character labels have been removed.

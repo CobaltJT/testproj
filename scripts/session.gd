@@ -296,28 +296,11 @@ func _physics_process(delta: float) -> void:
 		var direction := -1 if Input.is_action_just_pressed("climb_up") else 1
 		if multiplayer.is_server(): lift_for(1, direction)
 		else: request_lift.rpc_id(1, direction)
-	if Input.is_action_just_pressed("take_bin_ore"):
-		if multiplayer.is_server(): take_bin_for(1)
-		else: request_take_bin.rpc_id(1)
 	if Input.is_action_just_pressed("cycle_storage"):
 		if multiplayer.is_server():
 			cycle_storage_for(1)
 		else:
 			request_storage_cycle.rpc_id(1)
-	if Input.is_action_just_pressed("accept_order") or Input.is_action_just_pressed("reject_order"):
-		if not orders.queue.is_empty():
-			var order_id: int = orders.queue[0].id
-			var accept := Input.is_action_just_pressed("accept_order")
-			if multiplayer.is_server():
-				decide_order_for(1, order_id, accept)
-			else:
-				request_order_decision.rpc_id(1, order_id, accept)
-	for choice in STATION_JOB.ANVIL_RECIPES:
-		if Input.is_action_just_pressed("recipe_" + choice):
-			if multiplayer.is_server():
-				choose_recipe(1, choice)
-			else:
-				request_recipe.rpc_id(1, choice)
 	if Input.is_action_just_pressed("build_menu"):
 		catalog.visible = not catalog.visible
 	if Input.is_action_just_pressed("cancel_build"):
@@ -333,11 +316,6 @@ func _physics_process(delta: float) -> void:
 			pack_for(1)
 		else:
 			request_pack.rpc_id(1)
-	if Input.is_action_just_pressed("buy_wood"):
-		if multiplayer.is_server():
-			buy_wood_for(1)
-		else:
-			request_wood.rpc_id(1)
 	if Input.is_action_just_pressed("throw_ore") or Input.is_action_just_pressed("drop_ore"):
 		var drop := Input.is_action_just_pressed("drop_ore")
 		if multiplayer.is_server():
@@ -716,7 +694,7 @@ func buy_wood_for(id: int) -> void:
 		return
 	var piece_id: int = merchant.buy(id, players[id].position, orders, ore, progression.purchase_price(id, MERCHANT_STATE.WOOD_PRICE))
 	if piece_id == -1:
-		var message := "B buys wood: stand by the merchant with empty hands, %s coins and stock available." % progression.purchase_price(id, MERCHANT_STATE.WOOD_PRICE)
+		var message := "Wood unavailable: empty hands, %s coins, stock and merchant proximity required." % progression.purchase_price(id, MERCHANT_STATE.WOOD_PRICE)
 		if id == 1:
 			interaction_feedback(message)
 		else:
@@ -774,7 +752,9 @@ func interact_for(id: int) -> void:
 	var object: int = nearest_loose(dwarf.position)
 	var bin: int = nearest_mobile_bin(dwarf.position)
 	var cart: int = nearest_cart(dwarf.position)
-	if carried == -1 and object != -1 and ore.pickup(id, object):
+	if carried == -1 and object != -1 and ore.pieces[object].kind == "ore_bin" and not ore.pieces[object].contents.is_empty() and ore.take_from_bin(id, object):
+		message = "Took one intermediate product."
+	elif carried == -1 and object != -1 and ore.pickup(id, object):
 		message = "Picked up %s. F: throw · Q: drop" % ("movable parts bin" if ore.pieces[object].kind == "ore_bin" else ore.pieces[object].kind.replace("_", " "))
 	elif carried == -1 and cart != -1:
 		message = "Took one ore from cart." if transport.take(cart, id, ore) else "Cart is empty. C: push cart."
@@ -783,7 +763,7 @@ func interact_for(id: int) -> void:
 		message = "Ore loaded into cart. E: take ore with empty hands · C: push cart."
 		sync_transport()
 	elif carried != -1 and bin != -1 and ore.deposit_in_bin(id, bin):
-		message = "Intermediate product stored. G: take one out with empty hands."
+		message = "Intermediate product stored."
 	elif near_mine(dwarf):
 		message = "Mine closed until shop hours." if cycle.phase != "shop" else "Hold E with empty hands to mine ore. Prospector speeds up extraction."
 	elif absf(dwarf.position.x - 166) <= 30 and absf(dwarf.position.y - 216) <= 6 and not orders.queue.is_empty() and carried != -1:
@@ -795,7 +775,7 @@ func interact_for(id: int) -> void:
 			var result := "Order complete! +2 reputation." if orders.completed > completed_before else "%s more needed." % (request.get("quantity", 1) - request.delivered)
 			message = "%s delivered! +%s coins. %s" % [product.capitalize(), progression.sale_price(id, CUSTOMER_STATE.PRICES[product]), result]
 		else:
-			message = "Y: accept or N: reject this request first." if not request.accepted else "Front customer needs a %s." % product
+			message = "Accept the request first." if not request.accepted else "Front customer needs a %s." % product
 		if sold:
 			award_exp(id, "delivery")
 		broadcast_state("receive_orders", [orders.snapshot()])
@@ -1111,10 +1091,12 @@ func request_order_decision(order_id: int, accept: bool) -> void:
 func decide_order_for(id: int, order_id: int, accept: bool) -> void:
 	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
 		return
+	var failed_before: int = orders.missed
 	var changed: bool = orders.decide(id, players[id].position, order_id, accept, progression.reject_cost(id))
 	var message := "Order accepted · 30s" if accept else "Order declined · −%s rep" % progression.reject_cost(id)
+	if orders.missed > failed_before: message = "Request failed · −6 rep"
 	if not changed:
-		message = "No request to decide"
+		message = "Request no longer available"
 	feedback_for(id, message)
 	broadcast_state("receive_orders", [orders.snapshot()])
 	refresh_orders()
@@ -1287,6 +1269,12 @@ func request_storage_cycle() -> void:
 func cycle_storage_for(id: int) -> void:
 	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
 		return
+	var station: int = workshop.nearest(players[id].position)
+	if station != -1 and workshop.stations[station].kind == "anvil":
+		var job = workshop.stations[station].job
+		var next: String = STATION_JOB.ANVIL_RECIPES[(STATION_JOB.ANVIL_RECIPES.find(job.recipe) + 1) % STATION_JOB.ANVIL_RECIPES.size()]
+		choose_recipe(id, next)
+		return
 	if workshop.cycle_storage(id, players[id].position, ore):
 		broadcast_state("receive_workshop", [workshop.snapshot()])
 		refresh_workshop()
@@ -1336,18 +1324,8 @@ func purchase_mobile_bin_for(id: int) -> void:
 	broadcast_state("receive_orders", [orders.snapshot()])
 	refresh_orders()
 	catalog.hide()
-	feedback_for(id, "Movable parts bin: Q drops, F throws. Holds 10 intermediate products. G takes one out with empty hands.")
+	feedback_for(id, "Movable parts bin: Q drops, F throws. Holds 10 intermediate products. E takes a product; C lifts the bin.")
 
-@rpc("any_peer", "call_remote", "reliable")
-func request_take_bin() -> void:
-	if multiplayer.is_server(): take_bin_for(multiplayer.get_remote_sender_id())
-
-func take_bin_for(id: int) -> void:
-	if not multiplayer.is_server() or not players.has(id) or workshop.pending.has(id) or cycle.phase in ["summary", "transition"]: return
-	var bin := nearest_mobile_bin(players[id].position)
-	if bin != -1 and ore.take_from_bin(id, bin):
-		broadcast_state("receive_ore", [ore.snapshot()], true)
-		feedback_for(id, "Took one intermediate product from movable bin.")
 
 func init_transport_world() -> void:
 	lift_node = Node2D.new()
@@ -1448,6 +1426,11 @@ func toggle_cart_for(id: int) -> void:
 			sync_transport()
 			return
 	var cart := nearest_cart(players[id].position)
+	var bin := nearest_mobile_bin(players[id].position)
+	if bin != -1 and (cart == -1 or (world.to_local(ore_bodies[bin].global_position) - (players[id].position - Vector2(0, 8))).length() < transport.carts[cart].at.distance_to(players[id].position)):
+		if ore.pickup(id, bin):
+			broadcast_state("receive_ore", [ore.snapshot()], true)
+		return
 	if cart != -1 and ore.carried_by(id) == -1 and transport.carts[cart].driver == 0 and not transport.moving:
 		transport.carts[cart].driver = id
 		sync_transport()
@@ -1563,3 +1546,11 @@ func refresh_transport() -> void:
 @rpc("authority", "call_remote", "reliable")
 func initialize_hud_events() -> void:
 	if hud != null: hud.reset_events()
+
+func customer_card_decision(order_id: int, accept: bool) -> void:
+	if multiplayer.is_server(): decide_order_for(1, order_id, accept)
+	else: request_order_decision.rpc_id(1, order_id, accept)
+
+func merchant_card_buy() -> void:
+	if multiplayer.is_server(): buy_wood_for(1)
+	else: request_wood.rpc_id(1)

@@ -59,9 +59,9 @@ to load it, then **hold E with empty hands for five seconds** to work. Release,
 move away, jump, or get knocked back to pause; another dwarf can continue.
 Helpers never multiply work speed. Outputs drop onto each station's right tray.
 
-At an empty anvil, select its shared recipe with keys **1–4**:
+At an empty anvil, press **T** to cycle its shared recipe in this order:
 
-| Key | Anvil recipe | Input → output |
+| Cycle order | Anvil recipe | Input → output |
 | --- | --- | --- |
 | 1 | Horseshoe | Ingot → finished horseshoe |
 | 2 | Blade | Ingot → unfinished sword |
@@ -71,7 +71,7 @@ At an empty anvil, select its shared recipe with keys **1–4**:
 - **Horseshoe:** smelt an ingot at the forge, then shape it at an anvil.
 - **Sword:** make a blade at an anvil, then load and work it at a grinder to sharpen it.
 - **Axe:** make a head at an anvil; make a shaft from wood at a woodworking bench;
-  load both at an anvil set to recipe 4 and work to assemble the axe.
+  load both at an anvil set to Assemble axe and work to assemble the axe.
 
 Grinders and woodworking benches have fixed recipes. Assembly ingredients may
 be supplied in either order and by different players. Loaded recipes lock until
@@ -131,7 +131,9 @@ carried underground. The entrance itself no longer produces ore.
 Wood comes **only from the merchant**. The merchant first visits 12 seconds after
 opening, stays 20 seconds, and returns every 45 seconds. Each visit offers four
 wood at **5 coins each**. Stand beside the purple merchant between the counter
-and the ground-floor build area, with empty hands, and press **B** per purchase.
+and the ground-floor build area with empty hands, then click the **coin-bag
+buy button** on the merchant card. It is disabled without stock, funds, proximity
+or free hands; the host rechecks those conditions.
 Pick up the physical wood and take it to a woodworking bench. Buying is checked
 by the host for stock, funds, position, and free hands.
 
@@ -175,12 +177,14 @@ The Build catalog also sells a **movable parts bin** for **15 coins**, before
 Bargainer discounts. It holds **10 intermediate products** and is purchased directly into
 empty hands. It is a physics object rather than grid-placed furniture.
 
-- **E**, empty hands: pick up the bin, including its contents.
+- **C**: pick up the bin, including its contents. The nearer bin or cart is selected;
+  C releases an already coupled cart first.
 - **Q / F**: drop or throw the bin. It stays upright and retains its contents.
 - Loose bins catch falling/thrown intermediate products through their open top. Wrong items and
   overflow stay loose. Carried bins do not catch items.
 - **E**, carrying an intermediate product near a loose bin: deposit it manually.
-- **G**, empty hands near a loose bin: take one original product out.
+- **E**, empty hands near a stocked loose bin: take one original product out.
+  E can also pick up an empty bin.
 
 Raw ore, wood and finished products are rejected. Loaded bins retain the exact item identities across movement, multiplayer,
 reconnects, and days. The host validates purchases, capacity, access range and
@@ -223,7 +227,7 @@ roll the cart onto it, then use W/S to travel between unlocked floors.
 
 Carts hold **25 raw ore**, catching falling/thrown ore automatically. **E** loads
 carried ore into a nearby cart; **E**, with empty hands, retrieves one ore.
-**G** remains reserved for withdrawing products from movable parts bins.
+The same E interaction withdraws from stocked movable parts bins.
 Intermediate and finished products are rejected, and overflow stays loose.
 Loaded carts retain exact ore identities during movement, elevator rides,
 reconnects and day changes. The host owns all transport movement and purchases.
@@ -237,8 +241,8 @@ icon includes the waiting count. There is no text customer panel or empty-hands
 label.
 
 Customers have screen-space cards above them with a product icon, quantity still
-needed, and remaining time. Amber marks the front request awaiting a decision,
-green marks an accepted order, and gray marks queued customers. Merchant cards
+needed, and remaining time. Amber marks requests awaiting a decision; green marks accepted orders,
+including queued orders. The card buttons accept or reject that specific order. Merchant cards
 show a wood icon, stock, price and remaining visit time. Cards follow their
 visitors and stay the same size as the camera moves. Station recipes use icons,
 and work progress uses bars without progress text. Mine labels are removed.
@@ -303,23 +307,29 @@ subsequent arrival use a freshly randomized interval:
 Each interval is sampled when scheduled; reputation changes affect future
 scheduled intervals and newly arriving orders. Existing quantities stay fixed.
 
-At the counter, press **Y** to accept or **N** to reject the
-front customer's request within **10 seconds**. This decision timer starts once
-they reach the front; queued customers retain their full decision window.
-Rejecting or leaving a request unanswered costs **3 reputation**.
+Click the **green check** on any customer card to accept, or the **red cross**
+to reject. Decisions do not require standing at the counter and can be made
+while customers are walking in or waiting behind others. The **10-second
+decision timer starts on arrival** and runs for every customer independently.
+Rejecting or leaving an unaccepted request unanswered costs **3 reputation**
+(before Diplomat discounts for explicit rejection only).
 
-Accepting starts a separate **30-second** fulfilment timer. Carry the exact
-finished product to the left counter and press **E**. Only the **front customer**
-can be served. Players can deliver one item at a time cooperatively; the HUD
-shows **delivered / requested**. Horseshoes sell for **10 coins each**, swords for
-**15**, and axes for **25**, before the delivering dwarf's sales bonus. Each item
-pays immediately and earns **5 EXP** for its deliverer. Partial deliveries do not
-reset the timer or award reputation. Completing the entire request gives
-**+2 shared reputation** and counts as one served request in the daily report.
-Failing an accepted order, including a partially delivered one, costs **6
-reputation** and counts as one failed request. Already delivered items remain
-sold and paid. Accepted orders cannot be rejected. The HUD shows each request's
-phase, quantity, timer, unit price, coins, and reputation, which can fall below zero.
+Accepting starts a fresh **30-second** fulfilment timer, which continues during
+walking and queuing. An accepted request cannot be accepted again to reset its
+deadline. Its red cross remains available: rejecting it counts as a **failed
+order**, costs **6 reputation** with no Diplomat discount, and counts in the
+daily failed-order statistic. It does not count as an unaccepted rejection.
+The Y/N decision keys and B merchant-buy key have been removed.
+
+Only the **front customer**, once at the counter, can receive products. Carry a
+matching finished product to the counter and press **E**. Players can deliver
+one item at a time cooperatively. Cards show the quantity still needed and the
+remaining timer. Horseshoes sell for **10 coins each**, swords for **15**, and
+axes for **25**, before the delivering dwarf's sales bonus. Each item pays
+immediately and earns **5 EXP**. Partial deliveries do not reset the timer or
+award reputation. Completing the entire request gives **+2 shared reputation**
+and counts as one served request. An accepted order that times out, even while
+queued, costs **6 reputation**. Already delivered items remain sold and paid.
 
 ## Player progression
 

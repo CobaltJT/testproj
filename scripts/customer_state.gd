@@ -1,5 +1,5 @@
 extends RefCounted
-## Front-only service: decide within 10 seconds, then fulfill within 30 seconds.
+## Arrival-based queue deadlines, remote decisions, and front-only delivery.
 const DECISION_TIME := 10.0
 const PATIENCE := 30.0
 const WALK_TIME := 2.0
@@ -53,61 +53,65 @@ func step(delta: float, arrivals: bool = true) -> void:
 	var left := maxf(0, delta)
 	while left > 0.000001:
 		var advance := minf(left, until_arrival) if arrivals else left
-		var ticking := false
-		if not queue.is_empty():
-			var first: Dictionary = queue[0]
-			ticking = first.accepted or first.age >= WALK_TIME - 0.000001
-			advance = minf(advance, first.remaining if ticking else WALK_TIME - first.age)
+		for order in queue:
+			advance = minf(advance, order.remaining)
 		for departure in departures:
 			departure.remaining -= advance
 		departures = departures.filter(func(entry): return entry.remaining > 0)
-		if ticking:
-			queue[0].remaining -= advance
 		for order in queue:
 			order.age += advance
+			order.remaining -= advance
 		if arrivals:
 			until_arrival -= advance
 		left -= advance
-		if not queue.is_empty() and queue[0].remaining <= 0.000001:
-			var expired: Dictionary = queue.pop_front()
+		for index in range(queue.size() - 1, -1, -1):
+			if queue[index].remaining > 0.000001: continue
+			var expired: Dictionary = queue[index]
+			queue.remove_at(index)
 			if expired.accepted:
 				missed += 1
 				reputation -= FAIL_PENALTY
-				depart(expired, 0, false, "failed")
+				depart(expired, index, false, "failed")
 			else:
 				rejected += 1
 				unanswered += 1
 				reputation -= REJECT_PENALTY
-				depart(expired, 0, false, "unanswered")
+				depart(expired, index, false, "unanswered")
 		if arrivals and until_arrival <= 0.000001:
 			number += 1
 			queue.append({"id": number, "kind": PRODUCTS[rng.randi_range(0, PRODUCTS.size() - 1)], "remaining": DECISION_TIME, "age": 0.0, "accepted": false, "quantity": rng.randi_range(1, max_quantity()), "delivered": 0})
 			reset_arrival()
 
 func depart(order: Dictionary, index: int, served: bool, reason: String = "fulfilled") -> void:
-	departures.append({"id": order.id, "kind": order.kind, "remaining": WALK_TIME, "served": served, "reason": reason, "x": 120.0 - index * 20})
+	departures.append({"id": order.id, "kind": order.kind, "remaining": WALK_TIME, "served": served, "reason": reason, "x": lerpf(70, 120.0 - index * 20, minf(1, order.age / WALK_TIME))})
 
 func decide(player: int, at: Vector2, order_id: int, accept: bool, rejection_cost: int = REJECT_PENALTY) -> bool:
-	if not at_counter(player, at) or queue.is_empty():
-		return false
-	var first: Dictionary = queue[0]
-	if first.id != order_id or first.accepted or first.age < WALK_TIME or first.remaining <= 0:
-		return false
-	if accept:
-		first.accepted = true
-		first.remaining = PATIENCE
-	else:
-		queue.pop_front()
-		rejected += 1
-		reputation -= rejection_cost
-		depart(first, 0, false, "rejected")
-	return true
+	if player <= 0 or not at.is_finite(): return false
+	for index in range(queue.size()):
+		var order: Dictionary = queue[index]
+		if order.id != order_id: continue
+		if order.remaining <= 0 or accept and order.accepted: return false
+		if accept:
+			order.accepted = true
+			order.remaining = PATIENCE
+		else:
+			queue.remove_at(index)
+			if order.accepted:
+				missed += 1
+				reputation -= FAIL_PENALTY
+				depart(order, index, false, "failed")
+			else:
+				rejected += 1
+				reputation -= rejection_cost
+				depart(order, index, false, "rejected")
+		return true
+	return false
 
 func deliver(player: int, at: Vector2, materials: RefCounted, sale_multiplier: float = 1.0) -> bool:
 	if not at_counter(player, at) or queue.is_empty():
 		return false
 	var first: Dictionary = queue[0]
-	if not first.accepted or first.remaining <= 0:
+	if not first.accepted or first.remaining <= 0 or first.age < WALK_TIME:
 		return false
 	var piece: int = materials.carried_by(player)
 	if piece == -1 or materials.pieces[piece].kind != first.kind:

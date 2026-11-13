@@ -29,6 +29,11 @@ func press(action: String) -> void:
 	await frames(2)
 	Input.action_release(action)
 	await frames(12)
+func cycle_anvil_to(recipe: String) -> void:
+	for i in range(4):
+		if job("anvil").recipe == recipe: return
+		await press("cycle_storage")
+	check(job("anvil").recipe == recipe, "T cycles anvil to " + recipe)
 func stage(value: String) -> void:
 	check(await until(func(): return sync.seen.has(value)), "Stage " + value)
 func done(value: String) -> void: sync.report.rpc_id(1, role + ":" + value)
@@ -326,7 +331,8 @@ func client_scenarios() -> void:
 	done("build")
 	await stage("wood")
 	if role == "client2":
-		await press("buy_wood")
+		session.hud.merchant_card.buy_button.pressed.emit()
+		await frames(14)
 		await frames(30)
 		await press("interact")
 	await stage("parallel")
@@ -343,7 +349,7 @@ func client_scenarios() -> void:
 	for phase in ["blade", "grind", "head"]:
 		await stage(phase)
 		if role == "client1":
-			if phase != "grind": await press("recipe_" + phase)
+			if phase != "grind": await cycle_anvil_to(phase)
 			await press("interact")
 			Input.action_press("interact")
 		var piece := 2 if phase == "head" else 1
@@ -352,7 +358,7 @@ func client_scenarios() -> void:
 		Input.action_release("interact")
 		done(phase)
 	await stage("assemble")
-	if role == "client1": await press("recipe_axe")
+	if role == "client1": await cycle_anvil_to("axe")
 	await frames(20)
 	await press("interact")
 	Input.action_press("interact")
@@ -367,16 +373,18 @@ func client_scenarios() -> void:
 	done("wrong")
 	await stage("sell_sword")
 	if role == "client1":
-		await press("accept_order")
+		session.hud.order_cards[101 if role == "client1" else 102].accept_button.pressed.emit()
+		await frames(14)
 		check(await until(func(): return not session.orders.queue.is_empty() and session.orders.queue[0].accepted), "Remote acceptance replicated")
 		await press("interact")
 	await stage("partial")
 	check(await until(func(): return not session.orders.queue.is_empty() and session.orders.queue[0].get("quantity", 1) == 2 and session.orders.queue[0].get("delivered", 0) == 1 and session.orders.coins == 40), "Client observes exact partial delivery and per-item earnings")
-	check(session.hud.order_cards[101].count.text == "×1", "HUD shows delivered and requested quantities")
+	check(await until(func(): return session.hud.order_cards.has(101) and session.hud.order_cards[101].count.text == "×1"), "Card shows remaining requested quantity")
 	done("partial")
 	await stage("sell_axe")
 	if role == "client2":
-		await press("accept_order")
+		session.hud.order_cards[101 if role == "client1" else 102].accept_button.pressed.emit()
+		await frames(14)
 		check(await until(func(): return not session.orders.queue.is_empty() and session.orders.queue[0].accepted), "Next remote acceptance replicated")
 		await press("interact")
 	await stage("expire")

@@ -133,6 +133,7 @@ func setup(session: Node, layer: CanvasLayer, menu_panel: Control) -> void:
 	customer_badge = visitor_badge(visitors, false)
 	merchant_badge = visitor_badge(visitors, true)
 	merchant_card = VISITOR_CARD.new()
+	merchant_card.buy_button.pressed.connect(game.merchant_card_buy)
 	add_child(merchant_card)
 	var actions := HBoxContainer.new()
 	add_child(actions)
@@ -197,9 +198,9 @@ func make_help() -> void:
 	grid.add_theme_constant_override("separation", 24)
 	column.add_child(grid)
 	var guides := [
-		"[b]MOVEMENT[/b]\nA/D or arrows: move\nW/S or up/down: climb / elevator\nSpace: jump\n\n[b]INTERACTION[/b]\nE: pick up / interact\nHold E: work / mine\nF: throw\nQ: drop\nG: take part from movable bin",
-		"[b]WORKSHOP[/b]\nTab: menu\nLeft click: place\nEsc: close / cancel\nR: pack empty placeable\n\n[b]ANVIL RECIPES[/b]\n1: horseshoe\n2: blade\n3: axe head\n4: assemble axe",
-		"[b]CUSTOMERS & TRADE[/b]\nY: accept order\nN: reject order\nB: buy wood\n\n[b]STORAGE & CARTS[/b]\nT: select stored product\nC: couple / release cart\nA/D: push cart\nSpace: release cart"
+		"[b]MOVEMENT[/b]\nA/D or arrows: move\nW/S or up/down: climb / elevator\nSpace: jump\n\n[b]INTERACTION[/b]\nE: pick up / interact\nHold E: work / mine\nF: throw\nQ: drop",
+		"[b]WORKSHOP[/b]\nTab: menu\nLeft click: place\nEsc: close / cancel\nR: pack empty placeable\n\n[b]ANVIL[/b]\nT: cycle recipe",
+		"[b]CUSTOMERS & TRADE[/b]\nGreen check: accept order\nRed cross: reject / fail order\nCoin bag: buy wood\n\n[b]STORAGE & CARTS[/b]\nT: cycle anvil recipe / stored product\nC: lift bin / couple cart\nA/D: push cart\nSpace: release cart"
 	]
 	for text in guides:
 		var guide := RichTextLabel.new()
@@ -308,9 +309,12 @@ func update_visitors() -> void:
 		live[order.id] = true
 		if not order_cards.has(order.id):
 			order_cards[order.id] = VISITOR_CARD.new()
+			order_cards[order.id].accept_button.pressed.connect(game.customer_card_decision.bind(order.id, true))
+			order_cards[order.id].reject_button.pressed.connect(game.customer_card_decision.bind(order.id, false))
 			add_child(order_cards[order.id])
 		var card = order_cards[order.id]
-		var color := Color("7db59b") if order.accepted else (Color("d5af65") if index == 0 else Color("697482"))
+		card.set_customer(order.accepted)
+		var color := Color("7db59b") if order.accepted else Color("d5af65")
 		card.update_card(game.material_texture(order.kind), order.get("quantity", 1) - order.get("delivered", 0), order.remaining, 30.0 if order.accepted else 10.0, color)
 		if game.customer_nodes.has(order.id): tether(card, game.customer_nodes[order.id])
 	for id in order_cards.keys():
@@ -319,6 +323,10 @@ func update_visitors() -> void:
 			order_cards.erase(id)
 	merchant_card.visible = game.merchant.remaining > 0
 	if merchant_card.visible:
+		var local: int = game.multiplayer.get_unique_id()
+		var can_buy: bool = game.players.has(local) and game.cycle.phase == "shop" and game.merchant.stock > 0 and game.ore.carried_by(local) == -1 and not game.workshop.pending.has(local) and game.orders.coins >= game.progression.purchase_price(local, game.MERCHANT_STATE.WOOD_PRICE)
+		if can_buy: can_buy = absf(game.players[local].position.x - game.MERCHANT_STATE.POSITION.x) <= 12 and absf(game.players[local].position.y - game.MERCHANT_STATE.POSITION.y) <= 6
+		merchant_card.set_merchant(can_buy)
 		merchant_card.update_card(game.material_texture("wood"), game.merchant.stock, game.merchant.remaining, game.MERCHANT_STATE.STAY, Color("b59ad3"), game.progression.purchase_price(game.multiplayer.get_unique_id(), game.MERCHANT_STATE.WOOD_PRICE))
 		tether(merchant_card, game.merchant_node)
 

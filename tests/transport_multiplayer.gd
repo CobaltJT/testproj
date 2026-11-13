@@ -129,8 +129,7 @@ func client() -> void:
 	check(await until(func(): return session.transport.carts[1].items.size() == 25), "All 25 ore identities received")
 	for piece in session.transport.carts[1].items: check(session.ore.pieces[piece].processing, "Stored ore reserved")
 	if role == "client2":
-		await press("take_bin_ore")
-		check(session.ore.carried_by(session.multiplayer.get_unique_id()) == -1, "Remote G leaves cart inventory unchanged")
+		check(not InputMap.has_action("take_bin_ore"), "Obsolete G binding removed on client")
 		await press("interact")
 		check(await until(func(): return session.transport.carts[1].items.size() == 24 and session.ore.carried_by(session.multiplayer.get_unique_id()) != -1), "Remote E withdraws ore")
 		await press("interact")

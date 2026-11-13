@@ -55,8 +55,10 @@ func run() -> void:
 	dwarf.position = session.world.to_local(body.global_position) + Vector2(0, 11)
 	dwarf.velocity = Vector2.ZERO
 	await frames(5)
-	await press("interact")
-	check(session.ore.carried_by(1) == bin and session.ore.pieces[bin].contents == [2], "E prioritizes picking up loaded movable bin over anvil")
+	await press("pack_station")
+	check(session.ore.carried_by(1) == -1 and session.ore.is_loose(bin), "R does not pick up movable bins")
+	await press("push_cart")
+	check(session.ore.carried_by(1) == bin and session.ore.pieces[bin].contents == [2], "C lifts loaded movable bin without losing contents")
 	await press("throw_ore")
 	await frames(40)
 	check(session.ore.is_loose(bin) and session.ore.pieces[bin].contents == [2] and not session.ore_bodies[bin].freeze, "Thrown bin remains physical and retains ore")
@@ -64,8 +66,8 @@ func run() -> void:
 	dwarf.position = Vector2(center.x, 216)
 	dwarf.velocity = Vector2.ZERO
 	await frames(5)
-	await press("take_bin_ore")
-	check(session.ore.carried_by(1) == 2 and session.ore.pieces[bin].contents.is_empty(), "G withdraws original intermediate product into empty hands")
+	await press("interact")
+	check(session.ore.carried_by(1) == 2 and session.ore.pieces[bin].contents.is_empty(), "E withdraws original intermediate product into empty hands")
 	session.disconnect_game("Done")
 	check(session.ore.pieces.size() == 8, "Leaving clears movable bins and their contents")
 	print("MOBILE BIN PHYSICS RESULT: ", failures, " failures")

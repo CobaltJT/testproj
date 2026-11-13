@@ -1,6 +1,8 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Texture2D" path="res://assets/textures/smithy.svg" id="1"]
+
+[ext_resource type="Texture2D" path="res://assets/textures/mine.svg" id="3"]
 
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2"]
 
@@ -17,13 +19,16 @@ size = Vector2(48, 8)
 size = Vector2(464, 8)
 
 [sub_resource type="RectangleShape2D" id="Cellar"]
-size = Vector2(544, 8)
+size = Vector2(326, 8)
+
+[sub_resource type="RectangleShape2D" id="MineRight"]
+size = Vector2(186, 8)
 
 [sub_resource type="RectangleShape2D" id="LeftWall"]
-size = Vector2(8, 230)
+size = Vector2(8, 470)
 
 [sub_resource type="RectangleShape2D" id="RightWall"]
-size = Vector2(8, 230)
+size = Vector2(8, 470)
 
 [sub_resource type="RectangleShape2D" id="Ceiling"]
 size = Vector2(544, 5)
@@ -128,15 +133,15 @@ position = Vector2(360.0, 220.0)
 shape = SubResource("GroundRight")
 
 [node name="Cellar" type="CollisionShape2D" parent="Collision"]
-position = Vector2(320.0, 292.0)
+position = Vector2(211.0, 292.0)
 shape = SubResource("Cellar")
 
 [node name="LeftWall" type="CollisionShape2D" parent="Collision"]
-position = Vector2(48.0, 181.0)
+position = Vector2(48.0, 301.0)
 shape = SubResource("LeftWall")
 
 [node name="RightWall" type="CollisionShape2D" parent="Collision"]
-position = Vector2(592.0, 181.0)
+position = Vector2(592.0, 301.0)
 shape = SubResource("RightWall")
 
 [node name="Ceiling" type="CollisionShape2D" parent="Collision"]
@@ -145,3 +150,42 @@ shape = SubResource("Ceiling")
 
 [node name="Player" parent="." instance=ExtResource("2")]
 position = Vector2(220, 216)
+
+[node name="MineBackground" type="Sprite2D" parent="."]
+z_index = -10
+position = Vector2(0, 288)
+texture_filter = 1
+texture = ExtResource("3")
+centered = false
+[node name="CellarRight" type="CollisionShape2D" parent="Collision"]
+position = Vector2(499, 292)
+shape = SubResource("MineRight")
+[node name="MineOneLeft" type="CollisionShape2D" parent="Collision"]
+position = Vector2(211, 372)
+shape = SubResource("Cellar")
+[node name="MineOneRight" type="CollisionShape2D" parent="Collision"]
+position = Vector2(499, 372)
+shape = SubResource("MineRight")
+[node name="MineTwoLeft" type="CollisionShape2D" parent="Collision"]
+position = Vector2(211, 452)
+shape = SubResource("Cellar")
+[node name="MineTwoRight" type="CollisionShape2D" parent="Collision"]
+position = Vector2(499, 452)
+shape = SubResource("MineRight")
+[node name="MineBottomLeft" type="CollisionShape2D" parent="Collision"]
+position = Vector2(211, 532)
+shape = SubResource("Cellar")
+[node name="MineBottomRight" type="CollisionShape2D" parent="Collision"]
+position = Vector2(499, 532)
+shape = SubResource("MineRight")
+[node name="MineBottomCenter" type="CollisionShape2D" parent="Collision"]
+position = Vector2(390, 532)
+scale = Vector2(0.172043, 1)
+shape = SubResource("MineRight")
+[node name="MineEntrance" type="Label" parent="."]
+z_index = 10
+offset_left = 360.0
+offset_top = 251.0
+theme_override_font_sizes/font_size = 8
+text = "MINE ENTRANCE\nDOWN: ladder"
+mouse_filter = 2

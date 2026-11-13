@@ -10,6 +10,7 @@ export XDG_CACHE_HOME="$check_dirs/cache"
 mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
 godot --headless --path . --editor --import --quit
 godot --headless --path . --quit-after 10
+godot --headless --path . --script res://tests/mine_levels.gd
 godot --headless --path . --script res://tests/mobile_bin.gd
 godot --headless --path . --script res://tests/mobile_bin_physics.gd
 godot --headless --path . --script res://tests/bin_physics.gd

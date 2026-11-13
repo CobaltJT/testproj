@@ -31,7 +31,7 @@ func run() -> void:
 	for i in range(3): session.award_exp(1, "delivery")
 	session.skill_buttons.mining.pressed.emit()
 	var dwarf = session.players[1]
-	dwarf.position = Vector2(390, 288)
+	dwarf.position = session.MINE_POSITION
 	dwarf.velocity = Vector2.ZERO
 	await frames(5)
 	Input.action_press("interact")

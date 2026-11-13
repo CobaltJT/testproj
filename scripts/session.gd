@@ -47,8 +47,10 @@ const EXTRA_TEXTURES = {
 	"ore_bin": preload("res://assets/textures/ore_bin.svg")
 }
 const MINING_STATE = preload("res://scripts/mining_state.gd")
-const MINE_POSITION := Vector2(390, 288)
-const MINE_OUTPUT := Vector2(344, 276)
+const MINE_POSITION := Vector2(240, 368)
+const MINE_OUTPUT := Vector2(194, 356)
+var mine_veins: Dictionary = {}
+var vein_nodes: Dictionary = {}
 var mining = MINING_STATE.new()
 var mining_station: Node2D
 const CUSTOMER_STATE = preload("res://scripts/customer_state.gd")
@@ -91,8 +93,13 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(update_overview)
 	update_overview()
 	overview_camera.make_current()
-	mining_station = preload("res://scenes/mining_station.tscn").instantiate()
-	world.add_child(mining_station)
+	for vein in range(MAP.VEINS.size()):
+		var view := preload("res://scenes/mining_station.tscn").instantiate()
+		view.position = MAP.VEINS[vein] - Vector2(390, 288)
+		world.add_child(view)
+		vein_nodes[vein] = view
+	mining_station = vein_nodes[0]
+	reset_mining()
 	merchant_node = preload("res://scenes/merchant.tscn").instantiate()
 	world.add_child(merchant_node)
 	reset_ore(false)
@@ -215,7 +222,7 @@ func client_ready() -> void:
 	receive_ore_motion.rpc_id(id, ore_motion())
 	receive_workshop.rpc_id(id, workshop.snapshot())
 	receive_orders.rpc_id(id, orders.snapshot())
-	receive_mining.rpc_id(id, mining.snapshot())
+	receive_mining.rpc_id(id, mining_snapshot())
 	receive_merchant.rpc_id(id, merchant.snapshot())
 	receive_progression.rpc_id(id, progression.snapshot())
 	receive_day.rpc_id(id, cycle.snapshot())
@@ -345,7 +352,7 @@ func _physics_process(delta: float) -> void:
 			broadcast_state("receive_ore_motion", [ore_motion()], false)
 			broadcast_state("receive_workshop", [workshop.snapshot()], false)
 			broadcast_state("receive_orders", [orders.snapshot()], false)
-			broadcast_state("receive_mining", [mining.snapshot()], false)
+			broadcast_state("receive_mining", [mining_snapshot()], false)
 			broadcast_state("receive_merchant", [merchant.snapshot()], false)
 	else:
 		send_controls.rpc_id(1, axis, jump, climb, Input.is_action_pressed("interact"))
@@ -595,46 +602,65 @@ func create_ore_body(id: int, simulate: bool, at: Vector2) -> RigidBody2D:
 	ore_bodies[id] = body
 	return body
 
+func vein_at(at: Vector2) -> int:
+	for vein in range(MAP.VEINS.size()):
+		var target: Vector2 = MAP.VEINS[vein]
+		if absf(at.x - target.x) <= 20 and absf(at.y - target.y) <= 6: return vein
+	return -1
+
 func near_mine(dwarf: CharacterBody2D) -> bool:
-	return absf(dwarf.position.x - MINE_POSITION.x) <= 20 and absf(dwarf.position.y - MINE_POSITION.y) <= 6
+	return vein_at(dwarf.position) != -1
+
+func reset_mining() -> void:
+	mine_veins.clear()
+	for vein in range(MAP.VEINS.size()): mine_veins[vein] = MINING_STATE.new()
+	mining = mine_veins[0]
+
+func mining_snapshot() -> Dictionary:
+	var state: Dictionary = {}
+	for vein in mine_veins: state[vein] = mine_veins[vein].snapshot()
+	return state
 
 func step_mining(delta: float) -> void:
-	if cycle.phase != "shop":
-		mining.worker = 0
-		refresh_mining()
-		return
-	var eligible: Array[int] = []
-	for id in players:
-		var dwarf = players[id]
-		if not workshop.pending.has(id) and work_held.get(id, false) and near_mine(dwarf) and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
-			eligible.append(id)
-	eligible.sort()
-	var worker: int = mining.worker if mining.worker in eligible else (eligible[0] if not eligible.is_empty() else 0)
-	if mining.step(delta * progression.speed(worker, "mining"), eligible):
-		award_exp(worker, "mining")
-		var piece_id: int = ore.add_mined_ore()
-		var body := create_ore_body(piece_id, true, MINE_OUTPUT)
-		position_ore(body, MINE_OUTPUT, Vector2(0, 20))
-		broadcast_state("receive_ore", [ore.snapshot()], true)
-		broadcast_state("receive_ore_motion", [ore_motion()], false)
-		broadcast_state("receive_mining", [mining.snapshot()], false)
+	for vein in mine_veins:
+		var job = mine_veins[vein]
+		var eligible: Array[int] = []
+		if cycle.phase == "shop":
+			for id in players:
+				var dwarf = players[id]
+				if not workshop.pending.has(id) and work_held.get(id, false) and vein_at(dwarf.position) == vein and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
+					eligible.append(id)
+		eligible.sort()
+		var worker: int = job.worker if job.worker in eligible else (eligible[0] if not eligible.is_empty() else 0)
+		if job.step(delta * progression.speed(worker, "mining"), eligible):
+			award_exp(worker, "mining")
+			var piece_id: int = ore.add_mined_ore()
+			var output: Vector2 = MAP.VEINS[vein] + Vector2(-46, -12)
+			var body := create_ore_body(piece_id, true, output)
+			position_ore(body, output, Vector2(0, 20))
+			broadcast_state("receive_ore", [ore.snapshot()], true)
+			broadcast_state("receive_ore_motion", [ore_motion()], false)
+			broadcast_state("receive_mining", [mining_snapshot()], false)
 	refresh_mining()
 
 @rpc("authority", "call_remote", "reliable")
 func receive_mining(state: Dictionary) -> void:
-	mining.restore(state)
+	for vein in mine_veins:
+		mine_veins[vein].restore(state[vein])
 	refresh_mining()
 
 func refresh_mining() -> void:
-	mining_station.get_node("Progress").value = mining.progress
-	var duration: float = MINING_STATE.DURATION / progression.speed(mining.worker if mining.worker != 0 else multiplayer.get_unique_id(), "mining")
-	var text := "HOLD E: MINE · %.1fs" % duration
-	if cycle.phase != "shop":
-		mining_station.get_node("WorkLabel").text = "MINE CLOSED"
-		return
-	if mining.progress > 0:
-		text = "%s %s%% · %.1fs per ore" % ["MINING" if mining.worker != 0 else "PAUSED", roundi(mining.progress / MINING_STATE.DURATION * 100), duration]
-	mining_station.get_node("WorkLabel").text = text
+	for vein in vein_nodes:
+		if not mine_veins.has(vein): continue
+		var job = mine_veins[vein]
+		var view: Node2D = vein_nodes[vein]
+		view.get_node("Progress").value = job.progress
+		var duration: float = MINING_STATE.DURATION / progression.speed(job.worker if job.worker != 0 else multiplayer.get_unique_id(), "mining")
+		var text := "HOLD E: MINE · %.1fs" % duration
+		if cycle.phase != "shop": text = "VEIN CLOSED"
+		elif job.progress > 0:
+			text = "%s %s%% · %.1fs per ore" % ["MINING" if job.worker != 0 else "PAUSED", roundi(job.progress / MINING_STATE.DURATION * 100), duration]
+		view.get_node("WorkLabel").text = text
 
 @rpc("any_peer", "call_remote", "reliable")
 func request_recipe(choice: String) -> void:
@@ -783,7 +809,7 @@ func reset_ore(simulate: bool) -> void:
 	refresh_progression()
 	workshop = WORKSHOP_STATE.new()
 	refresh_workshop()
-	mining = MINING_STATE.new()
+	reset_mining()
 	refresh_mining()
 	orders = CUSTOMER_STATE.new()
 	cycle = DAY_STATE.new()

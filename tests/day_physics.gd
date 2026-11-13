@@ -16,7 +16,7 @@ func run() -> void:
 	root.add_child(session)
 	session.host_game()
 	var dwarf = session.players[1]
-	dwarf.position = Vector2(390, 288)
+	dwarf.position = session.MINE_POSITION
 	await frames(5)
 	Input.action_press("interact")
 	await frames(65)

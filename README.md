@@ -9,7 +9,7 @@ host's LAN firewall. `127.0.0.1` is for multiple instances on one computer.
 
 The smithy is now **640 pixels wide** instead of 480, with about **42% more usable
 floor space** on all three levels. The right wing has solid floors, matching
-walls, and room for more stations. The existing counter, mine, and ladders remain
+walls, and room for more stations. The counter and building ladders remain, with a mine entrance in the basement
 in their familiar locations.
 
 Each player has a personal camera following their own dwarf, horizontally and
@@ -22,7 +22,7 @@ coverage. The connection menu returns to an overview of the whole building.
 
 ## Build your workshop
 
-The starting building has **no workstations**. The mine, counter, ladders, door,
+The starting building has **no workstations**. The mine entrance, counter, ladders, door,
 walls, and floors are fixed. You start with **100 shared coins** and eight loose
 ore pieces in the basement.
 
@@ -110,9 +110,23 @@ Furniture lets dwarfs walk past it; output trays collide with physical items.
 
 ## Mine ore and buy wood
 
-Hold **E for three seconds**, empty-handed beside the vein at the right of the
-basement, to extract a new ore piece. It falls out a short distance to the left.
-Mining supports pausing, handoffs, and unlimited repeat cycles for this prototype.
+The old basement mining spot at **(390, 288)** is now the **mine entrance**.
+Use **Down / Up** on its single continuous ladder to travel through three
+underground floors at y=368, 448, and 528. The ladder passes through openings in
+each floor; walk sideways onto a landing to leave it. The local camera follows
+through the entire mine while keeping its existing two-floor viewport height.
+
+There are **two ore veins on each level**, at x=240 and x=500. Stand beside a
+vein with empty hands, stay still, and **hold E for three seconds** to produce a
+physical ore piece beside that vein. Each vein has independent work progress:
+release E, move away, jump, or get hit to pause; another dwarf can finish the
+same vein. Players on separate veins can work concurrently. Prospector speed
+bonuses and +2 mining EXP apply as before. Veins do not deplete yet.
+
+Mining is enabled during shop hours and pauses in morning and evening; progress
+persists across days and reconnects. The ladder remains navigable. Placeable
+workstations remain limited to the building, while movable ore bins can be
+carried underground. The entrance itself no longer produces ore.
 
 Wood comes **only from the merchant**. The merchant first visits 12 seconds after
 opening, stays 20 seconds, and returns every 45 seconds. Each visit offers four
@@ -285,7 +299,7 @@ loopback; separate-computer LAN play still needs user testing.
 
 Leave returns to the menu. Host departure ends the session. New hosted games
 reset stations, resources, budget, reputation, day, and clocks. No persistence,
-upgrades, dedicated servers, internet matchmaking, or separate mine level yet.
+upgrades, dedicated servers, internet matchmaking, or mine depletion yet.
 
 ## Validation
 

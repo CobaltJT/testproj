@@ -24,7 +24,7 @@ func run() -> void:
 	await frames(15)
 	Input.action_release("interact")
 	check(session.mining.progress == 0, "Cannot mine from another floor")
-	dwarf.position = Vector2(390, 288)
+	dwarf.position = session.MINE_POSITION
 	dwarf.velocity = Vector2.ZERO
 	await frames(5)
 	Input.action_press("interact")
@@ -35,7 +35,7 @@ func run() -> void:
 	check(paused > 0.9 and paused < 1.2 and session.ore.pieces.size() == 8, "Real E input starts mining without extracting early")
 	await frames(30)
 	check(session.mining.progress == paused and session.mining.worker == 0, "E release pauses mining")
-	session.spawn_player(2, Vector2(390, 288))
+	session.spawn_player(2, session.MINE_POSITION)
 	session.work_held[2] = true
 	await frames(60)
 	session.peer_left(2)
@@ -52,8 +52,8 @@ func run() -> void:
 	check(session.mining.extracted == 1 and session.ore.pieces.size() == 9 and session.ore_bodies.has(8), "Handoff produces one new physical ore identity")
 	var body: RigidBody2D = session.ore_bodies[8]
 	var at: Vector2 = session.world.to_local(body.global_position)
-	check(body.visible and not body.freeze and at.y > 280 and at.y < 288 and absf(at.x - 344) < 5, "Extracted ore falls and settles beside mine entrance")
-	dwarf.position = Vector2(344, 288)
+	check(body.visible and not body.freeze and at.y > session.MINE_POSITION.y - 8 and at.y < session.MINE_POSITION.y and absf(at.x - session.MINE_OUTPUT.x) < 5, "Extracted ore falls and settles beside the underground vein")
+	dwarf.position = Vector2(session.MINE_OUTPUT.x, session.MINE_POSITION.y)
 	dwarf.velocity = Vector2.ZERO
 	await frames(5)
 	Input.action_press("interact")

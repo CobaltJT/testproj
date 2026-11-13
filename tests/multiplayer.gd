@@ -275,6 +275,15 @@ func host_scenarios() -> void:
 	broadcast()
 	sync.begin.rpc("mobile_catch")
 	check(await until(func(): return reports("mobile_catch")), "Movable bin catches ore on host and synchronizes contents")
+	# Different mine floors must progress independently and survive reconnects.
+	session.release_ore(c1, true)
+	move_peer(c1, session.MAP.VEINS[2])
+	move_peer(c2, session.MAP.VEINS[5])
+	broadcast()
+	await frames(10)
+	sync.begin.rpc("mine_levels")
+	check(await until(func(): return reports("mine_levels")), "Clients mine different underground levels concurrently")
+	check(session.mine_veins[2].progress > 1.5 and session.mine_veins[5].progress > 1.5 and session.mine_veins[0].progress == 0, "Vein work is independent across levels")
 	# Keep a genuinely loaded paused station for reconnect restoration.
 	job("anvil").select("horseshoe")
 	carry(1, 3)
@@ -464,6 +473,14 @@ func client_scenarios() -> void:
 	var raw: int = session.ore.pieces[mobile].contents[0]
 	check(session.ore.pieces[raw].processing and not session.ore_bodies[raw].visible, "Stored ore identity hidden on clients")
 	done("mobile_catch")
+	await stage("mine_levels")
+	Input.action_press("interact")
+	await frames(100)
+	Input.action_release("interact")
+	await frames(10)
+	check(await until(func(): return session.mine_veins[2].progress > 1.5 and session.mine_veins[5].progress > 1.5 and session.mine_veins[2].worker == 0 and session.mine_veins[5].worker == 0), "Two mining jobs synchronize independent paused progress")
+	check(root.get_camera_2d().get_screen_center_position().y > 700, "Each client's camera follows its dwarf underground")
+	done("mine_levels")
 	await stage("rejoin")
 	if role == "client2":
 		session.request_station.rpc_id(1, "grinder")
@@ -478,6 +495,7 @@ func client_scenarios() -> void:
 		check(session.workshop.stations[sid("finished_small")].items == [6] and session.ore.pieces[6].processing and not session.ore_bodies[6].visible, "Late join receives container contents and hidden stored identities")
 		check(session.workshop.stations[sid("intermediate_small")].items.size() == 1, "Reconnect preserves caught intermediate products")
 		check(session.ore.pieces[mobile].contents.size() == 1 and not session.ore_bodies[session.ore.pieces[mobile].contents[0]].visible, "Reconnect preserves movable bin inventory")
+		check(session.mine_veins.size() == 6 and session.mine_veins[2].progress > 1.5 and session.mine_veins[5].progress > 1.5, "Reconnect restores every underground vein and paused work")
 		check(job("anvil").slots.has("ingot") and is_equal_approx(job("anvil").progress, 1.25) and session.ore.pieces[8].consumed, "Reconnect preserves paused station ingredients and physical material states")
 	done("rejoin")
 	await stage("day_summary")

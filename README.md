@@ -118,6 +118,37 @@ and the ground-floor build area, with empty hands, and press **B** per purchase.
 Pick up the physical wood and take it to a woodworking bench. Buying is checked
 by the host for stock, funds, position, and free hands.
 
+## Storage containers
+
+Open **TAB → Build** to buy a container, then place it with the same green floor
+preview used for stations. Both categories offer these sizes (before Bargainer
+discounts):
+
+| Size | Capacity, individual items | Price |
+| --- | --- | --- |
+| Small | 5 | 10 coins |
+| Medium | 15 | 20 coins |
+| Large | 30 | 35 coins |
+
+**Intermediate storage** (blue trim) accepts ingots, unfinished swords, axe heads,
+and shafts. **Finished storage** (gold trim) accepts horseshoes, swords, and
+axes. Raw ore and wood are excluded. Each container can mix the products in its
+category; all products share its capacity. The sizes use distinct image textures.
+
+Stand beside a container and press **E** while carrying an accepted product to
+store it. With empty hands, **E** retrieves one item of the selected product
+straight into your hands. Press **T** to cycle the product to retrieve. Selection
+is shared, and the container label shows the selected product's count and total
+capacity usage. A full or incompatible container leaves the carried item intact.
+
+Stored items retain their identities and cannot be picked up, processed, or
+sold until retrieved. Storage grants no EXP. Retrieved items can be carried,
+worked, thrown, dropped, or delivered normally. **R** packs only an empty
+container; filled containers cannot be packed or refunded. Empty containers use
+the normal placement and original-price refund rules. The host validates access,
+category, capacity, selection, and every transfer. Contents synchronize for late
+joiners and persist across days; leaving the host session resets them.
+
 ## Daily cycle
 
 Each new session begins on **Day 1, Morning**. Morning lasts until any connected

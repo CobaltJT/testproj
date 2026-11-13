@@ -266,6 +266,11 @@ func _physics_process(delta: float) -> void:
 				apply_controls(id, Vector2.ZERO, false, false)
 				work_held[id] = false
 		return
+	if Input.is_action_just_pressed("cycle_storage"):
+		if multiplayer.is_server():
+			cycle_storage_for(1)
+		else:
+			request_storage_cycle.rpc_id(1)
 	if Input.is_action_just_pressed("accept_order") or Input.is_action_just_pressed("reject_order"):
 		if not orders.queue.is_empty():
 			var order_id: int = orders.queue[0].id
@@ -699,7 +704,12 @@ func interact_for(id: int) -> void:
 		refresh_orders()
 	else:
 		var station_id: int = workshop.nearest(dwarf.position)
-		if carried != -1 and station_id != -1:
+		if station_id != -1 and workshop.stations[station_id].kind in WORKSHOP_STATE.STORAGE:
+			var transferred: bool = workshop.storage_transfer(id, dwarf.position, ore)
+			message = "Stored item." if transferred and carried != -1 else ("Retrieved item. T: select another stored product." if transferred else "Storage: check category, capacity and selected product. T: cycle products.")
+			broadcast_state("receive_workshop", [workshop.snapshot()])
+			refresh_workshop()
+		elif carried != -1 and station_id != -1:
 			var job = workshop.stations[station_id].job
 			message = "Ingredient loaded. Hold E with empty hands to work." if job.load_material(id, ore) else ("Throw ore into the attached forge bin, then hold E to smelt." if job.kind == "forge" else "Wrong or duplicate ingredient for this station recipe.")
 			broadcast_state("receive_workshop", [workshop.snapshot()])
@@ -779,6 +789,8 @@ func step_workstations(delta: float) -> void:
 	var changed := false
 	for station_id in workshop.stations:
 		var entry: Dictionary = workshop.stations[station_id]
+		if entry.kind in WORKSHOP_STATE.STORAGE:
+			continue
 		var eligible: Array[int] = []
 		for id in players:
 			var dwarf = players[id]
@@ -814,7 +826,7 @@ func refresh_workshop() -> void:
 			var view: Node2D = STATION_SCENE.instantiate()
 			world.add_child(view)
 			station_nodes[id] = view
-		station_nodes[id].update_view(workshop.stations[id])
+		station_nodes[id].update_view(workshop.stations[id], ore)
 	if recipe_label != null:
 		recipe_label.visible = active
 		recipe_label.text = "Tab: build / skills · R: pack idle station · Anvil: 1 Horseshoe  2 Blade  3 Axe head  4 Assemble axe"
@@ -842,13 +854,20 @@ func init_build_ui(layer: CanvasLayer) -> void:
 	column.name = "Build"
 	catalog_tabs.add_child(column)
 	var title := Label.new()
-	title.text = "Buy a workstation (empty hands)"
+	title.text = "Buy stations or storage (empty hands)"
 	column.add_child(title)
+	var choices := HBoxContainer.new()
+	choices.add_theme_constant_override("separation", 24)
+	column.add_child(choices)
+	var stations_column := VBoxContainer.new()
+	var storage_column := VBoxContainer.new()
+	choices.add_child(stations_column)
+	choices.add_child(storage_column)
 	for kind in WORKSHOP_STATE.PRICES:
 		var button := Button.new()
 		button.focus_mode = Control.FOCUS_NONE
 		button.pressed.connect(func(): buy_station(kind))
-		column.add_child(button)
+		(storage_column if kind in WORKSHOP_STATE.STORAGE else stations_column).add_child(button)
 		station_buttons[kind] = button
 	var help := Label.new()
 	help.text = "After buying: click a green floor preview.\nRed: blocked. Esc: cancel/refund kit.\nR beside an empty station: pack/move.\nTAB closes this menu; the game continues while it is open."
@@ -962,7 +981,7 @@ func pack_for(id: int) -> void:
 	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
 		return
 	if not workshop.pack(id, players[id].position, ore):
-		feedback_for(id, "Only empty, idle stations can be packed; keep your hands free.")
+		feedback_for(id, "Only empty, idle stations or containers can be packed; keep your hands free.")
 	sync_build()
 
 func sync_build() -> void:
@@ -1054,7 +1073,7 @@ func refresh_progression() -> void:
 		skill_buttons[key].text = "%s%s [%s/%s] +" % [prerequisite, definition.title, progression.rank(local, key), definition.max]
 		skill_buttons[key].disabled = not progression.can_buy(local, key)
 	for kind in station_buttons:
-		station_buttons[kind].text = "%s · %s coins" % ["Forge + bin" if kind == "forge" else kind.capitalize(), progression.purchase_price(local, WORKSHOP_STATE.PRICES[kind])]
+		station_buttons[kind].text = "%s · %s coins" % [WORKSHOP_STATE.display_name(kind), progression.purchase_price(local, WORKSHOP_STATE.PRICES[kind])]
 
 func init_day_ui(layer: CanvasLayer) -> void:
 	day_label = Label.new()
@@ -1152,3 +1171,15 @@ func refresh_day() -> void:
 		blackout.color.a = 0
 	blackout.visible = active
 	last_day_phase = cycle.phase
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_storage_cycle() -> void:
+	if multiplayer.is_server():
+		cycle_storage_for(multiplayer.get_remote_sender_id())
+
+func cycle_storage_for(id: int) -> void:
+	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
+		return
+	if workshop.cycle_storage(id, players[id].position, ore):
+		broadcast_state("receive_workshop", [workshop.snapshot()])
+		refresh_workshop()

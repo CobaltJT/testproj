@@ -109,3 +109,8 @@ reject_order={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"physical_keycode":78)]
 }
+
+cycle_storage={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":84)]
+}

@@ -1,6 +1,21 @@
 extends RefCounted
 const JOB = preload("res://scripts/station_job.gd")
-const PRICES := {"anvil": 20, "grinder": 25, "woodbench": 25, "forge": 25}
+const PRICES := {"anvil": 20, "grinder": 25, "woodbench": 25, "forge": 25, "intermediate_small": 10, "intermediate_medium": 20, "intermediate_large": 35, "finished_small": 10, "finished_medium": 20, "finished_large": 35}
+const STORAGE := {
+	"intermediate_small": {"capacity": 5, "group": "intermediate", "size": "Small"},
+	"intermediate_medium": {"capacity": 15, "group": "intermediate", "size": "Medium"},
+	"intermediate_large": {"capacity": 30, "group": "intermediate", "size": "Large"},
+	"finished_small": {"capacity": 5, "group": "finished", "size": "Small"},
+	"finished_medium": {"capacity": 15, "group": "finished", "size": "Medium"},
+	"finished_large": {"capacity": 30, "group": "finished", "size": "Large"}
+}
+const STORAGE_PRODUCTS := {"intermediate": ["ingot", "dull_sword", "axe_head", "shaft"], "finished": ["horseshoe", "sword", "axe"]}
+
+static func display_name(kind: String) -> String:
+	if kind in STORAGE:
+		return "%s · %s (%s items)" % [STORAGE[kind].group.capitalize(), STORAGE[kind].size, STORAGE[kind].capacity]
+	return "Forge + bin" if kind == "forge" else kind.capitalize()
+
 const MAP = preload("res://scripts/map_layout.gd")
 const FLOORS = MAP.FLOORS
 var stations: Dictionary = {}
@@ -58,7 +73,7 @@ func place(player: int, at: Vector2) -> int:
 	var kit: Dictionary = pending[player]
 	var job = JOB.new()
 	job.configure(kit.kind)
-	stations[kit.id] = {"kind": kit.kind, "at": at, "job": job, "paid": kit.paid}
+	stations[kit.id] = {"kind": kit.kind, "at": at, "job": job, "paid": kit.paid, "items": [], "selected": ""}
 	pending.erase(player)
 	if kit.kind == "anvil":
 		opened = true
@@ -80,16 +95,16 @@ func nearest(at: Vector2) -> int:
 
 func pack(player: int, at: Vector2, materials: RefCounted) -> bool:
 	var id := nearest(at)
-	if player <= 0 or id == -1 or pending.has(player) or materials.carried_by(player) != -1 or not stations[id].job.slots.is_empty() or not stations[id].job.ore_queue.is_empty():
+	if player <= 0 or id == -1 or pending.has(player) or materials.carried_by(player) != -1 or not stations[id].job.slots.is_empty() or not stations[id].job.ore_queue.is_empty() or not stations[id].items.is_empty():
 		return false
-	pending[player] = {"id": id, "kind": stations[id].kind, "paid": stations[id].paid}
+	pending[player] = {"id": id, "kind": stations[id].kind, "paid": stations[id].paid, "items": stations[id].items.duplicate(), "selected": stations[id].selected}
 	stations.erase(id)
 	return true
 
 func snapshot() -> Dictionary:
 	var result: Dictionary = {}
 	for id in stations:
-		result[id] = {"kind": stations[id].kind, "at": stations[id].at, "job": stations[id].job.snapshot(), "paid": stations[id].paid}
+		result[id] = {"kind": stations[id].kind, "at": stations[id].at, "job": stations[id].job.snapshot(), "paid": stations[id].paid, "items": stations[id].items.duplicate(), "selected": stations[id].selected}
 	return {"stations": result, "pending": pending.duplicate(true), "next_id": next_id, "opened": opened}
 
 func restore(state: Dictionary) -> void:
@@ -98,7 +113,54 @@ func restore(state: Dictionary) -> void:
 		var entry: Dictionary = state.stations[id]
 		var job = JOB.new()
 		job.restore(entry.job)
-		stations[id] = {"kind": entry.kind, "at": entry.at, "job": job, "paid": entry.paid}
+		stations[id] = {"kind": entry.kind, "at": entry.at, "job": job, "paid": entry.paid, "items": entry.items.duplicate(), "selected": entry.selected}
 	pending = state.pending.duplicate(true)
 	next_id = state.next_id
 	opened = state.opened
+
+func storage_transfer(player: int, at: Vector2, materials: RefCounted) -> bool:
+	var id := nearest(at)
+	if player <= 0 or id == -1 or pending.has(player) or stations[id].kind not in STORAGE:
+		return false
+	var entry: Dictionary = stations[id]
+	var definition: Dictionary = STORAGE[entry.kind]
+	var carried: int = materials.carried_by(player)
+	if carried != -1:
+		if entry.items.size() >= definition.capacity or materials.pieces[carried].kind not in STORAGE_PRODUCTS[definition.group]:
+			return false
+		materials.release_carrier(player)
+		materials.pieces[carried].processing = true
+		entry.items.append(carried)
+		if entry.selected == "": entry.selected = materials.pieces[carried].kind
+		return true
+	if entry.items.is_empty():
+		return false
+	for piece in entry.items:
+		if materials.pieces[piece].kind != entry.selected:
+			continue
+		materials.pieces[piece].processing = false
+		if not materials.pickup(player, piece):
+			materials.pieces[piece].processing = true
+			return false
+		entry.items.erase(piece)
+		var kinds := stored_kinds(id, materials)
+		if entry.selected not in kinds: entry.selected = kinds[0] if not kinds.is_empty() else ""
+		return true
+	return false
+
+func stored_kinds(id: int, materials: RefCounted) -> Array:
+	var result: Array = []
+	for piece in stations[id].items:
+		var kind: String = materials.pieces[piece].kind
+		if kind not in result: result.append(kind)
+	return result
+
+func cycle_storage(player: int, at: Vector2, materials: RefCounted) -> bool:
+	var id := nearest(at)
+	if player <= 0 or id == -1 or pending.has(player) or stations[id].kind not in STORAGE:
+		return false
+	var kinds := stored_kinds(id, materials)
+	if kinds.is_empty(): return false
+	var entry: Dictionary = stations[id]
+	entry.selected = kinds[(kinds.find(entry.selected) + 1) % kinds.size()]
+	return true

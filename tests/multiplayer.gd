@@ -269,12 +269,12 @@ func host_scenarios() -> void:
 	for piece in session.ore.pieces:
 		if session.ore.pieces[piece].kind == "ore_bin": mobile = piece
 	check(mobile != -1 and session.orders.coins == 45, "Movable ore bin charges shared price once")
-	var raw: int = session.ore.add_material("ore")
+	var raw: int = session.ore.add_material("shaft")
 	session.refresh_ore()
 	session.position_ore(session.ore_bodies[raw], session.world.to_local(session.ore_bodies[mobile].global_position) + Vector2(0, -35), Vector2(0, 100))
 	broadcast()
 	sync.begin.rpc("mobile_catch")
-	check(await until(func(): return reports("mobile_catch")), "Movable bin catches ore on host and synchronizes contents")
+	check(await until(func(): return reports("mobile_catch")), "Movable bin catches intermediate products on host and synchronizes contents")
 	# Different mine floors must progress independently and survive reconnects.
 	session.release_ore(c1, true)
 	move_peer(c1, session.MAP.VEINS[2])

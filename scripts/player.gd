@@ -7,6 +7,8 @@ const GRAVITY := 1000.0
 const CLIMB_SPEED := 110.0
 const MAP = preload("res://scripts/map_layout.gd")
 const LADDERS: Array[Rect2] = MAP.LADDERS
+var transport_locked := false
+var mine_ladder_top := 288.0
 var walking_multiplier := 1.0
 var knockback_x := 0.0
 var hit_stun := 0.0
@@ -32,12 +34,17 @@ func set_camera_active(local: bool) -> void:
 func _physics_process(delta: float) -> void:
 	if networked and not multiplayer.is_server():
 		return
+	if transport_locked:
+		velocity = Vector2.ZERO
+		return
 	hit_stun = maxf(0, hit_stun - delta)
 	var horizontal := controls.x if networked else Input.get_axis("move_left", "move_right")
 	var vertical := controls.y if networked else Input.get_axis("climb_up", "climb_down")
 	var jump_pressed := (jump_held and not previous_jump) if networked else Input.is_action_just_pressed("jump")
 	previous_jump = jump_held
 	var holding_climb := climb_held if networked else (Input.is_action_pressed("climb_up") or Input.is_action_pressed("climb_down"))
+	set_collision_mask_value(5, not (vertical > 0 and position.x >= 374 and position.x <= 406 and position.y >= mine_ladder_top - 2))
+	if climbing and active_ladder == 2 and (mine_ladder_top >= 528 or position.y < mine_ladder_top - 2): climbing = false
 	if not holding_climb:
 		ladder_jump_locked = false
 	# A held Up can catch the ladder as an upward jump reaches its apex.
@@ -46,6 +53,9 @@ func _physics_process(delta: float) -> void:
 	if hit_stun == 0 and not climbing and not ladder_jump_locked and not jump_pressed and not is_zero_approx(vertical):
 		for i in range(LADDERS.size()):
 			var ladder := LADDERS[i]
+			if i == 2:
+				if mine_ladder_top >= 528: continue
+				ladder = Rect2(374, mine_ladder_top, 32, 528 - mine_ladder_top)
 			if position.x >= ladder.position.x and position.x <= ladder.end.x and position.y >= ladder.position.y - 3 and position.y <= ladder.end.y + 1:
 				if vertical < 0 and position.y <= ladder.position.y:
 					continue
@@ -54,6 +64,7 @@ func _physics_process(delta: float) -> void:
 				break
 	if climbing:
 		var ladder := LADDERS[active_ladder]
+		if active_ladder == 2: ladder = Rect2(374, mine_ladder_top, 32, 528 - mine_ladder_top)
 		velocity = Vector2(horizontal * SPEED * walking_multiplier, vertical * CLIMB_SPEED)
 		if jump_pressed:
 			climbing = false

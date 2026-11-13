@@ -119,3 +119,8 @@ take_bin_ore={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"physical_keycode":71)]
 }
+
+push_cart={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":67)]
+}

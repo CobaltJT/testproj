@@ -18,6 +18,16 @@ var blackout: ColorRect
 var last_day_phase := "morning"
 var fade_tween: Tween
 var day_tick := 0
+const TRANSPORT = preload("res://scripts/transport_state.gd")
+var transport = TRANSPORT.new()
+var cart_nodes: Dictionary = {}
+var rail_nodes: Array = []
+var shown_tracks: Array = []
+var shaft_nodes: Array = []
+var lift_node: Node2D
+var lift_riders: Dictionary = {}
+var transport_buttons: Dictionary = {}
+var transport_info: Label
 const MAP = preload("res://scripts/map_layout.gd")
 var overview_camera: Camera2D
 const WORKSHOP_STATE = preload("res://scripts/workshop_state.gd")
@@ -102,6 +112,7 @@ func _ready() -> void:
 	reset_mining()
 	merchant_node = preload("res://scenes/merchant.tscn").instantiate()
 	world.add_child(merchant_node)
+	init_transport_world()
 	reset_ore(false)
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -226,6 +237,7 @@ func client_ready() -> void:
 	receive_merchant.rpc_id(id, merchant.snapshot())
 	receive_progression.rpc_id(id, progression.snapshot())
 	receive_day.rpc_id(id, cycle.snapshot())
+	receive_transport.rpc_id(id, transport.snapshot())
 
 @rpc("authority", "call_local", "reliable")
 func spawn_player(id: int, at: Vector2) -> void:
@@ -237,7 +249,7 @@ func spawn_player(id: int, at: Vector2) -> void:
 	dwarf.networked = true
 	# Dwarfs pass through each other; only the building blocks movement.
 	dwarf.collision_layer = 2
-	dwarf.collision_mask = 1
+	dwarf.collision_mask = 17
 	world.add_child(dwarf)
 	var local := id == multiplayer.get_unique_id()
 	dwarf.set_camera_active(local)
@@ -276,6 +288,13 @@ func _physics_process(delta: float) -> void:
 				apply_controls(id, Vector2.ZERO, false, false)
 				work_held[id] = false
 		return
+	if Input.is_action_just_pressed("push_cart"):
+		if multiplayer.is_server(): toggle_cart_for(1)
+		else: request_cart_toggle.rpc_id(1)
+	if Input.is_action_just_pressed("climb_up") or Input.is_action_just_pressed("climb_down"):
+		var direction := -1 if Input.is_action_just_pressed("climb_up") else 1
+		if multiplayer.is_server(): lift_for(1, direction)
+		else: request_lift.rpc_id(1, direction)
 	if Input.is_action_just_pressed("take_bin_ore"):
 		if multiplayer.is_server(): take_bin_for(1)
 		else: request_take_bin.rpc_id(1)
@@ -303,6 +322,8 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("cancel_build"):
 		catalog.hide()
 		if multiplayer.is_server():
+			transport.cancel(1, orders)
+			sync_transport()
 			cancel_build_for(1)
 		else:
 			request_cancel_build.rpc_id(1)
@@ -338,6 +359,7 @@ func _physics_process(delta: float) -> void:
 			if Time.get_ticks_msec() - last_input[id] > 500 and players.has(id):
 				apply_controls(id, Vector2.ZERO, false, false)
 				work_held[id] = false
+		step_transport(delta)
 		step_workstations(delta)
 		step_mining(delta)
 		refresh_orders()
@@ -353,6 +375,7 @@ func _physics_process(delta: float) -> void:
 			broadcast_state("receive_workshop", [workshop.snapshot()], false)
 			broadcast_state("receive_orders", [orders.snapshot()], false)
 			broadcast_state("receive_mining", [mining_snapshot()], false)
+			broadcast_state("receive_transport", [transport.snapshot()])
 			broadcast_state("receive_merchant", [merchant.snapshot()], false)
 	else:
 		send_controls.rpc_id(1, axis, jump, climb, Input.is_action_pressed("interact"))
@@ -385,6 +408,11 @@ func receive_state(state: Array) -> void:
 
 func peer_left(id: int) -> void:
 	if multiplayer.is_server():
+		transport.cancel(id, orders)
+		for cart in transport.carts.values():
+			if cart.driver == id: cart.driver = 0
+		lift_riders.erase(id)
+		sync_transport()
 		workshop.cancel(id, orders)
 		sync_build()
 		workshop.cancel(id, orders)
@@ -493,6 +521,14 @@ func step_ore() -> void:
 		var body: RigidBody2D = ore_bodies[piece_id]
 		var stored := false
 		if ore.pieces[piece_id].kind == "ore" and body.linear_velocity.y >= 0:
+			for cart in cart_nodes:
+				if cart_nodes[cart].get_node("Catch").overlaps_body(body):
+					stored = transport.store(cart, piece_id, ore)
+					if stored:
+						collected = true
+						break
+		if stored: continue
+		if ore.pieces[piece_id].kind in ORE_STATE.BIN_PRODUCTS and body.linear_velocity.y >= 0:
 			for bin in ore_bodies:
 				if ore.pieces[bin].kind == "ore_bin" and ore.is_loose(bin) and ore_bodies[bin].get_node("Catch").overlaps_body(body):
 					stored = ore.store_in_bin(bin, piece_id)
@@ -530,6 +566,7 @@ func step_ore() -> void:
 				break
 
 	if collected:
+		sync_transport()
 		broadcast_state("receive_ore", [ore.snapshot()], true)
 		broadcast_state("receive_workshop", [workshop.snapshot()])
 		refresh_workshop()
@@ -598,7 +635,7 @@ func create_ore_body(id: int, simulate: bool, at: Vector2) -> RigidBody2D:
 	body.global_position = world.to_global(at)
 	body.freeze = not simulate
 	body.collision_layer = 4 if simulate else 0
-	body.collision_mask = 13 if simulate else 0
+	body.collision_mask = 29 if simulate else 0
 	ore_bodies[id] = body
 	return body
 
@@ -628,7 +665,7 @@ func step_mining(delta: float) -> void:
 		if cycle.phase == "shop":
 			for id in players:
 				var dwarf = players[id]
-				if not workshop.pending.has(id) and work_held.get(id, false) and vein_at(dwarf.position) == vein and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
+				if not workshop.pending.has(id) and work_held.get(id, false) and vein_at(dwarf.position) == vein and not dwarf.transport_locked and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
 					eligible.append(id)
 		eligible.sort()
 		var worker: int = job.worker if job.worker in eligible else (eligible[0] if not eligible.is_empty() else 0)
@@ -735,10 +772,14 @@ func interact_for(id: int) -> void:
 	var message := "E: pick up/load · Hold E: work · Tab: build · R: pack idle station"
 	var object: int = nearest_loose(dwarf.position)
 	var bin: int = nearest_mobile_bin(dwarf.position)
+	var cart: int = nearest_cart(dwarf.position)
 	if carried == -1 and object != -1 and ore.pickup(id, object):
-		message = "Picked up %s. F: throw · Q: drop" % ore.pieces[object].kind.replace("_", " ")
+		message = "Picked up %s. F: throw · Q: drop" % ("movable parts bin" if ore.pieces[object].kind == "ore_bin" else ore.pieces[object].kind.replace("_", " "))
+	elif carried != -1 and cart != -1 and transport.deposit(cart, id, ore):
+		message = "Ore loaded into cart. G: take ore · C: push cart."
+		sync_transport()
 	elif carried != -1 and bin != -1 and ore.deposit_in_bin(id, bin):
-		message = "Ore stored in movable bin. G: take one out with empty hands."
+		message = "Intermediate product stored. G: take one out with empty hands."
 	elif near_mine(dwarf):
 		message = "Mine closed until shop hours." if cycle.phase != "shop" else "Hold E with empty hands to mine ore. Prospector speeds up extraction."
 	elif absf(dwarf.position.x - 166) <= 30 and absf(dwarf.position.y - 216) <= 6 and not orders.queue.is_empty() and carried != -1:
@@ -788,10 +829,10 @@ func refresh_ore() -> void:
 		body.visible = loose
 		body.freeze = not loose or not (active and multiplayer.is_server())
 		body.collision_layer = 4 if loose and multiplayer.is_server() else 0
-		body.collision_mask = 13 if loose and multiplayer.is_server() else 0
+		body.collision_mask = 29 if loose and multiplayer.is_server() else 0
 		if ore.pieces[piece_id].kind == "ore_bin":
 			body.get_node("Catch").monitoring = loose and multiplayer.is_server()
-			body.get_node("Count").text = "ORE %s/10 · G: take" % ore.pieces[piece_id].contents.size()
+			body.get_node("Count").text = "PARTS %s/10 · G: take" % ore.pieces[piece_id].contents.size()
 	for id in players:
 		var carried: int = ore.carried_by(id)
 		players[id].get_node("CarriedOre").visible = carried != -1
@@ -805,6 +846,9 @@ func reset_ore(simulate: bool) -> void:
 	throw_grace.clear()
 	hit_cooldowns.clear()
 	ore = ORE_STATE.new()
+	transport = TRANSPORT.new()
+	lift_riders.clear()
+	refresh_transport()
 	progression = PROGRESSION.new()
 	refresh_progression()
 	workshop = WORKSHOP_STATE.new()
@@ -839,7 +883,7 @@ func step_workstations(delta: float) -> void:
 		var eligible: Array[int] = []
 		for id in players:
 			var dwarf = players[id]
-			if work_held.get(id, false) and workshop.nearest(dwarf.position) == station_id and not workshop.pending.has(id) and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
+			if work_held.get(id, false) and workshop.nearest(dwarf.position) == station_id and not workshop.pending.has(id) and not dwarf.transport_locked and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
 				eligible.append(id)
 		eligible.sort()
 		var worker: int = entry.job.worker if entry.job.worker in eligible else (eligible[0] if not eligible.is_empty() else 0)
@@ -954,6 +998,7 @@ func init_build_ui(layer: CanvasLayer) -> void:
 	help_skills.text = "Complete mining: +2 EXP · Station work: +3 EXP · Delivery: +5 EXP\nEXP goes to the completing worker. Progress lasts for this session.\nPurchase prices round up to whole coins. Unanswered requests still cost 3 reputation."
 	help_skills.add_theme_font_size_override("font_size", 12)
 	skills.add_child(help_skills)
+	init_transport_ui()
 	catalog.hide()
 
 func _process(_delta: float) -> void:
@@ -968,11 +1013,24 @@ func _process(_delta: float) -> void:
 		build_ghost.position = at + Vector2(8, -16)
 		build_ghost.texture = STATION_VIEW.TEXTURES[workshop.pending[id].kind]
 		build_ghost.modulate = Color(0.4, 1, 0.5, 0.7) if workshop.can_place(at) else Color(1, 0.3, 0.3, 0.7)
+	if active and transport.pending.has(id) and cycle.phase not in ["summary", "transition"]:
+		catalog.hide()
+		var at: Vector2 = transport.snap_rail(world.get_local_mouse_position())
+		build_ghost.visible = true
+		build_ghost.texture = preload("res://assets/textures/rail.svg")
+		build_ghost.position = at - Vector2(0, 2)
+		build_ghost.modulate = Color(0.4, 1, 0.5, 0.7) if transport.can_rail(at) else Color(1, 0.3, 0.3, 0.7)
 	if not active:
 		catalog.hide()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if active and build_ghost != null and build_ghost.visible and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		if transport.pending.has(multiplayer.get_unique_id()):
+			var rail: Vector2 = transport.snap_rail(world.get_global_transform_with_canvas().affine_inverse() * event.position)
+			if multiplayer.is_server(): place_rail_for(1, rail)
+			else: request_rail_place.rpc_id(1, rail)
+			get_viewport().set_input_as_handled()
+			return
 		var at: Vector2 = workshop.snap(world.get_global_transform_with_canvas().affine_inverse() * event.position)
 		if multiplayer.is_server():
 			place_for(1, at)
@@ -992,7 +1050,7 @@ func request_station(kind: String) -> void:
 		purchase_for(multiplayer.get_remote_sender_id(), kind)
 
 func purchase_for(id: int, kind: String) -> void:
-	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
+	if not multiplayer.is_server() or not players.has(id) or transport.pending.has(id) or cycle.phase in ["summary", "transition"]:
 		return
 	if not workshop.purchase(id, kind, orders, ore, 1.0 - 0.1 * progression.rank(id, "purchasing")):
 		feedback_for(id, "Cannot buy: check coins, empty hands, and any unplaced kit.")
@@ -1018,6 +1076,8 @@ func request_cancel_build() -> void:
 func cancel_build_for(id: int) -> void:
 	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
 		return
+	transport.cancel(id, orders)
+	sync_transport()
 	workshop.cancel(id, orders)
 	sync_build()
 
@@ -1027,7 +1087,7 @@ func request_pack() -> void:
 		pack_for(multiplayer.get_remote_sender_id())
 
 func pack_for(id: int) -> void:
-	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
+	if not multiplayer.is_server() or not players.has(id) or transport.pending.has(id) or cycle.phase in ["summary", "transition"]:
 		return
 	if not workshop.pack(id, players[id].position, ore):
 		feedback_for(id, "Only empty, idle stations or containers can be packed; keep your hands free.")
@@ -1122,7 +1182,7 @@ func refresh_progression() -> void:
 		skill_buttons[key].text = "%s%s [%s/%s] +" % [prerequisite, definition.title, progression.rank(local, key), definition.max]
 		skill_buttons[key].disabled = not progression.can_buy(local, key)
 	if mobile_bin_button != null:
-		mobile_bin_button.text = "Movable ore bin (10) · %s coins" % progression.purchase_price(local, ORE_STATE.BIN_PRICE)
+		mobile_bin_button.text = "Movable parts bin (10) · %s coins" % progression.purchase_price(local, ORE_STATE.BIN_PRICE)
 	for kind in station_buttons:
 		station_buttons[kind].text = "%s · %s coins" % [WORKSHOP_STATE.display_name(kind), progression.purchase_price(local, WORKSHOP_STATE.PRICES[kind])]
 
@@ -1267,10 +1327,10 @@ func request_mobile_bin() -> void:
 	if multiplayer.is_server(): purchase_mobile_bin_for(multiplayer.get_remote_sender_id())
 
 func purchase_mobile_bin_for(id: int) -> void:
-	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"] or workshop.pending.has(id) or ore.carried_by(id) != -1: return
+	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"] or workshop.pending.has(id) or transport.pending.has(id) or ore.carried_by(id) != -1: return
 	var price: int = progression.purchase_price(id, ORE_STATE.BIN_PRICE)
 	if orders.coins < price:
-		feedback_for(id, "Not enough coins for an ore bin.")
+		feedback_for(id, "Not enough coins for a parts bin.")
 		return
 	orders.coins -= price
 	orders.spent += price
@@ -1280,7 +1340,7 @@ func purchase_mobile_bin_for(id: int) -> void:
 	broadcast_state("receive_orders", [orders.snapshot()])
 	refresh_orders()
 	catalog.hide()
-	feedback_for(id, "Movable ore bin: Q drops, F throws. Holds 10 ore. G takes one ore out with empty hands.")
+	feedback_for(id, "Movable parts bin: Q drops, F throws. Holds 10 intermediate products. G takes one out with empty hands.")
 
 @rpc("any_peer", "call_remote", "reliable")
 func request_take_bin() -> void:
@@ -1288,7 +1348,223 @@ func request_take_bin() -> void:
 
 func take_bin_for(id: int) -> void:
 	if not multiplayer.is_server() or not players.has(id) or workshop.pending.has(id) or cycle.phase in ["summary", "transition"]: return
+	var cart := nearest_cart(players[id].position)
+	if cart != -1 and transport.take(cart, id, ore):
+		broadcast_state("receive_ore", [ore.snapshot()], true)
+		sync_transport()
+		return
 	var bin := nearest_mobile_bin(players[id].position)
 	if bin != -1 and ore.take_from_bin(id, bin):
 		broadcast_state("receive_ore", [ore.snapshot()], true)
-		feedback_for(id, "Took one ore from movable bin.")
+		feedback_for(id, "Took one intermediate product from movable bin.")
+
+func init_transport_world() -> void:
+	lift_node = Node2D.new()
+	lift_node.z_index = 10
+	world.add_child(lift_node)
+	var sprite := Sprite2D.new()
+	sprite.texture = preload("res://assets/textures/elevator.svg")
+	sprite.position = Vector2(0, -24)
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	lift_node.add_child(sprite)
+	var body := StaticBody2D.new()
+	body.collision_layer = 16
+	body.collision_mask = 2
+	lift_node.add_child(body)
+	var shape := CollisionShape2D.new()
+	var rectangle := RectangleShape2D.new()
+	rectangle.size = Vector2(32, 4)
+	shape.shape = rectangle
+	shape.one_way_collision = true
+	shape.one_way_collision_margin = 1.0
+	shape.position.y = 2
+	body.add_child(shape)
+
+func init_transport_ui() -> void:
+	var tab := VBoxContainer.new()
+	tab.name = "Transport"
+	catalog_tabs.add_child(tab)
+	transport_info = Label.new()
+	tab.add_child(transport_info)
+	for level in range(1, 4):
+		var button := Button.new()
+		button.focus_mode = Control.FOCUS_NONE
+		button.pressed.connect(func(): transport_buy("lift", level))
+		tab.add_child(button)
+		transport_buttons[level] = button
+	for kind in ["rail", "cart"]:
+		var button := Button.new()
+		button.focus_mode = Control.FOCUS_NONE
+		button.pressed.connect(func(): transport_buy(kind, 0))
+		tab.add_child(button)
+		transport_buttons[kind] = button
+	var help := Label.new()
+	help.text = "Rails: buy, then click a green extension. Esc refunds.\nRails start beside each unlocked elevator landing.\nAt the shaft: W/S calls or rides the lift.\nCart: C couples/releases · A/D pushes · Jump releases.\nE loads ore · G takes ore · Cart capacity: 25 ore."
+	help.add_theme_font_size_override("font_size", 12)
+	tab.add_child(help)
+	refresh_transport()
+
+func transport_buy(kind: String, level: int) -> void:
+	if multiplayer.is_server(): buy_transport_for(1, kind, level)
+	else: request_transport_buy.rpc_id(1, kind, level)
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_transport_buy(kind: String, level: int) -> void:
+	if multiplayer.is_server(): buy_transport_for(multiplayer.get_remote_sender_id(), kind, level)
+
+func buy_transport_for(id: int, kind: String, level: int) -> void:
+	if not transport_allowed(id) or ore.carried_by(id) != -1 or workshop.pending.has(id) or transport.pending.has(id): return
+	var ok := false
+	if kind == "lift": ok = transport.upgrade(level, orders, progression.purchase_price(id, TRANSPORT.UPGRADE_PRICE))
+	elif kind == "rail": ok = transport.buy_rail(id, orders, progression.purchase_price(id, TRANSPORT.RAIL_PRICE))
+	elif kind == "cart":
+		var at: Vector2 = players[id].position
+		for rail in transport.tracks:
+			if absf(rail.y - at.y) < 6 and absf(rail.x - at.x) < 24:
+				ok = transport.buy_cart(rail, orders, progression.purchase_price(id, TRANSPORT.CART_PRICE)) != -1
+				break
+	feedback_for(id, "Transport purchased." if ok else "Cannot buy: check coins, empty hands, upgrade order, and nearby rails for a cart.")
+	sync_transport()
+
+func transport_allowed(id: int) -> bool:
+	return multiplayer.is_server() and players.has(id) and cycle.phase not in ["summary", "transition"]
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_rail_place(at: Vector2) -> void:
+	if multiplayer.is_server(): place_rail_for(multiplayer.get_remote_sender_id(), at)
+
+func place_rail_for(id: int, at: Vector2) -> void:
+	if transport_allowed(id):
+		transport.place_rail(id, at)
+		sync_transport()
+
+func nearest_cart(at: Vector2) -> int:
+	var nearest := -1
+	var distance := 36.0
+	for id in transport.carts:
+		var offset: Vector2 = transport.carts[id].at - at
+		if absf(offset.y) <= 8 and offset.length() < distance:
+			nearest = id
+			distance = offset.length()
+	return nearest
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_cart_toggle() -> void:
+	if multiplayer.is_server(): toggle_cart_for(multiplayer.get_remote_sender_id())
+
+func toggle_cart_for(id: int) -> void:
+	if not transport_allowed(id): return
+	for cart in transport.carts.values():
+		if cart.driver == id:
+			cart.driver = 0
+			players[id].transport_locked = false
+			sync_transport()
+			return
+	var cart := nearest_cart(players[id].position)
+	if cart != -1 and ore.carried_by(id) == -1 and transport.carts[cart].driver == 0 and not transport.moving:
+		transport.carts[cart].driver = id
+		sync_transport()
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_lift(direction: int) -> void:
+	if multiplayer.is_server(): lift_for(multiplayer.get_remote_sender_id(), direction)
+
+func lift_for(id: int, direction: int) -> void:
+	if not transport_allowed(id) or direction not in [-1, 1] or absf(players[id].position.x - 390) > 30: return
+	var stop := -1
+	for i in range(transport.upgrades + 1):
+		if absf(players[id].position.y - TRANSPORT.STOPS[i]) < 6: stop = i
+	if stop == -1: return
+	var aboard: bool = absf(players[id].position.x - 390) <= 16
+	for cart in transport.carts.values():
+		if cart.driver == id and absf(cart.at.x - 390) <= 16: aboard = true
+	if absf(transport.lift_y - TRANSPORT.STOPS[stop]) <= 2 and not aboard: return
+	var destination := stop if absf(transport.lift_y - TRANSPORT.STOPS[stop]) > 2 else stop + direction
+	var old: float = transport.lift_y
+	if transport.start_lift(destination):
+		lift_riders.clear()
+		for peer in players:
+			if absf(players[peer].position.x - 390) <= 16 and absf(players[peer].position.y - old) < 6:
+				lift_riders[peer] = true
+				players[peer].climbing = false
+				players[peer].transport_locked = true
+		sync_transport()
+
+func step_transport(delta: float) -> void:
+	for id in players: players[id].transport_locked = false
+	transport.step_lift(delta)
+	for id in lift_riders:
+		if players.has(id):
+			players[id].transport_locked = true
+			players[id].position = Vector2(players[id].position.x, transport.lift_y)
+			players[id].velocity = Vector2.ZERO
+	if not transport.moving: lift_riders.clear()
+	for cart in transport.carts.values():
+		var driver: int = cart.driver
+		if not players.has(driver) or players[driver].jump_held or ore.carried_by(driver) != -1:
+			cart.driver = 0
+			continue
+		var id: int = transport.carts.find_key(cart)
+		if not lift_riders.has(driver): transport.move_cart(id, players[driver].controls.x * 70 * delta)
+		players[driver].transport_locked = true
+		players[driver].position = cart.at - Vector2(20, 0)
+		players[driver].velocity = Vector2.ZERO
+	refresh_transport()
+
+func sync_transport() -> void:
+	refresh_transport()
+	broadcast_state("receive_transport", [transport.snapshot()])
+	broadcast_state("receive_orders", [orders.snapshot()])
+	refresh_orders()
+
+@rpc("authority", "call_remote", "reliable")
+func receive_transport(state: Dictionary) -> void:
+	transport.restore(state)
+	refresh_transport()
+
+func refresh_transport() -> void:
+	if lift_node == null: return
+	lift_node.visible = transport.upgrades > 0
+	lift_node.position = Vector2(390, transport.lift_y)
+	lift_node.get_child(1).collision_layer = 16 if transport.upgrades > 0 else 0
+	for id in players: players[id].mine_ladder_top = 288.0 + transport.upgrades * 80
+	while shaft_nodes.size() < transport.upgrades:
+		var sprite := Sprite2D.new()
+		sprite.texture = preload("res://assets/textures/shaft_lift.svg")
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		sprite.z_index = -9
+		sprite.position = Vector2(390, 328 + shaft_nodes.size() * 80)
+		world.add_child(sprite)
+		shaft_nodes.append(sprite)
+	for i in range(shaft_nodes.size()): shaft_nodes[i].visible = i < transport.upgrades
+	if shown_tracks != transport.tracks:
+		shown_tracks = transport.tracks.duplicate()
+		for node in rail_nodes: node.free()
+		rail_nodes.clear()
+		for at in transport.tracks:
+			var sprite := Sprite2D.new()
+			sprite.texture = preload("res://assets/textures/rail.svg")
+			sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			sprite.position = at - Vector2(0, 2)
+			sprite.z_index = 10
+			world.add_child(sprite)
+			rail_nodes.append(sprite)
+	for id in cart_nodes.keys():
+		if not transport.carts.has(id):
+			cart_nodes[id].free()
+			cart_nodes.erase(id)
+	for id in transport.carts:
+		if not cart_nodes.has(id):
+			cart_nodes[id] = preload("res://scenes/mine_cart.tscn").instantiate()
+			world.add_child(cart_nodes[id])
+		cart_nodes[id].position = transport.carts[id].at
+		cart_nodes[id].get_node("Catch").monitoring = active and multiplayer.is_server()
+		cart_nodes[id].get_node("Count").text = "ORE %s/25 · C: push · G: take" % transport.carts[id].items.size()
+	if transport_info != null:
+		transport_info.text = "Elevator: %s/3 segments · Rails: %s · Carts: %s" % [transport.upgrades, transport.tracks.size(), transport.carts.size()]
+		var id := multiplayer.get_unique_id()
+		for level in range(1, 4):
+			transport_buttons[level].text = "Upgrade elevator to mine level %s · %s coins" % [level, progression.purchase_price(id, TRANSPORT.UPGRADE_PRICE)]
+			transport_buttons[level].disabled = level != transport.upgrades + 1
+		transport_buttons.rail.text = "Buy rail section · %s coins" % progression.purchase_price(id, TRANSPORT.RAIL_PRICE)
+		transport_buttons.cart.text = "Buy mine cart · %s coins (stand beside rails)" % progression.purchase_price(id, TRANSPORT.CART_PRICE)

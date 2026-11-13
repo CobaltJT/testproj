@@ -48,9 +48,10 @@ func run() -> void:
 	check(session.ore.is_loose(bin) and session.ore_bodies[bin].get_node("Catch").monitoring, "Dropped bin is a live movable physics container")
 	var body: RigidBody2D = session.ore_bodies[bin]
 	var center: Vector2 = session.world.to_local(body.global_position)
+	session.ore.pieces[2].kind = "shaft"
 	session.position_ore(session.ore_bodies[2], center + Vector2(0, -35), Vector2(0, 100))
 	await frames(60)
-	check(session.ore.pieces[bin].contents == [2] and not session.ore_bodies[2].visible, "Falling ore is caught in movable bin")
+	check(session.ore.pieces[bin].contents == [2] and not session.ore_bodies[2].visible, "Falling intermediate product is caught in movable bin")
 	dwarf.position = session.world.to_local(body.global_position) + Vector2(0, 11)
 	dwarf.velocity = Vector2.ZERO
 	await frames(5)
@@ -64,7 +65,7 @@ func run() -> void:
 	dwarf.velocity = Vector2.ZERO
 	await frames(5)
 	await press("take_bin_ore")
-	check(session.ore.carried_by(1) == 2 and session.ore.pieces[bin].contents.is_empty(), "G withdraws original ore into empty hands")
+	check(session.ore.carried_by(1) == 2 and session.ore.pieces[bin].contents.is_empty(), "G withdraws original intermediate product into empty hands")
 	session.disconnect_game("Done")
 	check(session.ore.pieces.size() == 8, "Leaving clears movable bins and their contents")
 	print("MOBILE BIN PHYSICS RESULT: ", failures, " failures")

@@ -9,13 +9,14 @@ func check(ok: bool, message: String) -> void:
 func _initialize() -> void:
 	var ore = ORE.new()
 	var bin: int = ore.add_material("ore_bin")
+	ore.pieces[0].kind = "shaft"
 	check(ore.store_in_bin(bin, 0) and not ore.store_in_bin(bin, 0), "Ore stored once by identity")
-	var ingot: int = ore.add_material("ingot")
-	check(not ore.store_in_bin(bin, ingot) and ore.is_loose(ingot), "Only raw ore enters movable bin")
+	var ingot: int = ore.add_material("ore")
+	check(not ore.store_in_bin(bin, ingot) and ore.is_loose(ingot), "Raw ore cannot enter movable parts bin")
 	for i in range(9):
-		var piece: int = ore.add_material("ore")
+		var piece: int = ore.add_material("shaft")
 		check(ore.store_in_bin(bin, piece), "Fill movable bin")
-	var extra: int = ore.add_material("ore")
+	var extra: int = ore.add_material("shaft")
 	check(not ore.store_in_bin(bin, extra) and ore.is_loose(extra), "Ten-slot capacity leaves overflow loose")
 	check(ore.pickup(1, bin) and ore.pieces[bin].contents.size() == 10 and not ore.is_loose(0), "Loaded bin can be carried while contents remain reserved")
 	check(not ore.take_from_bin(2, bin) and not ore.store_in_bin(bin, extra), "Carried bin cannot be accessed as a loose object")

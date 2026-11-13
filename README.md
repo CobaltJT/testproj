@@ -104,8 +104,8 @@ knock dwarfs back. Jumping off a ladder prevents immediate reattachment while
 ascending; held Up can catch it at the apex. Down + Jump detaches into a fall.
 On an interact press, nearby loose objects take priority over placeable objects,
 including loaded workstations. Clear nearby clutter before holding E to work.
-Carried ore can also be deposited into a nearby movable ore bin before using
-a placeable.
+Carried intermediate products can also be deposited into a nearby movable
+parts bin before using a placeable; carried ore can be deposited into mine carts.
 Furniture lets dwarfs walk past it; output trays collide with physical items.
 
 ## Mine ore and buy wood
@@ -125,7 +125,7 @@ bonuses and +2 mining EXP apply as before. Veins do not deplete yet.
 
 Mining is enabled during shop hours and pauses in morning and evening; progress
 persists across days and reconnects. The ladder remains navigable. Placeable
-workstations remain limited to the building, while movable ore bins can be
+workstations remain limited to the building, while movable parts bins can be
 carried underground. The entrance itself no longer produces ore.
 
 Wood comes **only from the merchant**. The merchant first visits 12 seconds after
@@ -169,27 +169,59 @@ the normal placement and original-price refund rules. The host validates access,
 category, capacity, selection, and every transfer. Contents synchronize for late
 joiners and persist across days; leaving the host session resets them.
 
-## Movable ore bins and draw order
+## Movable parts bins and draw order
 
-The Build catalog also sells a **movable ore bin** for **15 coins**, before
-Bargainer discounts. It holds **10 raw ore** and is purchased directly into
+The Build catalog also sells a **movable parts bin** for **15 coins**, before
+Bargainer discounts. It holds **10 intermediate products** and is purchased directly into
 empty hands. It is a physics object rather than grid-placed furniture.
 
 - **E**, empty hands: pick up the bin, including its contents.
-- **Q / F**: drop or throw the bin. It stays upright and retains its ore.
-- Loose bins catch falling/thrown ore through their open top. Wrong items and
+- **Q / F**: drop or throw the bin. It stays upright and retains its contents.
+- Loose bins catch falling/thrown intermediate products through their open top. Wrong items and
   overflow stay loose. Carried bins do not catch items.
-- **E**, carrying ore near a loose bin: deposit that ore manually.
-- **G**, empty hands near a loose bin: take one original ore out. You can then
-  throw it into the forge bin or carry it elsewhere.
+- **E**, carrying an intermediate product near a loose bin: deposit it manually.
+- **G**, empty hands near a loose bin: take one original product out.
 
-Loaded bins retain the exact ore identities across movement, multiplayer,
+Raw ore, wood and finished products are rejected. Loaded bins retain the exact item identities across movement, multiplayer,
 reconnects, and days. The host validates purchases, capacity, access range and
 transfers; moving and storing items grants no EXP.
 
 The world renders background first, then stationary objects, then characters,
 then movable objects (including carried objects). This order is consistent for
 hosts and clients and does not change collision behavior.
+
+## Mine transport: elevator, rails and ore carts
+
+Open **TAB → Transport**. Each elevator segment costs **30 coins**, rail sections
+cost **5**, and mine carts cost **25**, before Bargainer discounts. Purchases use
+shared coins and appear in daily spending.
+
+Upgrade the shaft from the basement down, **mine level 1 → 2 → 3**. Only the
+next segment can be purchased; levels cannot be skipped or bought twice.
+Upgraded ladder sections become an elevator shaft. The ladder below the lowest
+upgraded stop remains usable, including descending through the lowest platform.
+At an unlocked landing, **W/S** calls the elevator to that landing when it is
+elsewhere. Step onto the platform and press **W/S** again to travel one stop up
+or down. All players standing on the platform and carts parked on it ride along.
+The elevator cannot travel into locked levels.
+
+Each unlocked elevator landing has free **starting rails on both sides**.
+Buy a rail section, then click a green preview to extend an existing rail on the
+same floor. Sections are 32 pixels long and cannot float, overlap, skip a gap,
+cover the shaft, or extend into locked levels. **Esc** refunds an unplaced rail.
+Rails are limited to the basement and the three mine floors.
+
+Stand beside rails with empty hands to buy a cart. **C** couples or releases a
+nearby unoccupied cart; **A/D** pushes it along its rails. **Jump** also releases
+it. A cart stops at the end of the connected track and cannot be picked up,
+thrown, or driven across gaps. A stationary elevator platform bridges the shaft;
+roll the cart onto it, then use W/S to travel between unlocked floors.
+
+Carts hold **25 raw ore**, catching falling/thrown ore automatically. **E** loads
+carried ore into a nearby cart; **G**, with empty hands, retrieves one ore.
+Intermediate and finished products are rejected, and overflow stays loose.
+Loaded carts retain exact ore identities during movement, elevator rides,
+reconnects and day changes. The host owns all transport movement and purchases.
 
 ## Daily cycle
 

@@ -22,7 +22,7 @@ with tempfile.TemporaryDirectory(prefix="hearth-lan-") as directory:
                 env[f"XDG_{kind}_HOME"] = str(folder)
             log = (work / f"{role}.log").open("w+")
             args = ["godot", "--headless", "--path", str(root), "--script",
-                    "res://tests/multiplayer.gd", "--", f"--role={role}",
+                    os.environ.get("GODOT_MULTIPLAYER_SCRIPT", "res://tests/multiplayer.gd"), "--", f"--role={role}",
                     f"--port={port}", "--host" if role == "host" else "--join=127.0.0.1"]
             processes.append((role, subprocess.Popen(args, env=env, stdout=log, stderr=subprocess.STDOUT), log))
             if role == "host":

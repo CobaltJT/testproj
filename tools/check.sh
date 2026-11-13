@@ -10,6 +10,8 @@ export XDG_CACHE_HOME="$check_dirs/cache"
 mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
 godot --headless --path . --editor --import --quit
 godot --headless --path . --quit-after 10
+godot --headless --path . --script res://tests/transport.gd
+godot --headless --path . --script res://tests/transport_physics.gd
 godot --headless --path . --script res://tests/mine_levels.gd
 godot --headless --path . --script res://tests/mobile_bin.gd
 godot --headless --path . --script res://tests/mobile_bin_physics.gd
@@ -34,3 +36,5 @@ godot --headless --path . --script res://tests/mining_physics.gd
 godot --headless --path . --script res://tests/forge.gd
 godot --headless --path . --script res://tests/forge_physics.gd
 python3 tools/check_multiplayer.py
+
+GODOT_MULTIPLAYER_SCRIPT=res://tests/transport_multiplayer.gd python3 tools/check_multiplayer.py

@@ -20,7 +20,7 @@ func run() -> void:
 	Input.action_press("build_menu")
 	await frames(2)
 	Input.action_release("build_menu")
-	check(session.catalog.visible and session.catalog_tabs.get_tab_count() == 2, "TAB offers Build and Skills")
+	check(session.catalog.visible and session.catalog_tabs.get_tab_count() == 3, "TAB offers Build and Skills")
 	session.catalog_tabs.current_tab = 1
 	await frames(5)
 	check(Rect2(Vector2.ZERO, root.get_visible_rect().size).encloses(session.catalog.get_global_rect()), "Build and Skills panel fits default viewport")

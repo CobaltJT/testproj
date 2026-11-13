@@ -3,6 +3,7 @@ extends RefCounted
 const INITIAL_ORE := 8
 const BIN_CAPACITY := 10
 const BIN_PRICE := 15
+const BIN_PRODUCTS := ["ingot", "dull_sword", "axe_head", "shaft"]
 var pieces: Dictionary = {}
 
 func _init() -> void:
@@ -63,7 +64,7 @@ func add_material(kind: String) -> int:
 	return id
 
 func store_in_bin(bin: int, piece: int) -> bool:
-	if not is_loose(bin) or pieces[bin].kind != "ore_bin" or not is_loose(piece) or pieces[piece].kind != "ore" or pieces[bin].contents.size() >= BIN_CAPACITY:
+	if not is_loose(bin) or pieces[bin].kind != "ore_bin" or not is_loose(piece) or pieces[piece].kind not in BIN_PRODUCTS or pieces[bin].contents.size() >= BIN_CAPACITY:
 		return false
 	pieces[piece].processing = true
 	pieces[bin].contents.append(piece)
@@ -71,7 +72,7 @@ func store_in_bin(bin: int, piece: int) -> bool:
 
 func deposit_in_bin(player: int, bin: int) -> bool:
 	var piece := carried_by(player)
-	if player <= 0 or piece == -1 or not is_loose(bin) or pieces[bin].kind != "ore_bin" or pieces[piece].kind != "ore" or pieces[bin].contents.size() >= BIN_CAPACITY:
+	if player <= 0 or piece == -1 or not is_loose(bin) or pieces[bin].kind != "ore_bin" or pieces[piece].kind not in BIN_PRODUCTS or pieces[bin].contents.size() >= BIN_CAPACITY:
 		return false
 	release_carrier(player)
 	return store_in_bin(bin, piece)

@@ -1,0 +1,22 @@
+[gd_scene load_steps=3 format=3]
+[ext_resource type="Texture2D" path="res://assets/textures/cart.svg" id="1"]
+[sub_resource type="RectangleShape2D" id="Sensor"]
+size = Vector2(26, 16)
+[node name="MineCart" type="Node2D"]
+z_index = 30
+[node name="Sprite" type="Sprite2D" parent="."]
+position = Vector2(0, -12)
+texture = ExtResource("1")
+texture_filter = 1
+[node name="Catch" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 4
+monitoring = false
+[node name="Shape" type="CollisionShape2D" parent="Catch"]
+position = Vector2(0, -14)
+shape = SubResource("Sensor")
+[node name="Count" type="Label" parent="."]
+offset_left = -30.0
+offset_top = -44.0
+theme_override_font_sizes/font_size = 7
+mouse_filter = 2

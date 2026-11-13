@@ -469,7 +469,9 @@ func client_scenarios() -> void:
 	if role == "client2":
 		session.mobile_bin_button.pressed.emit()
 		check(await until(func(): return session.ore.carried_by(id) != -1 and session.ore.pieces[session.ore.carried_by(id)].kind == "ore_bin"), "Client buys physical ore bin into hands")
-		await press("drop_ore")
+		await press("push_cart")
+		await press("interact")
+		check(session.ore.carried_by(id) == -1, "Remote C drops bin and E does not pick up empty bin")
 	await frames(45)
 	var mobile := -1
 	for piece in session.ore.pieces:

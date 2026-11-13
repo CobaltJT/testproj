@@ -752,6 +752,7 @@ func interact_for(id: int) -> void:
 	var object: int = nearest_loose(dwarf.position)
 	var bin: int = nearest_mobile_bin(dwarf.position)
 	var cart: int = nearest_cart(dwarf.position)
+	if carried == -1 and object != -1 and ore.pieces[object].kind == "ore_bin" and ore.pieces[object].contents.is_empty(): return
 	if carried == -1 and object != -1 and ore.pieces[object].kind == "ore_bin" and not ore.pieces[object].contents.is_empty() and ore.take_from_bin(id, object):
 		message = "Took one intermediate product."
 	elif carried == -1 and object != -1 and ore.pickup(id, object):
@@ -1419,6 +1420,10 @@ func request_cart_toggle() -> void:
 
 func toggle_cart_for(id: int) -> void:
 	if not transport_allowed(id): return
+	var held: int = ore.carried_by(id)
+	if held != -1 and ore.pieces[held].kind == "ore_bin":
+		release_ore(id, true)
+		return
 	for cart in transport.carts.values():
 		if cart.driver == id:
 			cart.driver = 0

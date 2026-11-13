@@ -200,7 +200,7 @@ func make_help() -> void:
 	var guides := [
 		"[b]MOVEMENT[/b]\nA/D or arrows: move\nW/S or up/down: climb / elevator\nSpace: jump\n\n[b]INTERACTION[/b]\nE: pick up / interact\nHold E: work / mine\nF: throw\nQ: drop",
 		"[b]WORKSHOP[/b]\nTab: menu\nLeft click: place\nEsc: close / cancel\nR: pack empty placeable\n\n[b]ANVIL[/b]\nT: cycle recipe",
-		"[b]CUSTOMERS & TRADE[/b]\nGreen check: accept order\nRed cross: reject / fail order\nCoin bag: buy wood\n\n[b]STORAGE & CARTS[/b]\nT: cycle anvil recipe / stored product\nC: lift bin / couple cart\nA/D: push cart\nSpace: release cart"
+		"[b]CUSTOMERS & TRADE[/b]\nGreen check: accept order\nRed cross: reject / fail order\nCoin bag: buy wood\n\n[b]STORAGE & CARTS[/b]\nT: cycle anvil recipe / stored product\nC: lift / drop bin, couple cart\nA/D: push cart\nSpace: release cart"
 	]
 	for text in guides:
 		var guide := RichTextLabel.new()
@@ -219,6 +219,8 @@ func make_help() -> void:
 
 func notify(message: String) -> void:
 	last_message = message
+	for quiet in ["Order accepted", "Request accepted:", "Stored item", "Retrieved item", "Ingredient loaded", "Intermediate product stored", "Ore loaded into cart", "Took one intermediate product", "Took one ore from cart"]:
+		if message.begins_with(quiet): return
 	var short := message.split(". ")[0]
 	if "Order complete!" in message: return # Shared completion event supplies one toast.
 	if message.begins_with("Request accepted:"): short = "Order accepted · 30s"

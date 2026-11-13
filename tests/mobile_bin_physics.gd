@@ -43,10 +43,15 @@ func run() -> void:
 	await frames(3)
 	var bin: int = session.ore.carried_by(1)
 	check(bin != -1 and session.ore.pieces[bin].kind == "ore_bin" and session.orders.coins == 65, "Catalog buys movable bin directly into hands")
-	await press("drop_ore")
+	await press("push_cart")
 	await frames(40)
-	check(session.ore.is_loose(bin) and session.ore_bodies[bin].get_node("Catch").monitoring, "Dropped bin is a live movable physics container")
+	check(session.ore.is_loose(bin) and session.ore_bodies[bin].get_node("Catch").monitoring, "C drops held bin as a live physics container")
 	var body: RigidBody2D = session.ore_bodies[bin]
+	dwarf.position = session.world.to_local(body.global_position) + Vector2(0, 11)
+	dwarf.velocity = Vector2.ZERO
+	await frames(5)
+	await press("interact")
+	check(session.ore.carried_by(1) == -1 and session.ore.is_loose(bin), "E on empty bin does not pick it up")
 	var center: Vector2 = session.world.to_local(body.global_position)
 	session.ore.pieces[2].kind = "shaft"
 	session.position_ore(session.ore_bodies[2], center + Vector2(0, -35), Vector2(0, 100))
@@ -66,7 +71,10 @@ func run() -> void:
 	dwarf.position = Vector2(center.x, 216)
 	dwarf.velocity = Vector2.ZERO
 	await frames(5)
+	session.hud.notice_until = 0
+	session.hud.toast_queue.clear()
 	await press("interact")
+	check(session.hud.notice_until == 0, "Retrieving a part does not create a toast")
 	check(session.ore.carried_by(1) == 2 and session.ore.pieces[bin].contents.is_empty(), "E withdraws original intermediate product into empty hands")
 	session.disconnect_game("Done")
 	check(session.ore.pieces.size() == 8, "Leaving clears movable bins and their contents")

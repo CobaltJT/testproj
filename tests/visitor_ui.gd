@@ -43,9 +43,12 @@ func run() -> void:
 	var head: Vector2 = session.world.get_global_transform_with_canvas() * (session.customer_nodes[order.id].position + Vector2(0, -26))
 	check(card.get_global_rect().end.y <= head.y, "Customer card is tethered above visitor")
 	session.players[1].position = Vector2(166, 216)
+	session.hud.notice_until = 0
+	session.hud.toast_queue.clear()
+	var notice_before: String = session.hud.notice.text
 	session.decide_order_for(1, order.id, true)
 	await frames(3)
-	check(session.hud.notice.text == "Order accepted · 30s" and card.frame.border_color == Color("7db59b"), "Acceptance has concise toast and accepted card state")
+	check(session.hud.notice.text == notice_before and session.hud.notice_until == 0 and card.frame.border_color == Color("7db59b"), "Acceptance changes card state without a toast")
 	session.orders.step(30, false)
 	await frames(3)
 	check(not session.hud.customer_badge.visible and session.hud.order_cards.is_empty(), "Leaving customer removes card and indicator")

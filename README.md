@@ -177,14 +177,14 @@ The Build catalog also sells a **movable parts bin** for **15 coins**, before
 Bargainer discounts. It holds **10 intermediate products** and is purchased directly into
 empty hands. It is a physics object rather than grid-placed furniture.
 
-- **C**: pick up the bin, including its contents. The nearer bin or cart is selected;
+- **C**: pick up or drop the bin, including its contents. The nearer bin or cart is selected;
   C releases an already coupled cart first.
 - **Q / F**: drop or throw the bin. It stays upright and retains its contents.
 - Loose bins catch falling/thrown intermediate products through their open top. Wrong items and
   overflow stay loose. Carried bins do not catch items.
 - **E**, carrying an intermediate product near a loose bin: deposit it manually.
 - **E**, empty hands near a stocked loose bin: take one original product out.
-  E can also pick up an empty bin.
+  E on an empty movable bin does nothing.
 
 Raw ore, wood and finished products are rejected. Loaded bins retain the exact item identities across movement, multiplayer,
 reconnects, and days. The host validates purchases, capacity, access range and
@@ -247,10 +247,11 @@ show a wood icon, stock, price and remaining visit time. Cards follow their
 visitors and stay the same size as the camera moves. Station recipes use icons,
 and work progress uses bars without progress text. Mine labels are removed.
 
-Concise notifications cover accepted orders, customer/merchant arrivals,
+Concise notifications cover customer/merchant arrivals,
 completed or failed requests, unanswered expiry, shop opening/closing and new
 days. Shared event notifications are queued, and joining players do not replay
-historical events. Detailed action feedback remains in the F1 guide.
+historical events. Accepting an order and routine storage, loading, or retrieval
+actions do not produce toasts. Detailed action feedback remains in the F1 guide.
 
 **Hold F1** for a compact control reference; release it to close. It lists
 movement, interaction, workshop, recipe, storage, customer, cart and elevator

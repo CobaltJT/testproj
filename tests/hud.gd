@@ -47,6 +47,11 @@ func run() -> void:
 	session.interaction_feedback("E: pick up/load · Hold E: work")
 	await frames(3)
 	check(not session.hint.visible, "Control feedback does not restore persistent HUD clutter")
+	for quiet in ["Stored item.", "Retrieved item. T: select another stored product.", "Ingredient loaded. Hold E with empty hands to work.", "Intermediate product stored.", "Ore loaded into cart.", "Took one ore from cart.", "Took one intermediate product.", "Order accepted · 30s"]:
+		session.hud.notice_until = 0
+		session.interaction_feedback(quiet)
+		await frames(1)
+		check(session.hud.notice_until == 0, "Routine interaction stays silent: " + quiet)
 	session.interaction_feedback("Not enough coins.")
 	await frames(3)
 	check(session.hud.notice.visible and session.hud.notice.text == "Not enough coins.", "Action failures remain visible as short notifications")

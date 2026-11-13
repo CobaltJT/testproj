@@ -1,0 +1,47 @@
+[gd_scene load_steps=6 format=3]
+[ext_resource type="Texture2D" path="res://assets/textures/ore_bin.svg" id="1"]
+[sub_resource type="RectangleShape2D" id="Side"]
+size = Vector2(4, 44)
+[sub_resource type="RectangleShape2D" id="Bottom"]
+size = Vector2(64, 4)
+[sub_resource type="RectangleShape2D" id="Sensor"]
+size = Vector2(52, 32)
+[sub_resource type="PhysicsMaterial" id="Material"]
+friction = 0.85
+bounce = 0.05
+[node name="OreBin" type="RigidBody2D"]
+z_index = 30
+top_level = true
+collision_layer = 4
+collision_mask = 13
+mass = 2.0
+lock_rotation = true
+physics_material_override = SubResource("Material")
+continuous_cd = 2
+freeze = true
+[node name="Sprite2D" type="Sprite2D" parent="."]
+scale = Vector2(2, 2)
+texture_filter = 1
+texture = ExtResource("1")
+[node name="Left" type="CollisionShape2D" parent="."]
+position = Vector2(-30, 0)
+shape = SubResource("Side")
+[node name="Right" type="CollisionShape2D" parent="."]
+position = Vector2(30, 0)
+shape = SubResource("Side")
+[node name="Bottom" type="CollisionShape2D" parent="."]
+position = Vector2(0, 20)
+shape = SubResource("Bottom")
+[node name="Catch" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 4
+monitoring = false
+[node name="Shape" type="CollisionShape2D" parent="Catch"]
+position = Vector2(0, -2)
+shape = SubResource("Sensor")
+[node name="Count" type="Label" parent="."]
+offset_left = -32.0
+offset_top = -42.0
+theme_override_font_sizes/font_size = 12
+mouse_filter = 2
+text = "ORE 0/10 · G: take"

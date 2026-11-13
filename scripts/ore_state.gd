@@ -1,6 +1,8 @@
 extends RefCounted
 ## Host-owned identity ledger; physics transforms live in the ore bodies.
 const INITIAL_ORE := 8
+const BIN_CAPACITY := 10
+const BIN_PRICE := 15
 var pieces: Dictionary = {}
 
 func _init() -> void:
@@ -57,4 +59,26 @@ func add_material(kind: String) -> int:
 	for existing in pieces:
 		id = maxi(id, existing + 1)
 	pieces[id] = {"owner": 0, "processing": false, "kind": kind, "delivered": false, "consumed": false}
+	if kind == "ore_bin": pieces[id]["contents"] = []
 	return id
+
+func store_in_bin(bin: int, piece: int) -> bool:
+	if not is_loose(bin) or pieces[bin].kind != "ore_bin" or not is_loose(piece) or pieces[piece].kind != "ore" or pieces[bin].contents.size() >= BIN_CAPACITY:
+		return false
+	pieces[piece].processing = true
+	pieces[bin].contents.append(piece)
+	return true
+
+func deposit_in_bin(player: int, bin: int) -> bool:
+	var piece := carried_by(player)
+	if player <= 0 or piece == -1 or not is_loose(bin) or pieces[bin].kind != "ore_bin" or pieces[piece].kind != "ore" or pieces[bin].contents.size() >= BIN_CAPACITY:
+		return false
+	release_carrier(player)
+	return store_in_bin(bin, piece)
+
+func take_from_bin(player: int, bin: int) -> bool:
+	if player <= 0 or carried_by(player) != -1 or not is_loose(bin) or pieces[bin].kind != "ore_bin" or pieces[bin].contents.is_empty():
+		return false
+	var piece: int = pieces[bin].contents.pop_front()
+	pieces[piece].processing = false
+	return pickup(player, piece)

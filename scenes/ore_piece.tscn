@@ -6,6 +6,7 @@ radius = 8.0
 friction = 0.85
 bounce = 0.25
 [node name="OrePiece" type="RigidBody2D"]
+z_index = 30
 top_level = true
 collision_layer = 4
 collision_mask = 13

@@ -102,7 +102,10 @@ Bin contents, smelting progress, and ingot outputs synchronize for late joiners.
 You can carry one item. Loose items fall, bounce, stay where they land, and can
 knock dwarfs back. Jumping off a ladder prevents immediate reattachment while
 ascending; held Up can catch it at the apex. Down + Jump detaches into a fall.
-Work takes priority over pickup while a nearby station contains a loaded job.
+On an interact press, nearby loose objects take priority over placeable objects,
+including loaded workstations. Clear nearby clutter before holding E to work.
+Carried ore can also be deposited into a nearby movable ore bin before using
+a placeable.
 Furniture lets dwarfs walk past it; output trays collide with physical items.
 
 ## Mine ore and buy wood
@@ -151,6 +154,28 @@ container; filled containers cannot be packed or refunded. Empty containers use
 the normal placement and original-price refund rules. The host validates access,
 category, capacity, selection, and every transfer. Contents synchronize for late
 joiners and persist across days; leaving the host session resets them.
+
+## Movable ore bins and draw order
+
+The Build catalog also sells a **movable ore bin** for **15 coins**, before
+Bargainer discounts. It holds **10 raw ore** and is purchased directly into
+empty hands. It is a physics object rather than grid-placed furniture.
+
+- **E**, empty hands: pick up the bin, including its contents.
+- **Q / F**: drop or throw the bin. It stays upright and retains its ore.
+- Loose bins catch falling/thrown ore through their open top. Wrong items and
+  overflow stay loose. Carried bins do not catch items.
+- **E**, carrying ore near a loose bin: deposit that ore manually.
+- **G**, empty hands near a loose bin: take one original ore out. You can then
+  throw it into the forge bin or carry it elsewhere.
+
+Loaded bins retain the exact ore identities across movement, multiplayer,
+reconnects, and days. The host validates purchases, capacity, access range and
+transfers; moving and storing items grants no EXP.
+
+The world renders background first, then stationary objects, then characters,
+then movable objects (including carried objects). This order is consistent for
+hosts and clients and does not change collision behavior.
 
 ## Daily cycle
 

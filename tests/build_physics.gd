@@ -31,6 +31,9 @@ func run_job(at: Vector2) -> void:
 	session.players[1].velocity = Vector2.ZERO
 	await frames(5)
 	await press("interact")
+	# Clear loose clutter for this crafting test; pickup priority is tested separately.
+	for piece in session.ore_bodies:
+		if session.ore.is_loose(piece): session.position_ore(session.ore_bodies[piece], Vector2(150, 270), Vector2.ZERO)
 	Input.action_press("interact")
 	await frames(310)
 	Input.action_release("interact")
@@ -71,14 +74,14 @@ func run() -> void:
 	await frames(5)
 	await press("cancel_build")
 	check(session.orders.coins == 80 and not session.workshop.pending.has(1), "Escape refunds unplaced purchase")
-	# Work beside the starting ore pile: E must work a loaded job, not grab ore.
+	# Crafting with loose clutter cleared; separate tests exercise pickup priority.
 	session.purchase_for(1, "woodbench")
 	session.place_for(1, Vector2(248, 288))
 	var log_id: int = session.ore.add_material("wood")
 	session.ore.pickup(1, log_id)
 	session.refresh_ore()
 	await run_job(Vector2(248, 288))
-	check(session.ore.pieces[log_id].kind == "shaft" and session.ore.carried_by(1) == -1, "Loaded work takes priority over picking up loose ore nearby")
+	check(session.ore.pieces[log_id].kind == "shaft" and session.ore.carried_by(1) == -1, "Woodbench completes loaded work with empty hands")
 	dwarf.position = Vector2(160, 136)
 	dwarf.velocity = Vector2.ZERO
 	await frames(5)

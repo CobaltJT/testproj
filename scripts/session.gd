@@ -43,7 +43,8 @@ const EXTRA_TEXTURES = {
 	"dull_sword": preload("res://assets/textures/dull_sword.svg"),
 	"axe_head": preload("res://assets/textures/axe_head.svg"),
 	"shaft": preload("res://assets/textures/shaft.svg"),
-	"ingot": preload("res://assets/textures/ingot.svg")
+	"ingot": preload("res://assets/textures/ingot.svg"),
+	"ore_bin": preload("res://assets/textures/ore_bin.svg")
 }
 const MINING_STATE = preload("res://scripts/mining_state.gd")
 const MINE_POSITION := Vector2(390, 288)
@@ -56,6 +57,8 @@ var order_label: Label
 const PLAYER = preload("res://scenes/player.tscn")
 const WORLD = preload("res://scenes/smithy.tscn")
 const ORE_STATE = preload("res://scripts/ore_state.gd")
+const BIN_BODY = preload("res://scenes/ore_bin.tscn")
+var mobile_bin_button: Button
 const ORE_BODY = preload("res://scenes/ore_piece.tscn")
 const ORE_TEXTURE = preload("res://assets/textures/ore.svg")
 var work_held: Dictionary = {}
@@ -266,6 +269,9 @@ func _physics_process(delta: float) -> void:
 				apply_controls(id, Vector2.ZERO, false, false)
 				work_held[id] = false
 		return
+	if Input.is_action_just_pressed("take_bin_ore"):
+		if multiplayer.is_server(): take_bin_for(1)
+		else: request_take_bin.rpc_id(1)
 	if Input.is_action_just_pressed("cycle_storage"):
 		if multiplayer.is_server():
 			cycle_storage_for(1)
@@ -445,10 +451,12 @@ func release_ore(id: int, drop: bool) -> void:
 	var direction := -1.0 if dwarf.sprite.flip_h else 1.0
 	var body: RigidBody2D = ore_bodies[piece_id]
 	# Release within the dwarf's footprint so a wall cannot swallow the ore.
-	var at: Vector2 = dwarf.position + Vector2(direction * 2, -18 if not drop else -7)
+	var bin: bool = ore.pieces[piece_id].kind == "ore_bin"
+	var at: Vector2 = dwarf.position + Vector2(direction * 2, (-22 if not drop else -13) if bin else (-18 if not drop else -7))
+	if bin: at.x = clampf(at.x, 70, MAP.RIGHT_WALL - 20)
 	var motion := Vector2(direction * 280, -180) if not drop else Vector2(direction * 25, 0)
 	position_ore(body, at, motion)
-	body.angular_velocity = direction * 6 if not drop else 0
+	body.angular_velocity = direction * 6 if not drop and not bin else 0
 	throw_grace[piece_id] = [id, Time.get_ticks_msec() + 300]
 	broadcast_state("receive_ore", [ore.snapshot()], true)
 	broadcast_state("receive_ore_motion", [ore_motion()], false)
@@ -477,6 +485,14 @@ func step_ore() -> void:
 			continue
 		var body: RigidBody2D = ore_bodies[piece_id]
 		var stored := false
+		if ore.pieces[piece_id].kind == "ore" and body.linear_velocity.y >= 0:
+			for bin in ore_bodies:
+				if ore.pieces[bin].kind == "ore_bin" and ore.is_loose(bin) and ore_bodies[bin].get_node("Catch").overlaps_body(body):
+					stored = ore.store_in_bin(bin, piece_id)
+					if stored:
+						collected = true
+						break
+		if stored: continue
 		if body.linear_velocity.y >= 0:
 			for station_id in workshop.stations:
 				var entry: Dictionary = workshop.stations[station_id]
@@ -569,7 +585,7 @@ func show_customer(id: int, at: Vector2, request: String, leaving: bool) -> void
 	node.get_node("Request").text = request
 
 func create_ore_body(id: int, simulate: bool, at: Vector2) -> RigidBody2D:
-	var body: RigidBody2D = ORE_BODY.instantiate()
+	var body: RigidBody2D = (BIN_BODY if ore.pieces[id].kind == "ore_bin" else ORE_BODY).instantiate()
 	body.name = "Ore_%s" % id
 	world.add_child(body)
 	body.global_position = world.to_global(at)
@@ -691,7 +707,13 @@ func interact_for(id: int) -> void:
 	var dwarf = players[id]
 	var carried: int = ore.carried_by(id)
 	var message := "E: pick up/load · Hold E: work · Tab: build · R: pack idle station"
-	if near_mine(dwarf):
+	var object: int = nearest_loose(dwarf.position)
+	var bin: int = nearest_mobile_bin(dwarf.position)
+	if carried == -1 and object != -1 and ore.pickup(id, object):
+		message = "Picked up %s. F: throw · Q: drop" % ore.pieces[object].kind.replace("_", " ")
+	elif carried != -1 and bin != -1 and ore.deposit_in_bin(id, bin):
+		message = "Ore stored in movable bin. G: take one out with empty hands."
+	elif near_mine(dwarf):
 		message = "Mine closed until shop hours." if cycle.phase != "shop" else "Hold E with empty hands to mine ore. Prospector speeds up extraction."
 	elif absf(dwarf.position.x - 166) <= 30 and absf(dwarf.position.y - 216) <= 6 and not orders.queue.is_empty() and carried != -1:
 		var request: Dictionary = orders.queue[0]
@@ -719,18 +741,7 @@ func interact_for(id: int) -> void:
 			message = "Ingredient loaded. Hold E with empty hands to work." if job.load_material(id, ore) else ("Throw ore into the attached forge bin, then hold E to smelt." if job.kind == "forge" else "Wrong or duplicate ingredient for this station recipe.")
 			broadcast_state("receive_workshop", [workshop.snapshot()])
 			refresh_workshop()
-		elif carried == -1 and (station_id == -1 or workshop.stations[station_id].job.slots.is_empty() and workshop.stations[station_id].job.ore_queue.is_empty()):
-			var nearest := -1
-			var distance := 24.0
-			for piece_id in ore_bodies:
-				if not ore.is_loose(piece_id):
-					continue
-				var offset: Vector2 = world.to_local(ore_bodies[piece_id].global_position) - (dwarf.position - Vector2(0, 8))
-				if absf(offset.y) <= 18 and offset.length() < distance:
-					distance = offset.length()
-					nearest = piece_id
-			if nearest != -1 and ore.pickup(id, nearest):
-				message = "Picked up %s. F: throw · Q: drop" % ore.pieces[nearest].kind.replace("_", " ")
+
 	broadcast_state("receive_ore", [ore.snapshot()], true)
 	feedback_for(id, message)
 
@@ -752,6 +763,9 @@ func refresh_ore() -> void:
 		body.freeze = not loose or not (active and multiplayer.is_server())
 		body.collision_layer = 4 if loose and multiplayer.is_server() else 0
 		body.collision_mask = 13 if loose and multiplayer.is_server() else 0
+		if ore.pieces[piece_id].kind == "ore_bin":
+			body.get_node("Catch").monitoring = loose and multiplayer.is_server()
+			body.get_node("Count").text = "ORE %s/10 · G: take" % ore.pieces[piece_id].contents.size()
 	for id in players:
 		var carried: int = ore.carried_by(id)
 		players[id].get_node("CarriedOre").visible = carried != -1
@@ -874,6 +888,10 @@ func init_build_ui(layer: CanvasLayer) -> void:
 		button.pressed.connect(func(): buy_station(kind))
 		(storage_column if kind in WORKSHOP_STATE.STORAGE else stations_column).add_child(button)
 		station_buttons[kind] = button
+	mobile_bin_button = Button.new()
+	mobile_bin_button.focus_mode = Control.FOCUS_NONE
+	mobile_bin_button.pressed.connect(buy_mobile_bin)
+	storage_column.add_child(mobile_bin_button)
 	var help := Label.new()
 	help.text = "After buying: click a green floor preview.\nRed: blocked. Esc: cancel/refund kit.\nR beside an empty station: pack/move.\nTAB closes this menu; the game continues while it is open."
 	help.add_theme_font_size_override("font_size", 12)
@@ -1077,6 +1095,8 @@ func refresh_progression() -> void:
 		var prerequisite: String = "" if definition.parent == "" else "← " + PROGRESSION.SKILLS[definition.parent].title + " · "
 		skill_buttons[key].text = "%s%s [%s/%s] +" % [prerequisite, definition.title, progression.rank(local, key), definition.max]
 		skill_buttons[key].disabled = not progression.can_buy(local, key)
+	if mobile_bin_button != null:
+		mobile_bin_button.text = "Movable ore bin (10) · %s coins" % progression.purchase_price(local, ORE_STATE.BIN_PRICE)
 	for kind in station_buttons:
 		station_buttons[kind].text = "%s · %s coins" % [WORKSHOP_STATE.display_name(kind), progression.purchase_price(local, WORKSHOP_STATE.PRICES[kind])]
 
@@ -1188,3 +1208,61 @@ func cycle_storage_for(id: int) -> void:
 	if workshop.cycle_storage(id, players[id].position, ore):
 		broadcast_state("receive_workshop", [workshop.snapshot()])
 		refresh_workshop()
+
+func nearest_loose(at: Vector2) -> int:
+	var nearest := -1
+	var distance := 24.0
+	for piece in ore_bodies:
+		if not ore.is_loose(piece): continue
+		var offset: Vector2 = world.to_local(ore_bodies[piece].global_position) - (at - Vector2(0, 8))
+		if absf(offset.y) <= 18 and offset.length() < distance:
+			nearest = piece
+			distance = offset.length()
+	return nearest
+
+func nearest_mobile_bin(at: Vector2) -> int:
+	var nearest := -1
+	var distance := 32.0
+	for piece in ore_bodies:
+		if ore.pieces[piece].kind != "ore_bin" or not ore.is_loose(piece): continue
+		var offset: Vector2 = world.to_local(ore_bodies[piece].global_position) - (at - Vector2(0, 8))
+		if absf(offset.y) <= 18 and offset.length() < distance:
+			nearest = piece
+			distance = offset.length()
+	return nearest
+
+func buy_mobile_bin() -> void:
+	catalog.hide()
+	if multiplayer.is_server(): purchase_mobile_bin_for(1)
+	else: request_mobile_bin.rpc_id(1)
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_mobile_bin() -> void:
+	if multiplayer.is_server(): purchase_mobile_bin_for(multiplayer.get_remote_sender_id())
+
+func purchase_mobile_bin_for(id: int) -> void:
+	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"] or workshop.pending.has(id) or ore.carried_by(id) != -1: return
+	var price: int = progression.purchase_price(id, ORE_STATE.BIN_PRICE)
+	if orders.coins < price:
+		feedback_for(id, "Not enough coins for an ore bin.")
+		return
+	orders.coins -= price
+	orders.spent += price
+	var bin: int = ore.add_material("ore_bin")
+	ore.pickup(id, bin)
+	broadcast_state("receive_ore", [ore.snapshot()], true)
+	broadcast_state("receive_orders", [orders.snapshot()])
+	refresh_orders()
+	catalog.hide()
+	feedback_for(id, "Movable ore bin: Q drops, F throws. Holds 10 ore. G takes one ore out with empty hands.")
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_take_bin() -> void:
+	if multiplayer.is_server(): take_bin_for(multiplayer.get_remote_sender_id())
+
+func take_bin_for(id: int) -> void:
+	if not multiplayer.is_server() or not players.has(id) or workshop.pending.has(id) or cycle.phase in ["summary", "transition"]: return
+	var bin := nearest_mobile_bin(players[id].position)
+	if bin != -1 and ore.take_from_bin(id, bin):
+		broadcast_state("receive_ore", [ore.snapshot()], true)
+		feedback_for(id, "Took one ore from movable bin.")

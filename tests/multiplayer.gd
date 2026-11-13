@@ -85,6 +85,9 @@ func run() -> void:
 func host_scenarios() -> void:
 	session.advance_day()
 	check(session.workshop.stations.is_empty() and session.orders.coins == 100, "Host starts with empty workshop")
+	# Keep recipe fixtures clear of the loose-pickup radius at the woodbench.
+	for piece in session.ore_bodies:
+		session.position_ore(session.ore_bodies[piece], Vector2(150, 270), Vector2.ZERO)
 	session.purchase_for(1, "anvil")
 	session.place_for(1, Vector2(256, 216))
 	sync.begin.rpc("build")
@@ -260,6 +263,18 @@ func host_scenarios() -> void:
 	sync.begin.rpc("parts_throw")
 	check(await until(func(): return reports("parts_throw")), "Remote throw is caught by intermediate bin and replicated")
 	check(session.workshop.stations[sid("intermediate_small")].items == [thrown_part], "Host records thrown part identity exactly once")
+	sync.begin.rpc("mobile_buy")
+	check(await until(func(): return reports("mobile_buy")), "Client purchases and drops movable ore bin")
+	var mobile := -1
+	for piece in session.ore.pieces:
+		if session.ore.pieces[piece].kind == "ore_bin": mobile = piece
+	check(mobile != -1 and session.orders.coins == 45, "Movable ore bin charges shared price once")
+	var raw: int = session.ore.add_material("ore")
+	session.refresh_ore()
+	session.position_ore(session.ore_bodies[raw], session.world.to_local(session.ore_bodies[mobile].global_position) + Vector2(0, -35), Vector2(0, 100))
+	broadcast()
+	sync.begin.rpc("mobile_catch")
+	check(await until(func(): return reports("mobile_catch")), "Movable bin catches ore on host and synchronizes contents")
 	# Keep a genuinely loaded paused station for reconnect restoration.
 	job("anvil").select("horseshoe")
 	carry(1, 3)
@@ -271,7 +286,7 @@ func host_scenarios() -> void:
 	broadcast()
 	sync.begin.rpc("rejoin")
 	check(await until(func(): return reports("rejoin")), "Reconnect restores placed stations, jobs, inputs and economy")
-	check(session.orders.coins == 60 and session.workshop.pending.is_empty(), "Disconnect refunds abandoned kit")
+	check(session.orders.coins == 45 and session.workshop.pending.is_empty(), "Disconnect refunds abandoned kit")
 	session.orders.queue.clear()
 	session.orders.departures.clear()
 	session.cycle.remaining = 0.01
@@ -281,7 +296,7 @@ func host_scenarios() -> void:
 	sync.begin.rpc("next_morning")
 	check(await until(func(): return session.cycle.day == 2 and session.cycle.phase == "morning"), "Remote close advances shared day once")
 	check(await until(func(): return reports("next_morning")), "Both clients fade into next morning")
-	check(session.orders.coins == 60 and session.workshop.stations.size() == 5, "New morning preserves money and workshop")
+	check(session.orders.coins == 45 and session.workshop.stations.size() == 5, "New morning preserves money and workshop")
 	sync.begin.rpc("finished")
 	await frames(5)
 	session.disconnect_game("Done")
@@ -433,6 +448,22 @@ func client_scenarios() -> void:
 	var part: int = session.workshop.stations[sid("intermediate_small")].items[0]
 	check(await until(func(): return session.ore.pieces[part].processing and not session.ore_bodies[part].visible), "Caught part is hidden on both clients")
 	done("parts_throw")
+	await stage("mobile_buy")
+	if role == "client2":
+		session.mobile_bin_button.pressed.emit()
+		check(await until(func(): return session.ore.carried_by(id) != -1 and session.ore.pieces[session.ore.carried_by(id)].kind == "ore_bin"), "Client buys physical ore bin into hands")
+		await press("drop_ore")
+	await frames(45)
+	var mobile := -1
+	for piece in session.ore.pieces:
+		if session.ore.pieces[piece].kind == "ore_bin": mobile = piece
+	check(mobile != -1 and session.ore.is_loose(mobile) and session.ore_bodies[mobile].z_index > session.players[id].z_index, "Loose movable bin renders above characters on clients")
+	done("mobile_buy")
+	await stage("mobile_catch")
+	check(await until(func(): return session.ore.pieces[mobile].contents.size() == 1), "Nested ore contents replicate")
+	var raw: int = session.ore.pieces[mobile].contents[0]
+	check(session.ore.pieces[raw].processing and not session.ore_bodies[raw].visible, "Stored ore identity hidden on clients")
+	done("mobile_catch")
 	await stage("rejoin")
 	if role == "client2":
 		session.request_station.rpc_id(1, "grinder")
@@ -440,12 +471,13 @@ func client_scenarios() -> void:
 		session.disconnect_game("Reconnect")
 		await frames(15)
 		session.join_game()
-		check(await until(func(): return session.players.size() == 3 and session.workshop.stations.size() == 5 and session.orders.coins == 60), "Reconnect receives layout and abandoned-kit refund")
+		check(await until(func(): return session.players.size() == 3 and session.workshop.stations.size() == 5 and session.orders.coins == 45), "Reconnect receives layout and abandoned-kit refund")
 		check(root.get_camera_2d() == session.players[session.multiplayer.get_unique_id()].get_node("FollowCamera"), "Reconnect attaches camera to new local dwarf")
 		check(await until(func(): return session.progression.dwarfs.size() == 3), "Late join receives progression snapshot")
 		check(session.progression.dwarfs[session.multiplayer.get_unique_id()].level == 1, "New connection starts its own session dwarf progression")
 		check(session.workshop.stations[sid("finished_small")].items == [6] and session.ore.pieces[6].processing and not session.ore_bodies[6].visible, "Late join receives container contents and hidden stored identities")
 		check(session.workshop.stations[sid("intermediate_small")].items.size() == 1, "Reconnect preserves caught intermediate products")
+		check(session.ore.pieces[mobile].contents.size() == 1 and not session.ore_bodies[session.ore.pieces[mobile].contents[0]].visible, "Reconnect preserves movable bin inventory")
 		check(job("anvil").slots.has("ingot") and is_equal_approx(job("anvil").progress, 1.25) and session.ore.pieces[8].consumed, "Reconnect preserves paused station ingredients and physical material states")
 	done("rejoin")
 	await stage("day_summary")
@@ -456,6 +488,7 @@ func client_scenarios() -> void:
 	if role == "client1": session.next_day_button.pressed.emit()
 	check(await until(func(): return session.cycle.day == 2 and session.cycle.phase == "morning"), "Shared fade leads to morning")
 	check(session.open_button.visible and not session.day_popup.get_parent().visible, "Morning controls replace summary")
+	check(session.ore.pieces[mobile].contents.size() == 1, "Loaded movable bin persists into next day")
 	check(session.workshop.stations[sid("finished_small")].items == [6], "Stored contents persist into next day")
 	done("next_morning")
 	await stage("finished")

@@ -1,6 +1,7 @@
 [gd_scene load_steps=2 format=3]
 [ext_resource type="Texture2D" path="res://assets/textures/customer.svg" id="1"]
 [node name="Merchant" type="Node2D"]
+z_index = 20
 position = Vector2(212, 216)
 visible = false
 [node name="Sprite2D" type="Sprite2D" parent="."]

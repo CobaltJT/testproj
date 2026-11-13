@@ -1,6 +1,7 @@
 [gd_scene load_steps=2 format=3]
 [ext_resource type="Texture2D" path="res://assets/textures/ore_vein.svg" id="1"]
 [node name="MiningStation" type="Node2D"]
+z_index = 10
 [node name="Vein" type="Sprite2D" parent="."]
 position = Vector2(410, 276)
 texture_filter = 1

@@ -114,3 +114,8 @@ cycle_storage={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"physical_keycode":84)]
 }
+
+take_bin_ore={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":71)]
+}

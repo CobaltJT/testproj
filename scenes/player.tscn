@@ -6,6 +6,7 @@
 [sub_resource type="RectangleShape2D" id="Body"]
 size = Vector2(12, 23)
 [node name="Player" type="CharacterBody2D"]
+z_index = 20
 script = ExtResource("1")
 [node name="Sprite2D" type="Sprite2D" parent="."]
 position = Vector2(0, -12)
@@ -16,6 +17,7 @@ position = Vector2(0, -11.5)
 shape = SubResource("Body")
 
 [node name="CarriedOre" type="Sprite2D" parent="."]
+z_index = 10
 visible = false
 position = Vector2(9, -17)
 texture_filter = 1

@@ -88,6 +88,8 @@ func run() -> void:
 	var wood: int = session.ore.add_material("wood")
 	session.ore.pickup(1, wood)
 	session.refresh_ore()
+	for piece in session.ore_bodies:
+		if session.ore.is_loose(piece): session.position_ore(session.ore_bodies[piece], Vector2(150, 270), Vector2.ZERO)
 	var bench: int = session.workshop.nearest(dwarf.position)
 	session.workshop.stations[bench].job.load_material(1, session.ore)
 	Input.action_press("interact")

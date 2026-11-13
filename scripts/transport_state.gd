@@ -86,6 +86,14 @@ func move_cart(id: int, dx: float) -> void:
 		if blocked: break
 		cart.at = next
 
+static func follow_cart_x(player_x: float, previous_x: float, next_x: float) -> float:
+	var dx := next_x - previous_x
+	if dx > 0:
+		return maxf(player_x, minf(player_x + dx, next_x - 20))
+	if dx < 0:
+		return minf(player_x, maxf(player_x + dx, next_x + 20))
+	return player_x
+
 func store(id: int, piece: int, ore: RefCounted) -> bool:
 	if not carts.has(id) or carts[id].items.size() >= CART_CAPACITY or not ore.is_loose(piece) or ore.pieces[piece].kind != "ore": return false
 	ore.pieces[piece].processing = true

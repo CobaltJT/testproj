@@ -775,8 +775,11 @@ func interact_for(id: int) -> void:
 	var cart: int = nearest_cart(dwarf.position)
 	if carried == -1 and object != -1 and ore.pickup(id, object):
 		message = "Picked up %s. F: throw · Q: drop" % ("movable parts bin" if ore.pieces[object].kind == "ore_bin" else ore.pieces[object].kind.replace("_", " "))
+	elif carried == -1 and cart != -1:
+		message = "Took one ore from cart." if transport.take(cart, id, ore) else "Cart is empty. C: push cart."
+		sync_transport()
 	elif carried != -1 and cart != -1 and transport.deposit(cart, id, ore):
-		message = "Ore loaded into cart. G: take ore · C: push cart."
+		message = "Ore loaded into cart. E: take ore with empty hands · C: push cart."
 		sync_transport()
 	elif carried != -1 and bin != -1 and ore.deposit_in_bin(id, bin):
 		message = "Intermediate product stored. G: take one out with empty hands."
@@ -1348,11 +1351,6 @@ func request_take_bin() -> void:
 
 func take_bin_for(id: int) -> void:
 	if not multiplayer.is_server() or not players.has(id) or workshop.pending.has(id) or cycle.phase in ["summary", "transition"]: return
-	var cart := nearest_cart(players[id].position)
-	if cart != -1 and transport.take(cart, id, ore):
-		broadcast_state("receive_ore", [ore.snapshot()], true)
-		sync_transport()
-		return
 	var bin := nearest_mobile_bin(players[id].position)
 	if bin != -1 and ore.take_from_bin(id, bin):
 		broadcast_state("receive_ore", [ore.snapshot()], true)
@@ -1399,7 +1397,7 @@ func init_transport_ui() -> void:
 		tab.add_child(button)
 		transport_buttons[kind] = button
 	var help := Label.new()
-	help.text = "Rails: buy, then click a green extension. Esc refunds.\nRails start beside each unlocked elevator landing.\nAt the shaft: W/S calls or rides the lift.\nCart: C couples/releases · A/D pushes · Jump releases.\nE loads ore · G takes ore · Cart capacity: 25 ore."
+	help.text = "Rails: buy, then click a green extension. Esc refunds.\nRails start beside each unlocked elevator landing.\nAt the shaft: W/S calls or rides the lift.\nCart: C couples/releases · A/D pushes · Jump releases.\nE loads/takes ore · Cart capacity: 25 ore."
 	help.add_theme_font_size_override("font_size", 12)
 	tab.add_child(help)
 	refresh_transport()
@@ -1492,6 +1490,9 @@ func lift_for(id: int, direction: int) -> void:
 
 func step_transport(delta: float) -> void:
 	for id in players: players[id].transport_locked = false
+	var previous: Dictionary = {}
+	for id in transport.carts: previous[id] = transport.carts[id].at
+	var riders: Dictionary = lift_riders.duplicate()
 	transport.step_lift(delta)
 	for id in lift_riders:
 		if players.has(id):
@@ -1507,7 +1508,8 @@ func step_transport(delta: float) -> void:
 		var id: int = transport.carts.find_key(cart)
 		if not lift_riders.has(driver): transport.move_cart(id, players[driver].controls.x * 70 * delta)
 		players[driver].transport_locked = true
-		players[driver].position = cart.at - Vector2(20, 0)
+		players[driver].position.x = TRANSPORT.follow_cart_x(players[driver].position.x, previous[id].x, cart.at.x)
+		if not riders.has(driver): players[driver].position.y += cart.at.y - previous[id].y
 		players[driver].velocity = Vector2.ZERO
 	refresh_transport()
 
@@ -1559,7 +1561,7 @@ func refresh_transport() -> void:
 			world.add_child(cart_nodes[id])
 		cart_nodes[id].position = transport.carts[id].at
 		cart_nodes[id].get_node("Catch").monitoring = active and multiplayer.is_server()
-		cart_nodes[id].get_node("Count").text = "ORE %s/25 · C: push · G: take" % transport.carts[id].items.size()
+		cart_nodes[id].get_node("Count").text = "ORE %s/25 · C: push · E: load/take" % transport.carts[id].items.size()
 	if transport_info != null:
 		transport_info.text = "Elevator: %s/3 segments · Rails: %s · Carts: %s" % [transport.upgrades, transport.tracks.size(), transport.carts.size()]
 		var id := multiplayer.get_unique_id()

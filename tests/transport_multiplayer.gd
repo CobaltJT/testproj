@@ -109,7 +109,10 @@ func client() -> void:
 	done("cart")
 	await stage("push")
 	if role == "client1":
+		var before: Vector2 = session.players[session.multiplayer.get_unique_id()].position
+		var cart_before: Vector2 = session.transport.carts[1].at
 		await press("push_cart")
+		check(session.players[session.multiplayer.get_unique_id()].position.distance_to(before) < 0.1 and session.transport.carts[1].at == cart_before, "Remote coupling preserves positions")
 		Input.action_press("move_right")
 		await frames(27)
 		Input.action_release("move_right")
@@ -125,6 +128,13 @@ func client() -> void:
 	await stage("inventory")
 	check(await until(func(): return session.transport.carts[1].items.size() == 25), "All 25 ore identities received")
 	for piece in session.transport.carts[1].items: check(session.ore.pieces[piece].processing, "Stored ore reserved")
+	if role == "client2":
+		await press("take_bin_ore")
+		check(session.ore.carried_by(session.multiplayer.get_unique_id()) == -1, "Remote G leaves cart inventory unchanged")
+		await press("interact")
+		check(await until(func(): return session.transport.carts[1].items.size() == 24 and session.ore.carried_by(session.multiplayer.get_unique_id()) != -1), "Remote E withdraws ore")
+		await press("interact")
+		check(await until(func(): return session.transport.carts[1].items.size() == 25 and session.ore.carried_by(session.multiplayer.get_unique_id()) == -1), "Remote E reloads same ore")
 	done("inventory")
 	await stage("rejoin")
 	if role == "client2":

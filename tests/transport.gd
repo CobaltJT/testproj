@@ -9,6 +9,11 @@ func check(ok: bool, message: String) -> void:
 		failures += 1
 		push_error(message)
 func _initialize() -> void:
+	check(TRANSPORT.follow_cart_x(100, 100, 110) == 100, "Player stays still while cart moves across them")
+	check(TRANSPORT.follow_cart_x(100, 110, 125) == 105, "Player follows only after far edge reaches them")
+	check(TRANSPORT.follow_cart_x(105, 125, 95) == 105, "Reversing cart crosses player before moving them")
+	check(TRANSPORT.follow_cart_x(105, 95, 80) == 100, "Opposite edge moves player after reversal")
+	check(TRANSPORT.follow_cart_x(70, 100, 100) == 70 and TRANSPORT.follow_cart_x(70, 100, 101) == 71, "Outside coupling range preserves position and never snaps beyond actual cart movement")
 	var model = TRANSPORT.new()
 	var economy = ECONOMY.new()
 	var ore = ORE.new()

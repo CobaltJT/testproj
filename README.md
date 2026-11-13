@@ -212,13 +212,18 @@ cover the shaft, or extend into locked levels. **Esc** refunds an unplaced rail.
 Rails are limited to the basement and the three mine floors.
 
 Stand beside rails with empty hands to buy a cart. **C** couples or releases a
-nearby unoccupied cart; **A/D** pushes it along its rails. **Jump** also releases
+nearby unoccupied cart without moving either the player or the cart. **A/D**
+pushes it along its rails. The player remains stationary until the far edge of
+the moving cart reaches them, then follows that edge. Reversing direction lets
+the cart move back across the player before they follow its opposite edge.
+**Jump** also releases
 it. A cart stops at the end of the connected track and cannot be picked up,
 thrown, or driven across gaps. A stationary elevator platform bridges the shaft;
 roll the cart onto it, then use W/S to travel between unlocked floors.
 
 Carts hold **25 raw ore**, catching falling/thrown ore automatically. **E** loads
-carried ore into a nearby cart; **G**, with empty hands, retrieves one ore.
+carried ore into a nearby cart; **E**, with empty hands, retrieves one ore.
+**G** remains reserved for withdrawing products from movable parts bins.
 Intermediate and finished products are rejected, and overflow stays loose.
 Loaded carts retain exact ore identities during movement, elevator rides,
 reconnects and day changes. The host owns all transport movement and purchases.

@@ -1,4 +1,6 @@
 extends Node
+const HUD = preload("res://scripts/hud.gd")
+var hud: Control
 ## ENet LAN session. Only the host simulates physics; clients send controls.
 const PROGRESSION = preload("res://scripts/progression_state.gd")
 var progression = PROGRESSION.new()
@@ -178,6 +180,8 @@ func _ready() -> void:
 	multiplayer.connected_to_server.connect(func(): client_ready.rpc_id(1))
 	multiplayer.connection_failed.connect(func(): disconnect_game("Connection failed. Check IP, port and firewall."))
 	multiplayer.server_disconnected.connect(func(): disconnect_game("Host disconnected."))
+	hud = HUD.new()
+	hud.setup(self, layer, panel)
 	# The same production entry points are used by the multi-process smoke test.
 	var args := OS.get_cmdline_user_args()
 	for arg in args:
@@ -254,11 +258,6 @@ func spawn_player(id: int, at: Vector2) -> void:
 	var local := id == multiplayer.get_unique_id()
 	dwarf.set_camera_active(local)
 	dwarf.get_node("Sprite2D").modulate = Color.WHITE if local else Color.from_hsv(fmod(id * 0.137, 1.0), 0.45, 1.0)
-	var tag := Label.new()
-	tag.text = "YOU" if local else ("HOST" if id == 1 else "DWARF %s" % id)
-	tag.position = Vector2(-14, -35)
-	tag.add_theme_font_size_override("font_size", 7)
-	dwarf.add_child(tag)
 	players[id] = dwarf
 	progression.add(id)
 	active = true
@@ -435,7 +434,7 @@ func remove_player(id: int) -> void:
 	update_status()
 
 func update_status() -> void:
-	status.text = "%s · UDP %s · %s dwarfs" % ["Hosting" if multiplayer.is_server() else "Connected", int(port.value), players.size()]
+	status.text = "%s · UDP %s · %s player%s" % ["Hosting" if multiplayer.is_server() else "Connected", int(port.value), players.size(), "" if players.size() == 1 else "s"]
 
 func disconnect_game(message: String) -> void:
 	active = false
@@ -450,6 +449,9 @@ func disconnect_game(message: String) -> void:
 	last_interaction.clear()
 	reset_ore(false)
 	hint.text = ""
+	if hud != null:
+		hud.last_message = ""
+		hud.notice_until = 0
 	menu.show()
 	leave_button.hide()
 	status.text = message
@@ -468,6 +470,7 @@ func receive_ore(state: Dictionary) -> void:
 @rpc("authority", "call_remote", "reliable")
 func interaction_feedback(message: String) -> void:
 	hint.text = message
+	if hud != null: hud.notify(message)
 
 
 
@@ -609,12 +612,11 @@ func refresh_orders() -> void:
 			customer_nodes.erase(id)
 	if order_label != null:
 		order_label.visible = active
-		var text := "Coins: %s · Reputation: %s · Served: %s · Failed: %s · Declined: %s" % [orders.coins, orders.reputation, orders.completed, orders.missed, orders.rejected]
-		for i in range(orders.queue.size()):
-			var order: Dictionary = orders.queue[i]
-			var phase := "DELIVER" if order.accepted else ("Y accept / N reject" if i == 0 else "waiting for counter")
-			text += "\n%s #%s: %s %s/%s · %s · %ss · %sg each" % ["FRONT" if i == 0 else "QUEUED", order.id, order.kind.capitalize(), order.get("delivered", 0), order.get("quantity", 1), phase, ceili(order.remaining), progression.sale_price(multiplayer.get_unique_id(), CUSTOMER_STATE.PRICES[order.kind])]
-		text += "\nNext arrival: %ss · E serves FRONT only" % ceili(orders.until_arrival) if cycle.phase == "shop" else "\nShop closed to new arrivals · E serves FRONT only"
+		var text := "No customers"
+		if not orders.queue.is_empty():
+			var order: Dictionary = orders.queue[0]
+			text = "%s · %s/%s\n%s · %ss\n%s coins each · %s waiting" % [order.kind.capitalize(), order.get("delivered", 0), order.get("quantity", 1), "Accepted" if order.accepted else "Awaiting decision", ceili(order.remaining), progression.sale_price(multiplayer.get_unique_id(), CUSTOMER_STATE.PRICES[order.kind]), orders.queue.size() - 1]
+
 		order_label.text = text
 
 func show_customer(id: int, at: Vector2, request: String, leaving: bool) -> void:
@@ -693,7 +695,7 @@ func refresh_mining() -> void:
 		var view: Node2D = vein_nodes[vein]
 		view.get_node("Progress").value = job.progress
 		var duration: float = MINING_STATE.DURATION / progression.speed(job.worker if job.worker != 0 else multiplayer.get_unique_id(), "mining")
-		var text := "HOLD E: MINE · %.1fs" % duration
+		var text := "Ore vein · %.1fs" % duration
 		if cycle.phase != "shop": text = "VEIN CLOSED"
 		elif job.progress > 0:
 			text = "%s %s%% · %.1fs per ore" % ["MINING" if job.worker != 0 else "PAUSED", roundi(job.progress / MINING_STATE.DURATION * 100), duration]
@@ -835,7 +837,7 @@ func refresh_ore() -> void:
 		body.collision_mask = 29 if loose and multiplayer.is_server() else 0
 		if ore.pieces[piece_id].kind == "ore_bin":
 			body.get_node("Catch").monitoring = loose and multiplayer.is_server()
-			body.get_node("Count").text = "PARTS %s/10 · G: take" % ore.pieces[piece_id].contents.size()
+			body.get_node("Count").text = "PARTS %s/10" % ore.pieces[piece_id].contents.size()
 	for id in players:
 		var carried: int = ore.carried_by(id)
 		players[id].get_node("CarriedOre").visible = carried != -1
@@ -920,8 +922,8 @@ func refresh_workshop() -> void:
 			station_nodes[id] = view
 		station_nodes[id].update_view(workshop.stations[id], ore)
 	if recipe_label != null:
-		recipe_label.visible = active
-		recipe_label.text = "Tab: build / skills · R: pack idle station · Anvil: 1 Horseshoe  2 Blade  3 Axe head  4 Assemble axe"
+		recipe_label.visible = false
+		recipe_label.text = ""
 	if build_button != null:
 		build_button.visible = active
 
@@ -965,10 +967,6 @@ func init_build_ui(layer: CanvasLayer) -> void:
 	mobile_bin_button.focus_mode = Control.FOCUS_NONE
 	mobile_bin_button.pressed.connect(buy_mobile_bin)
 	storage_column.add_child(mobile_bin_button)
-	var help := Label.new()
-	help.text = "After buying: click a green floor preview.\nRed: blocked. Esc: cancel/refund kit.\nR beside an empty station: pack/move.\nTAB closes this menu; the game continues while it is open."
-	help.add_theme_font_size_override("font_size", 12)
-	column.add_child(help)
 	var skills := VBoxContainer.new()
 	skills.name = "Skills"
 	catalog_tabs.add_child(skills)
@@ -997,10 +995,6 @@ func init_build_ui(layer: CanvasLayer) -> void:
 			detail.text = definition.effect.replace("anvil, grinder and forge", "metalwork")
 			detail.add_theme_font_size_override("font_size", 12)
 			path.add_child(detail)
-	var help_skills := Label.new()
-	help_skills.text = "Complete mining: +2 EXP · Station work: +3 EXP · Delivery: +5 EXP\nEXP goes to the completing worker. Progress lasts for this session.\nPurchase prices round up to whole coins. Unanswered requests still cost 3 reputation."
-	help_skills.add_theme_font_size_override("font_size", 12)
-	skills.add_child(help_skills)
 	init_transport_ui()
 	catalog.hide()
 
@@ -1172,10 +1166,10 @@ func refresh_progression() -> void:
 	if progression_label == null:
 		return
 	progression_label.visible = active
-	var text := "Level 1 · EXP 0 / 10 · 0 skill points · TAB: Skills"
+	var text := "Level 1 · EXP 0 / 10 · 0 skill points"
 	if progression.dwarfs.has(local):
 		var dwarf: Dictionary = progression.dwarfs[local]
-		text = "Level %s · EXP %s / %s · %s skill points · TAB: Skills" % [dwarf.level, dwarf.exp, progression.required(dwarf.level), dwarf.points]
+		text = "Level %s · EXP %s / %s · %s skill points" % [dwarf.level, dwarf.exp, progression.required(dwarf.level), dwarf.points]
 	progression_label.text = text
 	if skill_summary != null:
 		skill_summary.text = text
@@ -1262,7 +1256,7 @@ func refresh_day() -> void:
 	if day_label == null:
 		return
 	day_label.visible = active
-	day_label.text = "Day %s · %s%s" % [cycle.day, cycle.phase.capitalize(), " · %ss until closing" % ceili(cycle.remaining) if cycle.phase == "shop" else ""]
+	day_label.text = "Day %s · %s%s" % [cycle.day, cycle.phase.capitalize(), " · %d:%02d" % [ceili(cycle.remaining) / 60, ceili(cycle.remaining) % 60] if cycle.phase == "shop" else ""]
 	open_button.visible = active and cycle.phase == "morning"
 	day_popup.get_parent().visible = active and cycle.phase == "summary"
 	if cycle.phase in ["summary", "transition"]:
@@ -1396,10 +1390,6 @@ func init_transport_ui() -> void:
 		button.pressed.connect(func(): transport_buy(kind, 0))
 		tab.add_child(button)
 		transport_buttons[kind] = button
-	var help := Label.new()
-	help.text = "Rails: buy, then click a green extension. Esc refunds.\nRails start beside each unlocked elevator landing.\nAt the shaft: W/S calls or rides the lift.\nCart: C couples/releases · A/D pushes · Jump releases.\nE loads/takes ore · Cart capacity: 25 ore."
-	help.add_theme_font_size_override("font_size", 12)
-	tab.add_child(help)
 	refresh_transport()
 
 func transport_buy(kind: String, level: int) -> void:
@@ -1561,7 +1551,7 @@ func refresh_transport() -> void:
 			world.add_child(cart_nodes[id])
 		cart_nodes[id].position = transport.carts[id].at
 		cart_nodes[id].get_node("Catch").monitoring = active and multiplayer.is_server()
-		cart_nodes[id].get_node("Count").text = "ORE %s/25 · C: push · E: load/take" % transport.carts[id].items.size()
+		cart_nodes[id].get_node("Count").text = "ORE %s/25" % transport.carts[id].items.size()
 	if transport_info != null:
 		transport_info.text = "Elevator: %s/3 segments · Rails: %s · Carts: %s" % [transport.upgrades, transport.tracks.size(), transport.carts.size()]
 		var id := multiplayer.get_unique_id()

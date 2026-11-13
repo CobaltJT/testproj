@@ -5,7 +5,7 @@ func update_view(entry: Dictionary, materials: RefCounted) -> void:
 	$Sprite.texture = TEXTURES[entry.kind]
 	var storage: bool = entry.kind in preload("res://scripts/workshop_state.gd").STORAGE
 	$Sprite.position = Vector2(8, -$Sprite.texture.get_height() / 2.0) if storage else Vector2(8, -16)
-	$Progress.visible = not storage
+	$Progress.visible = not storage and entry.job.progress > 0
 	$TrayBody.collision_layer = 0 if storage else 8
 	$Progress.value = entry.job.progress
 	var forge: bool = entry.kind == "forge"
@@ -32,11 +32,11 @@ func update_view(entry: Dictionary, materials: RefCounted) -> void:
 		var count := 0
 		for piece in entry.items:
 			if materials.pieces.has(piece) and materials.pieces[piece].kind == entry.selected: count += 1
-		$Label.text = "%s %s/%s\n%s\nE: store/take · T: cycle" % ["BIN" if definition.group == "intermediate" else "SHELF", entry.items.size(), definition.capacity, "%s x%s" % [entry.selected.replace("_", " ").to_upper(), count] if count else "EMPTY"]
+		$Label.text = "%s %s/%s\n%s" % ["BIN" if definition.group == "intermediate" else "SHELF", entry.items.size(), definition.capacity, "%s x%s" % [entry.selected.replace("_", " ").to_upper(), count] if count else "EMPTY"]
 		return
 	if forge:
 		$Label.text = "FORGE · BIN: %s" % entry.job.ore_queue.size()
-		$Label.text += "\nTHROW ORE" if entry.job.slots.is_empty() and entry.job.ore_queue.is_empty() else "\n%s %s%%" % ["SMELTING" if entry.job.worker else "HOLD E", roundi(entry.job.progress / entry.job.DURATION * 100)]
+		$Label.text += "\nIdle" if entry.job.slots.is_empty() and entry.job.ore_queue.is_empty() else "\n%s %s%%" % ["SMELTING" if entry.job.worker else "PAUSED", roundi(entry.job.progress / entry.job.DURATION * 100)]
 		return
 	var needed: Array = []
 	for ingredient in entry.job.INPUTS[entry.job.recipe]:
@@ -44,6 +44,6 @@ func update_view(entry: Dictionary, materials: RefCounted) -> void:
 			needed.append(ingredient.replace("_", " "))
 	$Label.text = entry.job.recipe.replace("_", " ").to_upper()
 	if not needed.is_empty():
-		$Label.text += "\nE: " + ", ".join(needed)
+		$Label.text += "\nNeeds " + ", ".join(needed)
 	else:
 		$Label.text += "\n%s %s%%" % ["WORK" if entry.job.worker else "PAUSED", roundi(entry.job.progress / entry.job.DURATION * 100)]

@@ -10,7 +10,7 @@ texture = ExtResource("1")
 offset_left = 337.0
 offset_top = 230.0
 theme_override_font_sizes/font_size = 7
-text = "HOLD E: MINE · 3s"
+text = "Ore vein"
 mouse_filter = 2
 [node name="Progress" type="ProgressBar" parent="."]
 offset_left = 375.0

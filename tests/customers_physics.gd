@@ -57,7 +57,7 @@ func run() -> void:
 	await frames(5)
 	check(session.orders.coins == 120 and session.orders.completed == 1 and session.orders.reputation == 2, "Second item completes request and awards reputation once")
 	check(not session.ore_bodies[0].visible and not dwarf.get_node("CarriedOre").visible, "Sold horseshoe disappears from world and hands")
-	check("Coins: 120" in session.order_label.text, "Order UI displays shared reward")
+	check("Coins: 120" in session.hud.shop.text, "Order UI displays shared reward")
 	await frames(130)
 	check(not session.customer_nodes.has(1) and session.orders.queue.is_empty(), "Served customer departs")
 	session.orders.step(session.orders.until_arrival + 2)

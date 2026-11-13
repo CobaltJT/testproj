@@ -228,6 +228,24 @@ Intermediate and finished products are rejected, and overflow stays loose.
 Loaded carts retain exact ore identities during movement, elevator rides,
 reconnects and day changes. The host owns all transport movement and purchases.
 
+## HUD and help
+
+The gameplay HUD shows shared coins/reputation, the day phase and shop clock,
+the local dwarf's held item and EXP, unspent skill points, and the front
+customer's progress/timer with a queued-customer count. A merchant notice shows
+live wood price and stock only while the merchant is present. Level-up points
+remain highlighted until spent. The Workshop and Leave buttons stay available.
+
+**Hold F1** for the complete controls and gameplay field guide; release it to
+return to the uncluttered view. It covers movement, crafting recipes, mining,
+storage, customers, skills, building, rails, carts and elevators. It does not
+pause the game. Connection details and recent detailed feedback live there too.
+
+Map control captions and debug-style character labels have been removed.
+Placeable names, requirements, counts and progress appear near the local dwarf;
+customer details are consolidated into the HUD. Short action notifications fade
+away, while persistent control instructions stay in the F1 overlay.
+
 ## Daily cycle
 
 Each new session begins on **Day 1, Morning**. Morning lasts until any connected

@@ -42,77 +42,14 @@ texture_filter = 1
 texture = ExtResource("1")
 centered = false
 
-[node name="Caption1" type="Label" parent="."]
-offset_left = 24.0
-offset_top = 7.0
-theme_override_colors/font_color = Color(0.9176470588235294, 0.8431372549019608, 0.6901960784313725, 1)
-theme_override_font_sizes/font_size = 16
-text = "HEARTH & HAMMER"
-mouse_filter = 2
 
-[node name="Caption2" type="Label" parent="."]
-offset_left = 25.0
-offset_top = 29.0
-theme_override_colors/font_color = Color(0.5450980392156862, 0.6039215686274509, 0.6666666666666666, 1)
-theme_override_font_sizes/font_size = 8
-text = "BUILD YOUR OWN WORKSHOP"
-mouse_filter = 2
 
-[node name="Caption3" type="Label" parent="."]
-offset_left = 64.0
-offset_top = 74.0
-theme_override_colors/font_color = Color(0.9176470588235294, 0.8431372549019608, 0.6901960784313725, 1)
-theme_override_font_sizes/font_size = 8
-text = "WORKSHOP"
-mouse_filter = 2
 
-[node name="Caption4" type="Label" parent="."]
-offset_left = 64.0
-offset_top = 147.0
-theme_override_colors/font_color = Color(0.9176470588235294, 0.8431372549019608, 0.6901960784313725, 1)
-theme_override_font_sizes/font_size = 8
-text = "CUSTOMERS"
-mouse_filter = 2
 
-[node name="Caption5" type="Label" parent="."]
-offset_left = 149.0
-offset_top = 179.0
-theme_override_colors/font_color = Color(0.9176470588235294, 0.8431372549019608, 0.6901960784313725, 1)
-theme_override_font_sizes/font_size = 8
-text = "ORDERS"
-mouse_filter = 2
 
-[node name="Caption6" type="Label" parent="."]
-offset_left = 377.0
-offset_top = 167.0
-theme_override_colors/font_color = Color(0.9176470588235294, 0.8431372549019608, 0.6901960784313725, 1)
-theme_override_font_sizes/font_size = 8
-text = ""
-mouse_filter = 2
 
-[node name="Caption7" type="Label" parent="."]
-offset_left = 144.0
-offset_top = 227.0
-theme_override_colors/font_color = Color(0.9176470588235294, 0.8431372549019608, 0.6901960784313725, 1)
-theme_override_font_sizes/font_size = 8
-text = "CELLAR / MINE ACCESS"
-mouse_filter = 2
 
-[node name="Caption8" type="Label" parent="."]
-offset_left = 352.0
-offset_top = 256.0
-theme_override_colors/font_color = Color(0.9176470588235294, 0.8431372549019608, 0.6901960784313725, 1)
-theme_override_font_sizes/font_size = 8
-text = "MINES"
-mouse_filter = 2
 
-[node name="Caption9" type="Label" parent="."]
-offset_left = 24.0
-offset_top = 305.0
-theme_override_colors/font_color = Color(0.6039215686274509, 0.6549019607843137, 0.6980392156862745, 1)
-theme_override_font_sizes/font_size = 8
-text = "A/D or arrows: walk  |  Space: jump  |  W/S or up/down: ladders"
-mouse_filter = 2
 
 [node name="Collision" type="StaticBody2D" parent="."]
 
@@ -187,5 +124,5 @@ z_index = 10
 offset_left = 360.0
 offset_top = 251.0
 theme_override_font_sizes/font_size = 8
-text = "MINE ENTRANCE\nDOWN: ladder"
+text = "Mine entrance"
 mouse_filter = 2

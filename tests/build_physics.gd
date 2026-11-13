@@ -60,10 +60,11 @@ func run() -> void:
 	check(session.station_nodes.is_empty() and session.build_ghost.visible, "R packs idle anvil for moving")
 	await click(Vector2(160, 136))
 	check(session.workshop.stations[anvil].at == Vector2(160, 136), "Manual placement works on upper floor")
+	session.ore.pieces[0].kind = "ingot" # Prepared stock for this anvil interaction test.
 	session.ore.pickup(1, 0)
 	session.refresh_ore()
 	await run_job(Vector2(160, 136))
-	check(session.ore.pieces[0].kind == "horseshoe" and session.ore_bodies[0].visible, "Raw ore becomes physical horseshoe using only placed anvil")
+	check(session.ore.pieces[0].kind == "horseshoe" and session.ore_bodies[0].visible, "Smelted ingot becomes physical horseshoe at placed anvil")
 	var at: Vector2 = session.world.to_local(session.ore_bodies[0].global_position)
 	check(absf(at.x - 188) < 8 and at.y < 136 and at.y > 120, "Output falls onto station's relocated tray")
 	session.purchase_for(1, "grinder")
@@ -82,11 +83,12 @@ func run() -> void:
 	dwarf.velocity = Vector2.ZERO
 	await frames(5)
 	# Packing a loaded station must preserve ingredients.
+	session.ore.pieces[1].kind = "ingot" # Prepared stock for this anvil interaction test.
 	session.ore.pickup(1, 1)
 	session.refresh_ore()
 	await press("interact")
 	await press("pack_station")
-	check(session.workshop.stations.has(anvil) and session.workshop.stations[anvil].job.slots.has("ore"), "Loaded station cannot be packed")
+	check(session.workshop.stations.has(anvil) and session.workshop.stations[anvil].job.slots.has("ingot"), "Loaded station cannot be packed")
 	session.disconnect_game("Done")
 	check(session.station_nodes.is_empty() and session.workshop.pending.is_empty() and session.orders.coins == 100, "Reset removes placed stations and restores budget")
 	print("BUILD INTERACTION RESULT: ", failures, " failures")

@@ -1,7 +1,7 @@
 extends RefCounted
 const DURATION := 5.0
 const ANVIL_RECIPES := ["horseshoe", "blade", "head", "axe"]
-const INPUTS := {"horseshoe": ["ore"], "blade": ["ore"], "head": ["ore"], "axe": ["axe_head", "shaft"], "sharpen": ["dull_sword"], "shaft": ["wood"], "smelt": ["ore"]}
+const INPUTS := {"horseshoe": ["ingot"], "blade": ["ingot"], "head": ["ingot"], "axe": ["axe_head", "shaft"], "sharpen": ["dull_sword"], "shaft": ["wood"], "smelt": ["ore"]}
 const OUTPUTS := {"horseshoe": "horseshoe", "blade": "dull_sword", "head": "axe_head", "axe": "axe", "sharpen": "sword", "shaft": "shaft", "smelt": "ingot"}
 var kind := "anvil"
 var recipe := "horseshoe"
@@ -27,8 +27,6 @@ func load_material(player: int, materials: RefCounted) -> bool:
 	if id == -1:
 		return false
 	var ingredient: String = materials.pieces[id].kind
-	if kind == "anvil" and ingredient == "ingot":
-		ingredient = "ore"
 	if ingredient not in INPUTS[recipe] or slots.has(ingredient):
 		return false
 	materials.release_carrier(player)

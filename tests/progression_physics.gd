@@ -70,6 +70,7 @@ func run() -> void:
 	dwarf.position = Vector2(256, 216)
 	dwarf.velocity = Vector2.ZERO
 	await frames(5)
+	session.ore.pieces[1].kind = "ingot" # Prepared stock for this anvil interaction test.
 	session.ore.pickup(1, 1)
 	var anvil: int = session.workshop.nearest(dwarf.position)
 	session.workshop.stations[anvil].job.load_material(1, session.ore)

@@ -22,6 +22,8 @@ func _initialize() -> void:
 			var piece: int = ore.add_material(product)
 			ore.pickup(1, piece)
 			check(model.storage_transfer(1, at, ore) and not ore.is_loose(piece) and ore.carried_by(1) == -1, "Store unique identity in " + kind)
+		var thrown: int = ore.add_material(product)
+		check(not model.catch_intermediate(1, thrown, ore) and ore.is_loose(thrown), "Full bins and all shelves reject automatic thrown insertion")
 		var extra: int = ore.add_material(product)
 		ore.pickup(1, extra)
 		check(not model.storage_transfer(1, at, ore) and ore.carried_by(1) == extra and model.stations[1].items.size() == capacity, "Full container preserves carried overflow item")

@@ -42,8 +42,11 @@ func _initialize() -> void:
 		var anvil = JOB.new()
 		anvil.configure("anvil")
 		anvil.select(recipe)
+		materials.pickup(1, 2)
+		check(not anvil.load_material(1, materials) and materials.carried_by(1) == 2, "Anvil rejects raw ore for " + recipe)
+		materials.release_carrier(1)
 		materials.pickup(1, 0)
-		check(anvil.load_material(1, materials) and anvil.slots.ore == 0, "Anvil accepts ingot for " + recipe)
+		check(anvil.load_material(1, materials) and anvil.slots.ingot == 0, "Anvil accepts ingot for " + recipe)
 		anvil.step(5, both, materials)
 		check(materials.pieces[0].kind == JOB.OUTPUTS[recipe], "Ingot follows existing anvil product route")
 		materials.pieces[0].kind = "ingot"

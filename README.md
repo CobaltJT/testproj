@@ -30,7 +30,7 @@ Press **Tab** or click **Build / Skills** to open the menu. Its **Build** tab of
 
 | Station | Cost | Purpose |
 | --- | --- | --- |
-| Anvil | 20 | Shape ore; assemble axe heads and shafts |
+| Anvil | 20 | Shape ingots; assemble axe heads and shafts |
 | Grinder | 25 | Sharpen unfinished swords |
 | Woodworking bench | 25 | Turn purchased wood into shafts |
 | Forge with attached bin | 25 | Collect thrown ore and smelt ingots |
@@ -52,9 +52,9 @@ Station placement itself does not start customer or merchant clocks.
 
 ## Produce goods
 
-Metal can be worked **directly from ore**, preserving the anvil-only horseshoe
-route. You can also purchase a **forge with its attached ore bin** and smelt
-ingots; anvils accept ingots in place of ore for horseshoes, blades, and heads. Carry each ingredient to a station and press **E**
+Metal recipes require **smelted iron ingots**. Purchase a **forge with its
+attached ore bin**, throw in raw iron ore, and smelt it before using the anvil.
+Raw ore cannot be loaded into an anvil. Carry each ingredient to a station and press **E**
 to load it, then **hold E with empty hands for five seconds** to work. Release,
 move away, jump, or get knocked back to pause; another dwarf can continue.
 Helpers never multiply work speed. Outputs drop onto each station's right tray.
@@ -63,12 +63,12 @@ At an empty anvil, select its shared recipe with keys **1–4**:
 
 | Key | Anvil recipe | Input → output |
 | --- | --- | --- |
-| 1 | Horseshoe | Ore → finished horseshoe |
-| 2 | Blade | Ore → unfinished sword |
-| 3 | Axe head | Ore → axe head |
+| 1 | Horseshoe | Ingot → finished horseshoe |
+| 2 | Blade | Ingot → unfinished sword |
+| 3 | Axe head | Ingot → axe head |
 | 4 | Assemble axe | Axe head + worked shaft → finished axe |
 
-- **Horseshoe:** needs only an anvil, replacing the old hammer recipe.
+- **Horseshoe:** smelt an ingot at the forge, then shape it at an anvil.
 - **Sword:** make a blade at an anvil, then load and work it at a grinder to sharpen it.
 - **Axe:** make a head at an anvil; make a shaft from wood at a woodworking bench;
   load both at an anvil set to recipe 4 and work to assemble the axe.
@@ -87,7 +87,7 @@ to smelt one ore into a physical ingot on the right output tray. E does not depo
 ore directly. The bin can queue multiple ore pieces and rejects other materials.
 
 Releasing E pauses the smelt; another dwarf can continue. Holding E processes the
-next queued ore. Anvils accept the resulting ingots as alternatives to raw ore.
+next queued ore. Anvils require the resulting ingots for horseshoes, blades, and axe heads.
 The forge and bin are one station: purchase, placement, relocation, and refund
 apply to both. A forge can only be packed when its bin and active job are empty.
 Bin contents, smelting progress, and ingot outputs synchronize for late joiners.
@@ -130,13 +130,16 @@ discounts):
 | Medium | 15 | 20 coins |
 | Large | 30 | 35 coins |
 
-**Intermediate storage** (blue trim) accepts ingots, unfinished swords, axe heads,
-and shafts. **Finished storage** (gold trim) accepts horseshoes, swords, and
+**Intermediate storage** uses open bins with blue trim and accepts ingots, unfinished swords, axe heads,
+and shafts. **Finished storage** uses open shelves with gold trim and accepts horseshoes, swords, and
 axes. Raw ore and wood are excluded. Each container can mix the products in its
 category; all products share its capacity. The sizes use distinct image textures.
 
 Stand beside a container and press **E** while carrying an accepted product to
-store it. With empty hands, **E** retrieves one item of the selected product
+store it. You can also **throw intermediate products into the open bins**; only
+descending compatible items are caught, up to capacity. Full bins or wrong
+products leave the item as a loose physics object. Finished shelves require
+manual storage with E and never catch thrown products. With empty hands, **E** retrieves one item of the selected product
 straight into your hands. Press **T** to cycle the product to retrieve. Selection
 is shared, and the container label shows the selected product's count and total
 capacity usage. A full or incompatible container leaves the carried item intact.

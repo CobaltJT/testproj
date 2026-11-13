@@ -480,6 +480,11 @@ func step_ore() -> void:
 		if body.linear_velocity.y >= 0:
 			for station_id in workshop.stations:
 				var entry: Dictionary = workshop.stations[station_id]
+				if entry.kind in WORKSHOP_STATE.STORAGE and WORKSHOP_STATE.STORAGE[entry.kind].group == "intermediate" and station_nodes.has(station_id) and station_nodes[station_id].get_node("PartsCatch").overlaps_body(body):
+					stored = workshop.catch_intermediate(station_id, piece_id, ore)
+					if stored:
+						collected = true
+						break
 				if entry.kind == "forge" and station_nodes.has(station_id) and station_nodes[station_id].get_node("BinCatch").overlaps_body(body):
 					stored = entry.job.store_ore(piece_id, ore)
 					if stored:

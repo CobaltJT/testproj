@@ -164,3 +164,14 @@ func cycle_storage(player: int, at: Vector2, materials: RefCounted) -> bool:
 	var entry: Dictionary = stations[id]
 	entry.selected = kinds[(kinds.find(entry.selected) + 1) % kinds.size()]
 	return true
+
+func catch_intermediate(id: int, piece: int, materials: RefCounted) -> bool:
+	if not stations.has(id) or stations[id].kind not in STORAGE or STORAGE[stations[id].kind].group != "intermediate" or not materials.is_loose(piece):
+		return false
+	var entry: Dictionary = stations[id]
+	if entry.items.size() >= STORAGE[entry.kind].capacity or materials.pieces[piece].kind not in STORAGE_PRODUCTS.intermediate:
+		return false
+	materials.pieces[piece].processing = true
+	entry.items.append(piece)
+	if entry.selected == "": entry.selected = materials.pieces[piece].kind
+	return true

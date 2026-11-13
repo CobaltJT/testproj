@@ -12,12 +12,27 @@ func update_view(entry: Dictionary, materials: RefCounted) -> void:
 	$BinWalls.collision_layer = 8 if forge else 0
 	$BinWalls.collision_mask = 4 if forge else 0
 	$BinCatch.monitoring = forge
+	var intermediate: bool = storage and preload("res://scripts/workshop_state.gd").STORAGE[entry.kind].group == "intermediate"
+	$PartsWalls.collision_layer = 8 if intermediate else 0
+	$PartsWalls.collision_mask = 4 if intermediate else 0
+	$PartsCatch.monitoring = intermediate
+	if intermediate:
+		var width: float = $Sprite.texture.get_width()
+		var height: float = $Sprite.texture.get_height()
+		$PartsWalls/Left.position = Vector2(8 - width / 2 + 1, -height / 2)
+		$PartsWalls/Right.position = Vector2(8 + width / 2 - 1, -height / 2)
+		$PartsWalls/Left.scale = Vector2(1, height / 14)
+		$PartsWalls/Right.scale = Vector2(1, height / 14)
+		$PartsWalls/Bottom.position = Vector2(8, -1.5)
+		$PartsWalls/Bottom.scale = Vector2(width / 20, 1)
+		$PartsCatch.position = Vector2(8, -height / 2)
+		$PartsCatch/Shape.scale = Vector2((width - 6) / 10, (height - 4) / 8)
 	if storage:
 		var definition: Dictionary = preload("res://scripts/workshop_state.gd").STORAGE[entry.kind]
 		var count := 0
 		for piece in entry.items:
 			if materials.pieces.has(piece) and materials.pieces[piece].kind == entry.selected: count += 1
-		$Label.text = "%s %s/%s\n%s\nE: store/take · T: cycle" % ["PARTS" if definition.group == "intermediate" else "GOODS", entry.items.size(), definition.capacity, "%s x%s" % [entry.selected.replace("_", " ").to_upper(), count] if count else "EMPTY"]
+		$Label.text = "%s %s/%s\n%s\nE: store/take · T: cycle" % ["BIN" if definition.group == "intermediate" else "SHELF", entry.items.size(), definition.capacity, "%s x%s" % [entry.selected.replace("_", " ").to_upper(), count] if count else "EMPTY"]
 		return
 	if forge:
 		$Label.text = "FORGE · BIN: %s" % entry.job.ore_queue.size()
@@ -26,7 +41,7 @@ func update_view(entry: Dictionary, materials: RefCounted) -> void:
 	var needed: Array = []
 	for ingredient in entry.job.INPUTS[entry.job.recipe]:
 		if not entry.job.slots.has(ingredient):
-			needed.append("ore / ingot" if entry.kind == "anvil" and ingredient == "ore" else ingredient.replace("_", " "))
+			needed.append(ingredient.replace("_", " "))
 	$Label.text = entry.job.recipe.replace("_", " ").to_upper()
 	if not needed.is_empty():
 		$Label.text += "\nE: " + ", ".join(needed)

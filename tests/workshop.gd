@@ -19,6 +19,12 @@ func work(job: RefCounted, materials: RefCounted, primary: int) -> void:
 	check(job.step(2.9, other, materials) == -1, "Handoff cannot finish before five seconds")
 	check(job.step(0.1, other, materials) == primary, "Handoff finishes exactly one output at five seconds")
 func load_ingredient(job: RefCounted, materials: RefCounted, id: int, who: int = 1) -> void:
+	if job.kind == "anvil" and materials.pieces[id].kind == "ore":
+		var forge = JOB.new()
+		forge.configure("forge")
+		forge.store_ore(id, materials)
+		var workers: Array[int] = [who]
+		forge.step(5, workers, materials)
 	check(materials.pickup(who, id) and job.load_material(who, materials), "Correct ingredient loads from hands")
 func _initialize() -> void:
 	var model = WORKSHOP.new()
@@ -42,10 +48,10 @@ func _initialize() -> void:
 	check(not model.pack(1, Vector2(160, 136), materials), "Loaded station cannot be packed or refunded")
 	var snapshot = WORKSHOP.new()
 	snapshot.restore(model.snapshot())
-	check(snapshot.stations[anvil].at == Vector2(160, 136) and snapshot.stations[anvil].job.slots.ore == 0, "Snapshot preserves locations and loaded jobs")
+	check(snapshot.stations[anvil].at == Vector2(160, 136) and snapshot.stations[anvil].job.slots.ingot == 0, "Snapshot preserves locations and loaded jobs")
 	var job = model.stations[anvil].job
 	work(job, materials, 0)
-	check(materials.pieces[0].kind == "horseshoe" and materials.is_loose(0), "Horseshoe needs only raw ore and anvil")
+	check(materials.pieces[0].kind == "horseshoe" and materials.is_loose(0), "Horseshoe requires a smelted ingot and anvil")
 	job.select("blade")
 	load_ingredient(job, materials, 1)
 	work(job, materials, 1)

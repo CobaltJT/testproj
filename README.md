@@ -231,10 +231,22 @@ reconnects and day changes. The host owns all transport movement and purchases.
 ## HUD and help
 
 The gameplay HUD shows shared coins/reputation, the day phase and shop clock,
-the local dwarf's held item and EXP, unspent skill points, and the front
-customer's progress/timer with a queued-customer count. A merchant notice shows
-live wood price and stock only while the merchant is present. Level-up points
-remain highlighted until spent. The Workshop and Leave buttons stay available.
+the held item's icon, EXP, and highlighted unspent skill points. Small customer
+and merchant icons appear only while those visitors are present; the customer
+icon includes the waiting count. There is no text customer panel or empty-hands
+label.
+
+Customers have screen-space cards above them with a product icon, quantity still
+needed, and remaining time. Amber marks the front request awaiting a decision,
+green marks an accepted order, and gray marks queued customers. Merchant cards
+show a wood icon, stock, price and remaining visit time. Cards follow their
+visitors and stay the same size as the camera moves. Station recipes use icons,
+and work progress uses bars without progress text. Mine labels are removed.
+
+Concise notifications cover accepted orders, customer/merchant arrivals,
+completed or failed requests, unanswered expiry, shop opening/closing and new
+days. Shared event notifications are queued, and joining players do not replay
+historical events. Detailed action feedback remains in the F1 guide.
 
 **Hold F1** for the complete controls and gameplay field guide; release it to
 return to the uncluttered view. It covers movement, crafting recipes, mining,
@@ -242,8 +254,8 @@ storage, customers, skills, building, rails, carts and elevators. It does not
 pause the game. Connection details and recent detailed feedback live there too.
 
 Map control captions and debug-style character labels have been removed.
-Placeable names, requirements, counts and progress appear near the local dwarf;
-customer details are consolidated into the HUD. Short action notifications fade
+Product icons, storage counts and progress bars appear near the local dwarf;
+visitor details appear on their overhead cards. Short action notifications fade
 away, while persistent control instructions stay in the F1 overlay.
 
 ## Daily cycle

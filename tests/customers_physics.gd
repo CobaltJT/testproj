@@ -46,7 +46,7 @@ func run() -> void:
 	Input.action_release("interact")
 	await frames(5)
 	check(session.orders.coins == 110 and session.orders.completed == 0 and session.orders.reputation == 0 and session.ore.carried_by(1) == -1, "Real E action delivers one item without completing whole request")
-	check("1/2" in session.order_label.text and session.customer_nodes.has(1), "Customer and partial quantity stay visible")
+	check(session.hud.order_cards[1].count.text == "×1" and session.customer_nodes.has(1), "Customer and partial quantity stay visible")
 	session.ore.pieces[1].kind = "horseshoe"
 	session.ore.pickup(1, 1)
 	session.refresh_ore()

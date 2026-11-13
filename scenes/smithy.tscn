@@ -119,10 +119,5 @@ shape = SubResource("MineRight")
 position = Vector2(390, 532)
 scale = Vector2(0.172043, 1)
 shape = SubResource("MineRight")
-[node name="MineEntrance" type="Label" parent="."]
-z_index = 10
-offset_left = 360.0
-offset_top = 251.0
-theme_override_font_sizes/font_size = 8
-text = "Mine entrance"
-mouse_filter = 2
+[node name="MineEntrance" type="Marker2D" parent="."]
+position = Vector2(390, 288)

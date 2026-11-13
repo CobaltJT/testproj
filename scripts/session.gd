@@ -207,6 +207,7 @@ func host_game() -> void:
 	leave_button.show()
 	reset_ore(true)
 	spawn_player(1, Vector2(220, 216))
+	if hud != null: hud.reset_events()
 	update_status()
 
 func join_game() -> void:
@@ -242,6 +243,7 @@ func client_ready() -> void:
 	receive_progression.rpc_id(id, progression.snapshot())
 	receive_day.rpc_id(id, cycle.snapshot())
 	receive_transport.rpc_id(id, transport.snapshot())
+	initialize_hud_events.rpc_id(id)
 
 @rpc("authority", "call_local", "reliable")
 func spawn_player(id: int, at: Vector2) -> void:
@@ -611,7 +613,7 @@ func refresh_orders() -> void:
 			customer_nodes[id].free()
 			customer_nodes.erase(id)
 	if order_label != null:
-		order_label.visible = active
+		order_label.visible = false
 		var text := "No customers"
 		if not orders.queue.is_empty():
 			var order: Dictionary = orders.queue[0]
@@ -694,12 +696,9 @@ func refresh_mining() -> void:
 		var job = mine_veins[vein]
 		var view: Node2D = vein_nodes[vein]
 		view.get_node("Progress").value = job.progress
-		var duration: float = MINING_STATE.DURATION / progression.speed(job.worker if job.worker != 0 else multiplayer.get_unique_id(), "mining")
-		var text := "Ore vein · %.1fs" % duration
-		if cycle.phase != "shop": text = "VEIN CLOSED"
-		elif job.progress > 0:
-			text = "%s %s%% · %.1fs per ore" % ["MINING" if job.worker != 0 else "PAUSED", roundi(job.progress / MINING_STATE.DURATION * 100), duration]
-		view.get_node("WorkLabel").text = text
+		view.get_node("Progress").visible = job.progress > 0
+		view.get_node("WorkLabel").text = ""
+		view.get_node("WorkLabel").hide()
 
 @rpc("any_peer", "call_remote", "reliable")
 func request_recipe(choice: String) -> void:
@@ -740,7 +739,7 @@ func receive_merchant(state: Dictionary) -> void:
 func refresh_merchant() -> void:
 	merchant_node.visible = active and merchant.remaining > 0
 	if merchant_label != null:
-		merchant_label.visible = active
+		merchant_label.visible = false
 		if cycle.phase != "shop":
 			merchant_label.text = "Merchant visits during shop hours."
 			return
@@ -837,7 +836,7 @@ func refresh_ore() -> void:
 		body.collision_mask = 29 if loose and multiplayer.is_server() else 0
 		if ore.pieces[piece_id].kind == "ore_bin":
 			body.get_node("Catch").monitoring = loose and multiplayer.is_server()
-			body.get_node("Count").text = "PARTS %s/10" % ore.pieces[piece_id].contents.size()
+			body.get_node("Count").text = "%s/10" % ore.pieces[piece_id].contents.size()
 	for id in players:
 		var carried: int = ore.carried_by(id)
 		players[id].get_node("CarriedOre").visible = carried != -1
@@ -1113,9 +1112,9 @@ func decide_order_for(id: int, order_id: int, accept: bool) -> void:
 	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
 		return
 	var changed: bool = orders.decide(id, players[id].position, order_id, accept, progression.reject_cost(id))
-	var message := "Request accepted: deliver within 30 seconds (+2 reputation)." if accept else "Request rejected: -%s reputation." % progression.reject_cost(id)
+	var message := "Order accepted · 30s" if accept else "Order declined · −%s rep" % progression.reject_cost(id)
 	if not changed:
-		message = "Decide on the front request at the counter. Already accepted or stale requests cannot be rejected."
+		message = "No request to decide"
 	feedback_for(id, message)
 	broadcast_state("receive_orders", [orders.snapshot()])
 	refresh_orders()
@@ -1551,7 +1550,7 @@ func refresh_transport() -> void:
 			world.add_child(cart_nodes[id])
 		cart_nodes[id].position = transport.carts[id].at
 		cart_nodes[id].get_node("Catch").monitoring = active and multiplayer.is_server()
-		cart_nodes[id].get_node("Count").text = "ORE %s/25" % transport.carts[id].items.size()
+		cart_nodes[id].get_node("Count").text = "%s/25" % transport.carts[id].items.size()
 	if transport_info != null:
 		transport_info.text = "Elevator: %s/3 segments · Rails: %s · Carts: %s" % [transport.upgrades, transport.tracks.size(), transport.carts.size()]
 		var id := multiplayer.get_unique_id()
@@ -1560,3 +1559,7 @@ func refresh_transport() -> void:
 			transport_buttons[level].disabled = level != transport.upgrades + 1
 		transport_buttons.rail.text = "Buy rail section · %s coins" % progression.purchase_price(id, TRANSPORT.RAIL_PRICE)
 		transport_buttons.cart.text = "Buy mine cart · %s coins (stand beside rails)" % progression.purchase_price(id, TRANSPORT.CART_PRICE)
+
+@rpc("authority", "call_remote", "reliable")
+func initialize_hud_events() -> void:
+	if hud != null: hud.reset_events()

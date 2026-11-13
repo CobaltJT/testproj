@@ -27,13 +27,13 @@ func run() -> void:
 	var camera: Camera2D = dwarf.get_node("FollowCamera")
 	check(root.get_camera_2d() == camera and camera.enabled, "Local dwarf owns active gameplay camera")
 	check(absf(height_in_world() - MAP.CAMERA_HEIGHT) < 0.1, "Actual camera canvas shows 160 world pixels: two floors")
-	var hud: Vector2 = session.order_label.get_global_transform_with_canvas().origin
+	var hud: Vector2 = session.hud.shop.get_global_transform_with_canvas().origin
 	dwarf.position = Vector2(400, 216)
 	dwarf.velocity = Vector2.ZERO
 	await frames(60)
 	check(camera.get_screen_center_position().distance_to(dwarf.global_position - Vector2(0, 64)) < 2, "Camera follows horizontal movement")
 	check(dwarf.is_on_floor(), "Ground floor supports the followed dwarf")
-	check(session.order_label.get_global_transform_with_canvas().origin == hud, "HUD stays fixed while camera moves")
+	check(session.hud.shop.get_global_transform_with_canvas().origin == hud, "HUD stays fixed while camera moves")
 	dwarf.position = Vector2(400, 136)
 	dwarf.velocity = Vector2.ZERO
 	await frames(60)

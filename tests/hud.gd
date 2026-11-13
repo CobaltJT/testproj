@@ -18,7 +18,7 @@ func run() -> void:
 	await frames(10)
 	check(session.hud.visible and not session.hud.help_layer.visible, "Compact HUD is visible and guide is hidden by default")
 	check(not session.hud.connection_panel.visible and not session.recipe_label.visible and not session.hint.visible, "Network panel and persistent control hint lines are hidden during play")
-	check("Coins: 100" in session.hud.shop.text and "Rep: 0" in session.hud.shop.text and session.hud.held.text == "Empty hands", "HUD reports shop and player inventory")
+	check("Coins: 100" in session.hud.shop.text and "Rep: 0" in session.hud.shop.text and session.hud.held.text == "" and not session.hud.held.visible, "HUD reports shop and player inventory")
 	for panel in session.hud.panels:
 		check(root.get_visible_rect().encloses(panel.get_global_rect()), "HUD card fits the default viewport")
 	var old_day: Vector2 = session.day_label.get_global_rect().position
@@ -37,7 +37,7 @@ func run() -> void:
 	session.ore.pickup(1, 0)
 	session.refresh_ore()
 	await frames(3)
-	check(session.hud.held.text == "Ore" and session.hud.held_icon.texture != null, "Held item name and image update")
+	check(not session.hud.held.visible and session.hud.held_icon.texture != null, "Held item uses an icon without persistent text")
 	for i in range(2): session.award_exp(1, "delivery")
 	await frames(3)
 	check("+1 skill" in session.progression_label.text, "Level-up leaves visible unspent skill indicator")

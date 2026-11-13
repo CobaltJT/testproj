@@ -372,7 +372,7 @@ func client_scenarios() -> void:
 		await press("interact")
 	await stage("partial")
 	check(await until(func(): return not session.orders.queue.is_empty() and session.orders.queue[0].get("quantity", 1) == 2 and session.orders.queue[0].get("delivered", 0) == 1 and session.orders.coins == 40), "Client observes exact partial delivery and per-item earnings")
-	check("1/2" in session.order_label.text, "HUD shows delivered and requested quantities")
+	check(session.hud.order_cards[101].count.text == "×1", "HUD shows delivered and requested quantities")
 	done("partial")
 	await stage("sell_axe")
 	if role == "client2":

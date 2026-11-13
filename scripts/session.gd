@@ -527,7 +527,7 @@ func refresh_orders() -> void:
 		var order: Dictionary = orders.queue[i]
 		var target := 120.0 - i * 20
 		var at := lerpf(70, target, minf(1, order.age / CUSTOMER_STATE.WALK_TIME))
-		show_customer(order.id, Vector2(at, 216), "%s: %s %ss" % ["DELIVER" if order.accepted else ("DECIDE" if i == 0 else "WAIT"), order.kind.to_upper(), ceili(order.remaining)], false)
+		show_customer(order.id, Vector2(at, 216), "%s: %s %s/%s · %ss" % ["DELIVER" if order.accepted else ("DECIDE" if i == 0 else "WAIT"), order.kind.to_upper(), order.get("delivered", 0), order.get("quantity", 1), ceili(order.remaining)], false)
 		live[order.id] = true
 	for departure in orders.departures:
 		var at := lerpf(70, departure.x, departure.remaining / CUSTOMER_STATE.WALK_TIME)
@@ -543,7 +543,7 @@ func refresh_orders() -> void:
 		for i in range(orders.queue.size()):
 			var order: Dictionary = orders.queue[i]
 			var phase := "DELIVER" if order.accepted else ("Y accept / N reject" if i == 0 else "waiting for counter")
-			text += "\n%s #%s: %s · %s · %ss · %sg" % ["FRONT" if i == 0 else "QUEUED", order.id, order.kind.capitalize(), phase, ceili(order.remaining), progression.sale_price(multiplayer.get_unique_id(), CUSTOMER_STATE.PRICES[order.kind])]
+			text += "\n%s #%s: %s %s/%s · %s · %ss · %sg each" % ["FRONT" if i == 0 else "QUEUED", order.id, order.kind.capitalize(), order.get("delivered", 0), order.get("quantity", 1), phase, ceili(order.remaining), progression.sale_price(multiplayer.get_unique_id(), CUSTOMER_STATE.PRICES[order.kind])]
 		text += "\nNext arrival: %ss · E serves FRONT only" % ceili(orders.until_arrival) if cycle.phase == "shop" else "\nShop closed to new arrivals · E serves FRONT only"
 		order_label.text = text
 
@@ -684,9 +684,15 @@ func interact_for(id: int) -> void:
 	if near_mine(dwarf):
 		message = "Mine closed until shop hours." if cycle.phase != "shop" else "Hold E with empty hands to mine ore. Prospector speeds up extraction."
 	elif absf(dwarf.position.x - 166) <= 30 and absf(dwarf.position.y - 216) <= 6 and not orders.queue.is_empty() and carried != -1:
-		var product: String = orders.queue[0].kind
+		var request: Dictionary = orders.queue[0]
+		var product: String = request.kind
+		var completed_before: int = orders.completed
 		var sold: bool = orders.deliver(id, dwarf.position, ore, 1.0 + 0.1 * progression.rank(id, "sales"))
-		message = "%s delivered! +%s coins, +2 reputation." % [product.capitalize(), progression.sale_price(id, CUSTOMER_STATE.PRICES[product])] if sold else ("Y: accept or N: reject this request first." if not orders.queue[0].accepted else "Front customer needs a %s." % product)
+		if sold:
+			var result := "Order complete! +2 reputation." if orders.completed > completed_before else "%s more needed." % (request.get("quantity", 1) - request.delivered)
+			message = "%s delivered! +%s coins. %s" % [product.capitalize(), progression.sale_price(id, CUSTOMER_STATE.PRICES[product]), result]
+		else:
+			message = "Y: accept or N: reject this request first." if not request.accepted else "Front customer needs a %s." % product
 		if sold:
 			award_exp(id, "delivery")
 		broadcast_state("receive_orders", [orders.snapshot()])

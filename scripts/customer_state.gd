@@ -1,7 +1,5 @@
 extends RefCounted
 ## Front-only service: decide within 10 seconds, then fulfill within 30 seconds.
-const FIRST_VISIT := 8.0
-const ARRIVAL_INTERVAL := 20.0
 const DECISION_TIME := 10.0
 const PATIENCE := 30.0
 const WALK_TIME := 2.0
@@ -12,7 +10,8 @@ const FAIL_PENALTY := 6
 const SUCCESS_REWARD := 2
 var queue: Array = []
 var departures: Array = []
-var until_arrival := FIRST_VISIT
+var rng := RandomNumberGenerator.new()
+var until_arrival := 0.0
 var number := 0
 var completed := 0
 var missed := 0
@@ -23,6 +22,28 @@ var spent := 0
 var refunds := 0
 var coins := 100
 var reputation := 0
+
+func _init() -> void:
+	rng.randomize()
+	reset_arrival()
+
+func difficulty_tier() -> int:
+	return clampi(floori(maxi(0, reputation) / 10.0), 0, 9)
+
+func max_quantity() -> int:
+	return 1 + difficulty_tier()
+
+func arrival_range() -> Vector2:
+	var tier := difficulty_tier()
+	return Vector2(18.0 - 1.3 * tier, 26.0 - 1.8 * tier)
+
+func reset_arrival() -> void:
+	var interval := arrival_range()
+	until_arrival = rng.randf_range(interval.x, interval.y)
+
+func seed_rng(value: int) -> void:
+	rng.seed = value
+	reset_arrival()
 
 func at_counter(player: int, at: Vector2) -> bool:
 	return player > 0 and at.is_finite() and absf(at.x - 166) <= 30 and absf(at.y - 216) <= 6
@@ -60,8 +81,8 @@ func step(delta: float, arrivals: bool = true) -> void:
 				depart(expired, 0, false, "unanswered")
 		if arrivals and until_arrival <= 0.000001:
 			number += 1
-			queue.append({"id": number, "kind": PRODUCTS[(number - 1) % PRODUCTS.size()], "remaining": DECISION_TIME, "age": 0.0, "accepted": false})
-			until_arrival += ARRIVAL_INTERVAL
+			queue.append({"id": number, "kind": PRODUCTS[rng.randi_range(0, PRODUCTS.size() - 1)], "remaining": DECISION_TIME, "age": 0.0, "accepted": false, "quantity": rng.randi_range(1, max_quantity()), "delivered": 0})
+			reset_arrival()
 
 func depart(order: Dictionary, index: int, served: bool, reason: String = "fulfilled") -> void:
 	departures.append({"id": order.id, "kind": order.kind, "remaining": WALK_TIME, "served": served, "reason": reason, "x": 120.0 - index * 20})
@@ -96,16 +117,19 @@ func deliver(player: int, at: Vector2, materials: RefCounted, sale_multiplier: f
 	var reward := ceili(PRICES[first.kind] * sale_multiplier - 0.000001)
 	coins += reward
 	earned += reward
-	completed += 1
-	reputation += SUCCESS_REWARD
-	depart(first, 0, true)
-	queue.pop_front()
+	first.delivered = first.get("delivered", 0) + 1
+	if first.delivered >= first.get("quantity", 1):
+		completed += 1
+		reputation += SUCCESS_REWARD
+		depart(first, 0, true)
+		queue.pop_front()
 	return true
 
 func snapshot() -> Dictionary:
-	return {"earned": earned, "spent": spent, "refunds": refunds, "queue": queue.duplicate(true), "departures": departures.duplicate(true), "until_arrival": until_arrival, "number": number, "completed": completed, "missed": missed, "rejected": rejected, "unanswered": unanswered, "coins": coins, "reputation": reputation}
+	return {"rng_state": rng.state, "earned": earned, "spent": spent, "refunds": refunds, "queue": queue.duplicate(true), "departures": departures.duplicate(true), "until_arrival": until_arrival, "number": number, "completed": completed, "missed": missed, "rejected": rejected, "unanswered": unanswered, "coins": coins, "reputation": reputation}
 
 func restore(state: Dictionary) -> void:
+	rng.state = state.rng_state
 	earned = state.earned
 	spent = state.spent
 	refunds = state.refunds

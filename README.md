@@ -124,9 +124,8 @@ Each new session begins on **Day 1, Morning**. Morning lasts until any connected
 player presses **Open shop**. There are no customer arrivals or merchant visits,
 and the mine is closed. Players can prepare, rearrange stations, and craft.
 
-**Shop hours last 120 seconds.** The mine opens, customers arrive first after
-8 seconds and then every 20 seconds, and merchants follow their normal visit
-schedule. The HUD shows the shared day, phase, and time until closing.
+**Shop hours last 120 seconds.** The mine opens, customers arrive at randomized
+intervals based on reputation, and merchants follow their normal visit schedule. The HUD shows the shared day, phase, and time until closing.
 
 At closing, **Evening** begins: no new customers appear, the merchant leaves,
 and the mine closes. Existing requests retain their decision and fulfilment
@@ -145,24 +144,47 @@ duplicate transition requests cannot skip phases or open the next day.
 
 ## Customers and reputation
 
-After the shop opens, the first customer arrives at 8 seconds, then one arrives
-every 20 seconds independently of the queue. Requests rotate through horseshoe,
-sword, and axe. At the counter, press **Y** to accept or **N** to reject the
+After the shop opens, customers arrive independently of the queue. The host
+randomly chooses **horseshoe, sword, or axe** for each request with equal odds;
+consecutive customers can request the same product. Each request contains
+**one product kind**, with a random quantity from 1 to the current maximum.
+
+Reputation sets the difficulty tier: one tier per **10 reputation**, capped at
+tier 9. Negative reputation uses tier 0. The first arrival of each day and every
+subsequent arrival use a freshly randomized interval:
+
+| Reputation | Random arrival interval | Quantity per request |
+| --- | --- | --- |
+| 0–9 (and negative) | 18–26 seconds | 1 |
+| 10–19 | 16.7–24.2 seconds | 1–2 |
+| 50–59 | 11.5–17 seconds | 1–6 |
+| 90+ | 6.3–9.8 seconds | 1–10 |
+
+Each interval is sampled when scheduled; reputation changes affect future
+scheduled intervals and newly arriving orders. Existing quantities stay fixed.
+
+At the counter, press **Y** to accept or **N** to reject the
 front customer's request within **10 seconds**. This decision timer starts once
 they reach the front; queued customers retain their full decision window.
 Rejecting or leaving a request unanswered costs **3 reputation**.
 
 Accepting starts a separate **30-second** fulfilment timer. Carry the exact
 finished product to the left counter and press **E**. Only the **front customer**
-can be served. Horseshoes sell for **10 coins**, swords for **15**, and axes for
-**25**. Timely delivery gives **+2 shared reputation**; failing an accepted order
-costs **6 reputation**. Accepted orders cannot be rejected. The HUD shows each
-request's phase, timer, coins, and reputation, which can fall below zero.
+can be served. Players can deliver one item at a time cooperatively; the HUD
+shows **delivered / requested**. Horseshoes sell for **10 coins each**, swords for
+**15**, and axes for **25**, before the delivering dwarf's sales bonus. Each item
+pays immediately and earns **5 EXP** for its deliverer. Partial deliveries do not
+reset the timer or award reputation. Completing the entire request gives
+**+2 shared reputation** and counts as one served request in the daily report.
+Failing an accepted order, including a partially delivered one, costs **6
+reputation** and counts as one failed request. Already delivered items remain
+sold and paid. Accepted orders cannot be rejected. The HUD shows each request's
+phase, quantity, timer, unit price, coins, and reputation, which can fall below zero.
 
 ## Player progression
 
 Every dwarf starts at level 1. Completing a mining cycle earns **2 EXP**, station
-work earns **3 EXP**, and delivering an accepted order earns **5 EXP**. Work EXP
+work earns **3 EXP**, and delivering each requested item earns **5 EXP**. Work EXP
 goes to the worker who finishes the cycle, including after a handoff. Picking up,
 buying, loading, placing, and rejecting do not grant EXP.
 

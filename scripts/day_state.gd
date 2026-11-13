@@ -43,7 +43,7 @@ func step(delta: float, orders: RefCounted, merchant: RefCounted) -> void:
 			remaining = SHOP_DURATION
 			baseline = totals(orders)
 			summary.clear()
-			orders.until_arrival = orders.FIRST_VISIT
+			orders.reset_arrival()
 			merchant.until_visit = merchant.FIRST_VISIT
 			merchant.remaining = 0
 			merchant.stock = 0

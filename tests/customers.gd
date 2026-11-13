@@ -11,8 +11,11 @@ func _initialize() -> void:
 	var ore = ORE.new()
 	var orders = ORDERS.new()
 	var counter := Vector2(166, 216)
+	orders.until_arrival = 8
 	orders.step(8)
-	check(orders.queue.size() == 1 and orders.coins == 100, "First arrival after eight seconds")
+	orders.queue[0].kind = "horseshoe"
+	orders.until_arrival = 20
+	check(orders.queue.size() == 1 and orders.coins == 100, "Scheduled first arrival")
 	check(not orders.decide(1, counter, 1, true), "Cannot accept while walking in")
 	orders.step(2)
 	check(orders.queue[0].remaining == 10, "Walking does not consume decision time")
@@ -47,6 +50,8 @@ func _initialize() -> void:
 	check(copy.rejected == 2 and copy.unanswered == 1 and copy.missed == 1 and copy.reputation == -10, "Snapshot preserves decision outcomes and economy")
 	var a = ORDERS.new()
 	var b = ORDERS.new()
+	a.seed_rng(12345)
+	b.seed_rng(12345)
 	a.step(100)
 	for i in range(1000): b.step(0.1)
 	check(a.number == b.number and a.rejected == b.rejected and a.reputation == b.reputation and a.queue.size() == b.queue.size(), "Large and small clock steps agree")

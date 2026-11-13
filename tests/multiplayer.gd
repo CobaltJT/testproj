@@ -156,7 +156,7 @@ func host_scenarios() -> void:
 	carry(c2, 2)
 	move_peer(c1, Vector2(166, 216))
 	move_peer(c2, Vector2(166, 216))
-	session.orders.queue = [{"id": 101, "kind": "sword", "remaining": 10.0, "age": 2.0, "accepted": false}, {"id": 102, "kind": "axe", "remaining": 10.0, "age": 2.0, "accepted": false}]
+	session.orders.queue = [{"id": 101, "kind": "sword", "quantity": 2, "delivered": 0, "remaining": 10.0, "age": 2.0, "accepted": false}, {"id": 102, "kind": "axe", "remaining": 10.0, "age": 2.0, "accepted": false}]
 	session.orders.number = 102
 	session.orders.until_arrival = 20
 	session.orders.reputation = 0
@@ -167,10 +167,19 @@ func host_scenarios() -> void:
 	check(await until(func(): return reports("wrong")), "Clients observe front-only queue rejection")
 	check(session.orders.completed == 0 and session.ore.carried_by(c2) == 2, "Axe cannot skip front sword order")
 	sync.begin.rpc("sell_sword")
-	check(await until(func(): return session.orders.completed == 1), "Finished sharpened sword sells")
+	check(await until(func(): return not session.orders.queue.is_empty() and session.orders.queue[0].get("delivered", 0) == 1), "First sword partially fills two-item order")
+	sync.begin.rpc("partial")
+	check(await until(func(): return reports("partial")), "Partial quantity and payment replicate before completion")
+	check(session.orders.completed == 0 and session.orders.reputation == 0, "Partial delivery does not complete request or reward reputation")
+	session.ore.pieces[5].kind = "sword"
+	carry(1, 5)
+	move_peer(1, Vector2(166, 216))
+	session.refresh_ore()
+	session.interact_for(1)
+	check(session.orders.completed == 1, "Host completes client's partial order cooperatively")
 	sync.begin.rpc("sell_axe")
 	check(await until(func(): return session.orders.completed == 2), "Assembled axe sells next")
-	check(session.orders.coins == 65 and session.orders.reputation == 4, "Correct item rewards reach shared economy")
+	check(session.orders.coins == 80 and session.orders.reputation == 4, "Correct item rewards reach shared economy")
 	session.orders.queue = [{"id": 103, "kind": "horseshoe", "remaining": 0.5, "age": 29.5, "accepted": true}]
 	session.orders.step(0.5)
 	broadcast()
@@ -185,7 +194,7 @@ func host_scenarios() -> void:
 	await frames(10)
 	sync.begin.rpc("refund")
 	check(await until(func(): return sid("grinder") == -1 and not session.workshop.pending.has(c1)), "Packing then cancelling refunds station")
-	check(session.orders.coins == 90, "Refund adds original price exactly once")
+	check(session.orders.coins == 105, "Refund adds original price exactly once")
 	# Add the restored forge with its integral, physical ore bin.
 	session.purchase_for(1, "forge")
 	session.place_for(1, Vector2(240, 136))
@@ -206,7 +215,7 @@ func host_scenarios() -> void:
 	sync.begin.rpc("forge_move")
 	check(await until(func(): return reports("forge_move")), "Client relocates forge and attached bin together")
 	check(session.workshop.stations[sid("forge")].at == Vector2(160, 288), "Relocated forge position authoritative")
-	check(session.orders.coins == 65, "Forge and bin share one purchase price")
+	check(session.orders.coins == 80, "Forge and bin share one purchase price")
 	check(session.progression.dwarfs[c1].level > 1 and session.progression.dwarfs[c2].level > 1, "Completed tasks and deliveries award personal EXP on host")
 	for peer in [c1, c2]:
 		while session.progression.dwarfs[peer].points < 1: session.award_exp(peer, "delivery")
@@ -225,7 +234,7 @@ func host_scenarios() -> void:
 	broadcast()
 	sync.begin.rpc("rejoin")
 	check(await until(func(): return reports("rejoin")), "Reconnect restores placed stations, jobs, inputs and economy")
-	check(session.orders.coins == 65 and session.workshop.pending.is_empty(), "Disconnect refunds abandoned kit")
+	check(session.orders.coins == 80 and session.workshop.pending.is_empty(), "Disconnect refunds abandoned kit")
 	session.orders.queue.clear()
 	session.orders.departures.clear()
 	session.cycle.remaining = 0.01
@@ -235,7 +244,7 @@ func host_scenarios() -> void:
 	sync.begin.rpc("next_morning")
 	check(await until(func(): return session.cycle.day == 2 and session.cycle.phase == "morning"), "Remote close advances shared day once")
 	check(await until(func(): return reports("next_morning")), "Both clients fade into next morning")
-	check(session.orders.coins == 65 and session.workshop.stations.size() == 3, "New morning preserves money and workshop")
+	check(session.orders.coins == 80 and session.workshop.stations.size() == 3, "New morning preserves money and workshop")
 	sync.begin.rpc("finished")
 	await frames(5)
 	session.disconnect_game("Done")
@@ -300,13 +309,17 @@ func client_scenarios() -> void:
 		await press("accept_order")
 		check(await until(func(): return not session.orders.queue.is_empty() and session.orders.queue[0].accepted), "Remote acceptance replicated")
 		await press("interact")
+	await stage("partial")
+	check(await until(func(): return not session.orders.queue.is_empty() and session.orders.queue[0].get("quantity", 1) == 2 and session.orders.queue[0].get("delivered", 0) == 1 and session.orders.coins == 40), "Client observes exact partial delivery and per-item earnings")
+	check("1/2" in session.order_label.text, "HUD shows delivered and requested quantities")
+	done("partial")
 	await stage("sell_axe")
 	if role == "client2":
 		await press("accept_order")
 		check(await until(func(): return not session.orders.queue.is_empty() and session.orders.queue[0].accepted), "Next remote acceptance replicated")
 		await press("interact")
 	await stage("expire")
-	check(session.orders.coins == 65 and session.orders.reputation == -2, "Shared rewards and expiry penalty replicated")
+	check(session.orders.coins == 80 and session.orders.reputation == -2, "Shared rewards and expiry penalty replicated")
 	done("expire")
 	await stage("move")
 	if role == "client1":
@@ -360,7 +373,7 @@ func client_scenarios() -> void:
 		session.disconnect_game("Reconnect")
 		await frames(15)
 		session.join_game()
-		check(await until(func(): return session.players.size() == 3 and session.workshop.stations.size() == 3 and session.orders.coins == 65), "Reconnect receives layout and abandoned-kit refund")
+		check(await until(func(): return session.players.size() == 3 and session.workshop.stations.size() == 3 and session.orders.coins == 80), "Reconnect receives layout and abandoned-kit refund")
 		check(root.get_camera_2d() == session.players[session.multiplayer.get_unique_id()].get_node("FollowCamera"), "Reconnect attaches camera to new local dwarf")
 		check(await until(func(): return session.progression.dwarfs.size() == 3), "Late join receives progression snapshot")
 		check(session.progression.dwarfs[session.multiplayer.get_unique_id()].level == 1, "New connection starts its own session dwarf progression")
@@ -368,7 +381,7 @@ func client_scenarios() -> void:
 	done("rejoin")
 	await stage("day_summary")
 	check(await until(func(): return session.cycle.phase == "summary" and session.day_popup.get_parent().visible), "Shared daily popup appears")
-	check(session.cycle.summary.earned == 40 and session.cycle.summary.served == 2, "Daily report includes actual shared deliveries")
+	check(session.cycle.summary.earned == 55 and session.cycle.summary.served == 2, "Daily report includes actual shared deliveries")
 	done("day_summary")
 	await stage("next_morning")
 	if role == "client1": session.next_day_button.pressed.emit()

@@ -21,16 +21,16 @@ func run() -> void:
 	Input.action_press("build_menu")
 	await frames(2)
 	Input.action_release("build_menu")
-	check(session.catalog.visible and session.catalog_tabs.get_tab_count() == 3, "TAB offers Build and Skills")
-	session.catalog_tabs.current_tab = 1
+	check(session.workshop_ui.visible and session.workshop_ui.tabs.get_tab_count() == 3, "TAB offers Build and Skills")
+	session.workshop_ui.tabs.current_tab = 1
 	await frames(5)
-	check(Rect2(Vector2.ZERO, root.get_visible_rect().size).encloses(session.catalog.get_global_rect()), "Build and Skills panel fits default viewport")
-	check(session.skill_buttons.walking.disabled and session.progression_label.visible, "Skills require points and HUD shows personal progress")
+	check(Rect2(Vector2.ZERO, root.get_visible_rect().size).encloses(session.workshop_ui.get_global_rect()), "Build and Skills panel fits default viewport")
+	check(session.workshop_ui.skill_buttons.walking.disabled and session.hud.progression_label.visible, "Skills require points and HUD shows personal progress")
 	for i in range(2): session.award_exp(1, "delivery")
-	session.skill_buttons.walking.pressed.emit()
+	session.workshop_ui.skill_buttons.walking.pressed.emit()
 	check(session.progression.rank(1, "walking") == 1 and is_equal_approx(session.players[1].walking_multiplier, 1.1), "Skill button spends earned point and changes movement")
 	for i in range(3): session.award_exp(1, "delivery")
-	session.skill_buttons.mining.pressed.emit()
+	session.workshop_ui.skill_buttons.mining.pressed.emit()
 	var dwarf = session.players[1]
 	dwarf.position = session.MINE_POSITION
 	dwarf.velocity = Vector2.ZERO
@@ -100,6 +100,6 @@ func run() -> void:
 	Input.action_release("interact")
 	check(session.ore.pieces[wood].kind == "shaft", "Woodworking skill accelerates woodbench separately")
 	session.disconnect_game("Done")
-	check(session.progression.dwarfs.is_empty() and not session.progression_label.visible, "Leaving resets session progression")
+	check(session.progression.dwarfs.is_empty() and not session.hud.progression_label.visible, "Leaving resets session progression")
 	print("PROGRESSION INTERACTION RESULT: ", failures, " failures")
 	quit(1 if failures else 0)

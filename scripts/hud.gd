@@ -1,5 +1,11 @@
 extends Control
 ## Presentation only: local HUD and hold-to-read controls, outside world camera transforms.
+signal workshop_requested
+signal day_advance_requested
+var day_label: Label
+var open_button: Button
+var progression_label: Label
+var build_button: Button
 var game: Node
 var connection_panel: Control
 var shop: Label
@@ -68,12 +74,6 @@ func label(text: String, size: int = 14) -> Label:
 	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return node
 
-func move_label(node: Control, parent: Node, size: int) -> void:
-	node.reparent(parent)
-	node.position = Vector2.ZERO
-	node.add_theme_font_size_override("font_size", size)
-	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
 func bar(parent: Node) -> ProgressBar:
 	var node := ProgressBar.new()
 	node.custom_minimum_size.y = 5
@@ -100,15 +100,18 @@ func setup(session: Node, layer: CanvasLayer, menu_panel: Control) -> void:
 	store.add_child(label("SMITHY", 12))
 	shop = label("", 17)
 	store.add_child(shop)
-	move_label(game.merchant_label, store, 12)
 	var day := card(Vector2(0.5, 0), Vector2(-150, 16), 300)
-	move_label(game.day_label, day, 16)
+	day_label = label("", 16)
+	day.add_child(day_label)
 	day_bar = bar(day)
-	game.open_button.reparent(day)
-	game.open_button.position = Vector2.ZERO
-	game.open_button.text = "Open shop"
+	open_button = Button.new()
+	open_button.focus_mode = Control.FOCUS_NONE
+	open_button.text = "Open shop"
+	open_button.pressed.connect(func(): day_advance_requested.emit())
+	day.add_child(open_button)
 	var player := card(Vector2(0, 1), Vector2(16, -140), 320)
-	move_label(game.progression_label, player, 14)
+	progression_label = label("", 14)
+	player.add_child(progression_label)
 	exp_bar = bar(player)
 	needs_label = label("Energy 100% · Food 100%", 12)
 	player.add_child(needs_label)
@@ -161,10 +164,12 @@ func setup(session: Node, layer: CanvasLayer, menu_panel: Control) -> void:
 	actions.offset_top = 16
 	actions.offset_bottom = 52
 	actions.custom_minimum_size.x = 264
-	game.build_button.reparent(actions)
-	game.build_button.position = Vector2.ZERO
-	game.build_button.text = "Workshop"
-	game.build_button.custom_minimum_size.x = 120
+	build_button = Button.new()
+	build_button.focus_mode = Control.FOCUS_NONE
+	build_button.text = "Workshop"
+	build_button.custom_minimum_size.x = 120
+	build_button.pressed.connect(func(): workshop_requested.emit())
+	actions.add_child(build_button)
 	var leave := Button.new()
 	leave.text = "Leave"
 	leave.focus_mode = Control.FOCUS_NONE
@@ -369,8 +374,6 @@ func _process(_delta: float) -> void:
 	update_visitors()
 	game.order_label.hide()
 	shop.text = "Coins: %s    Rep: %s" % [game.orders.coins, game.orders.reputation]
-	game.merchant_label.visible = false
-	game.merchant_label.text = "Wood %sc · %s left · %ss" % [game.progression.purchase_price(game.multiplayer.get_unique_id(), game.MERCHANT_STATE.WOOD_PRICE), game.merchant.stock, ceili(game.merchant.remaining)]
 	var local: int = game.multiplayer.get_unique_id()
 	if game.needs.dwarfs.has(local):
 		var vitals: Dictionary = game.needs.dwarfs[local]
@@ -393,12 +396,7 @@ func _process(_delta: float) -> void:
 	elif game.transport.pending.has(local):
 		held_icon.texture = preload("res://assets/textures/rail.svg")
 		held_icon.tooltip_text = "Rail section"
-	if game.progression.dwarfs.has(local):
-		var dwarf: Dictionary = game.progression.dwarfs[local]
-		game.progression_label.text = "Level %s · %s/%s EXP%s" % [dwarf.level, dwarf.exp, game.progression.required(dwarf.level), " · +%s skill point%s" % [dwarf.points, "" if dwarf.points == 1 else "s"] if dwarf.points > 0 else ""]
-		game.progression_label.modulate = Color("f1c56e") if dwarf.points > 0 else Color.WHITE
-		exp_bar.max_value = game.progression.required(dwarf.level)
-		exp_bar.value = dwarf.exp
+	refresh_progression()
 	day_bar.visible = game.cycle.phase == "shop"
 	day_bar.max_value = game.DAY_STATE.SHOP_DURATION
 	day_bar.value = game.cycle.remaining
@@ -419,3 +417,18 @@ func _process(_delta: float) -> void:
 		customer.get_node("Request").visible = false
 	game.merchant_node.get_node("Label").visible = false
 	game.order_label.modulate = Color("efb274") if not game.orders.queue.is_empty() and not game.orders.queue[0].accepted else Color.WHITE
+
+func refresh_progression() -> void:
+	progression_label.visible = game.active
+	var local: int = game.multiplayer.get_unique_id()
+	if game.progression.dwarfs.has(local):
+		var dwarf: Dictionary = game.progression.dwarfs[local]
+		progression_label.text = "Level %s · %s/%s EXP%s" % [dwarf.level, dwarf.exp, game.progression.required(dwarf.level), " · +%s skill point%s" % [dwarf.points, "" if dwarf.points == 1 else "s"] if dwarf.points > 0 else ""]
+		progression_label.modulate = Color("f1c56e") if dwarf.points > 0 else Color.WHITE
+		exp_bar.max_value = game.progression.required(dwarf.level)
+		exp_bar.value = dwarf.exp
+
+func refresh_day() -> void:
+	day_label.visible = game.active
+	day_label.text = "Day %s · %s%s" % [game.cycle.day, game.cycle.phase.capitalize(), " · %d:%02d" % [ceili(game.cycle.remaining) / 60, ceili(game.cycle.remaining) % 60] if game.cycle.phase == "shop" else ""]
+	open_button.visible = game.active and game.cycle.phase == "morning"

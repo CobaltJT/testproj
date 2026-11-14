@@ -40,7 +40,7 @@ func run() -> void:
 	session.ore.release_carrier(1)
 	session.position_ore(session.ore_bodies[1], Vector2(150, 270), Vector2.ZERO)
 	session.refresh_ore()
-	session.mobile_bin_button.pressed.emit()
+	session.workshop_ui.mobile_bin_button.pressed.emit()
 	await frames(3)
 	var bin: int = session.ore.carried_by(1)
 	check(bin != -1 and session.ore.pieces[bin].kind == "ore_bin" and session.orders.coins == 65, "Catalog buys movable bin directly into hands")

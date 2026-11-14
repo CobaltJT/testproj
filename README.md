@@ -455,6 +455,28 @@ Leave returns to the menu. Host departure ends the session. New hosted games
 reset stations, resources, budget, reputation, day, and clocks. No disk persistence,
 dedicated servers, internet matchmaking, or mine depletion yet.
 
+## UI structure
+
+The first refactoring milestone separates three presentation components:
+
+| Component | Editable scene | Responsibility |
+| --- | --- | --- |
+| Workshop catalog | `scenes/ui/workshop_catalog.tscn` | Build, Skills and Transport tabs, prices and availability |
+| Day summary | `scenes/ui/day_summary.tscn` | Daily report, modal input blocker and fade |
+| Expansion indicators | `scenes/ui/expansion_indicators.tscn` | Current-room buttons, camera projection and HUD avoidance |
+
+Their scripts live under `scripts/ui/`. Views receive the state they display
+and emit action signals. `session.gd` connects those signals to existing command
+handlers, which retain purchase validation, day advancement and host-authoritative
+RPCs. The views do not purchase objects or advance the simulation themselves.
+The HUD owns its day/status labels and Workshop/Open shop buttons directly;
+controls are no longer created by the session and reparented into the HUD.
+
+Gameplay state, physics, placement previews and networking remain in their current
+owners for later refactoring milestones. `tests/ui_components.gd` checks the
+extracted scenes independently, while the existing input and multiplayer tests
+exercise the same player actions through their new control owners.
+
 ## Validation
 
 Run **`bash tools/check.sh`** with Godot 4.6.x and Python 3 available. It isolates

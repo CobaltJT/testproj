@@ -2,26 +2,22 @@ extends Node
 const NEEDS = preload("res://scripts/needs_state.gd")
 var needs = NEEDS.new()
 var supplies = preload("res://scripts/merchant_state.gd").new()
+const CATALOG_VIEW = preload("res://scripts/ui/workshop_catalog.gd")
+const DAY_VIEW = preload("res://scripts/ui/day_summary.gd")
+const EXPANSION_VIEW = preload("res://scripts/ui/expansion_indicators.gd")
+const CATALOG_SCENE = preload("res://scenes/ui/workshop_catalog.tscn")
+const DAY_UI_SCENE = preload("res://scenes/ui/day_summary.tscn")
+const EXPANSION_SCENE = preload("res://scenes/ui/expansion_indicators.tscn")
+var workshop_ui: CATALOG_VIEW
+var day_ui: DAY_VIEW
+var expansion_ui: EXPANSION_VIEW
 const HUD = preload("res://scripts/hud.gd")
-var hud: Control
+var hud: HUD
 ## ENet LAN session. Only the host simulates physics; clients send controls.
 const PROGRESSION = preload("res://scripts/progression_state.gd")
 var progression = PROGRESSION.new()
-var progression_label: Label
-var skill_summary: Label
-var skill_buttons: Dictionary = {}
-var station_buttons: Dictionary = {}
-var catalog_tabs: TabContainer
 const DAY_STATE = preload("res://scripts/day_state.gd")
 var cycle = DAY_STATE.new()
-var day_label: Label
-var open_button: Button
-var day_popup: PanelContainer
-var day_summary: Label
-var next_day_button: Button
-var blackout: ColorRect
-var last_day_phase := "morning"
-var fade_tween: Tween
 var day_tick := 0
 const TRANSPORT = preload("res://scripts/transport_state.gd")
 var transport = TRANSPORT.new()
@@ -31,14 +27,8 @@ var shown_tracks: Array = []
 var shaft_nodes: Array = []
 var lift_node: Node2D
 var lift_riders: Dictionary = {}
-var transport_buttons: Dictionary = {}
-var transport_info: Label
 const ROOMS = preload("res://scripts/room_state.gd")
 var rooms = ROOMS.new()
-var room_buttons: Dictionary = {}
-var expansion_layer: Control
-var expansion_targets: Dictionary = {}
-var entrance_button: Button
 const MAP = preload("res://scripts/map_layout.gd")
 var overview_camera: Camera2D
 const WORKSHOP_STATE = preload("res://scripts/workshop_state.gd")
@@ -48,12 +38,9 @@ const STATION_VIEW = preload("res://scripts/station_view.gd")
 var workshop = WORKSHOP_STATE.new()
 var station_nodes: Dictionary = {}
 var build_ghost: Sprite2D
-var catalog: PanelContainer
-var build_button: Button
 const MERCHANT_STATE = preload("res://scripts/merchant_state.gd")
 var merchant = MERCHANT_STATE.new()
 var merchant_node: Node2D
-var merchant_label: Label
 var customer_nodes: Dictionary = {}
 var recipe_label: Label
 const EXTRA_TEXTURES = {"food": preload("res://assets/textures/food.svg"),
@@ -81,7 +68,6 @@ const PLAYER = preload("res://scenes/player.tscn")
 const WORLD = preload("res://scenes/smithy.tscn")
 const ORE_STATE = preload("res://scripts/ore_state.gd")
 const BIN_BODY = preload("res://scenes/ore_bin.tscn")
-var mobile_bin_button: Button
 const ORE_BODY = preload("res://scenes/ore_piece.tscn")
 const ORE_TEXTURE = preload("res://assets/textures/ore.svg")
 var work_held: Dictionary = {}
@@ -131,22 +117,13 @@ func _ready() -> void:
 	order_label.position = Vector2(505, 12)
 	order_label.add_theme_font_size_override("font_size", 12)
 	layer.add_child(order_label)
-	merchant_label = Label.new()
-	merchant_label.position = Vector2(24, 686)
-	merchant_label.add_theme_font_size_override("font_size", 13)
-	layer.add_child(merchant_label)
 	recipe_label = Label.new()
 	recipe_label.position = Vector2(24, 664)
 	recipe_label.add_theme_font_size_override("font_size", 13)
 	layer.add_child(recipe_label)
 	refresh_orders()
 	refresh_merchant()
-	progression_label = Label.new()
-	progression_label.position = Vector2(24, 608)
-	progression_label.add_theme_font_size_override("font_size", 14)
-	layer.add_child(progression_label)
-	init_build_ui(layer)
-	init_day_ui(layer)
+	init_ui(layer)
 	refresh_progression()
 	refresh_workshop()
 	var column := VBoxContainer.new()
@@ -184,7 +161,11 @@ func _ready() -> void:
 	multiplayer.server_disconnected.connect(func(): disconnect_game("Host disconnected."))
 	hud = HUD.new()
 	hud.setup(self, layer, panel)
-	layer.move_child(expansion_layer, 0)
+	layer.move_child(expansion_ui, 0)
+	hud.workshop_requested.connect(workshop_ui.toggle)
+	hud.day_advance_requested.connect(advance_day)
+	refresh_day()
+	refresh_progression()
 	# The same production entry points are used by the multi-process smoke test.
 	var args := OS.get_cmdline_user_args()
 	for arg in args:
@@ -318,9 +299,9 @@ func _physics_process(delta: float) -> void:
 		else:
 			request_storage_cycle.rpc_id(1)
 	if Input.is_action_just_pressed("build_menu"):
-		catalog.visible = not catalog.visible
+		workshop_ui.toggle()
 	if Input.is_action_just_pressed("cancel_build"):
-		catalog.hide()
+		workshop_ui.hide()
 		if multiplayer.is_server():
 			transport.cancel(1, orders)
 			sync_transport()
@@ -606,7 +587,7 @@ func receive_orders(state: Dictionary) -> void:
 	refresh_orders()
 
 func refresh_orders() -> void:
-	refresh_room_buttons()
+	refresh_expansions()
 	var live: Dictionary = {}
 	for i in range(orders.queue.size()):
 		var order: Dictionary = orders.queue[i]
@@ -770,12 +751,6 @@ func refresh_merchant() -> void:
 	var visiting = visiting_merchant()
 	merchant_node.visible = active and visiting.remaining > 0
 	merchant_node.modulate = {"wood": Color.WHITE, "ore": Color(0.65, 0.9, 1), "food": Color(0.7, 1, 0.65)}[visiting.kind]
-	if merchant_label != null:
-		merchant_label.visible = false
-		if cycle.phase != "shop":
-			merchant_label.text = "Merchant visits during shop hours."
-			return
-		merchant_label.text = "Merchant: B buys wood for %s coins · Stock: %s · Leaves in %ss" % [progression.purchase_price(multiplayer.get_unique_id(), MERCHANT_STATE.WOOD_PRICE), merchant.stock, ceili(merchant.remaining)] if merchant.remaining > 0 else "Merchant returns in %ss · Wood costs %s coins (B nearby)" % [ceili(merchant.until_visit), progression.purchase_price(multiplayer.get_unique_id(), MERCHANT_STATE.WOOD_PRICE)]
 
 func broadcast_state(method: String, arguments: Array, apply_local: bool = false) -> void:
 	if apply_local:
@@ -975,80 +950,6 @@ func refresh_workshop() -> void:
 	if recipe_label != null:
 		recipe_label.visible = false
 		recipe_label.text = ""
-	if build_button != null:
-		build_button.visible = active
-
-func init_build_ui(layer: CanvasLayer) -> void:
-	build_ghost = Sprite2D.new()
-	build_ghost.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	world.add_child(build_ghost)
-	build_ghost.hide()
-	build_button = Button.new()
-	build_button.text = "Build / Skills [Tab]"
-	build_button.position = Vector2(820, 642)
-	build_button.pressed.connect(func(): catalog.visible = not catalog.visible)
-	build_button.focus_mode = Control.FOCUS_NONE
-	layer.add_child(build_button)
-	catalog = PanelContainer.new()
-	catalog.position = Vector2(500, 160)
-	catalog.custom_minimum_size = Vector2(730, 430)
-	layer.add_child(catalog)
-	catalog_tabs = TabContainer.new()
-	catalog.add_child(catalog_tabs)
-	var column := VBoxContainer.new()
-	column.name = "Build"
-	catalog_tabs.add_child(column)
-	var title := Label.new()
-	title.text = "Buy furniture, stations or storage (empty hands)"
-	column.add_child(title)
-	var choices := HBoxContainer.new()
-	choices.add_theme_constant_override("separation", 24)
-	column.add_child(choices)
-	var stations_column := VBoxContainer.new()
-	var storage_column := VBoxContainer.new()
-	choices.add_child(stations_column)
-	choices.add_child(storage_column)
-	for kind in WORKSHOP_STATE.PRICES:
-		var button := Button.new()
-		button.focus_mode = Control.FOCUS_NONE
-		button.pressed.connect(func(): buy_station(kind))
-		(storage_column if kind in WORKSHOP_STATE.STORAGE else stations_column).add_child(button)
-		station_buttons[kind] = button
-	mobile_bin_button = Button.new()
-	mobile_bin_button.focus_mode = Control.FOCUS_NONE
-	mobile_bin_button.pressed.connect(buy_mobile_bin)
-	storage_column.add_child(mobile_bin_button)
-	var skills := VBoxContainer.new()
-	skills.name = "Skills"
-	catalog_tabs.add_child(skills)
-	skill_summary = Label.new()
-	skills.add_child(skill_summary)
-	var branches := HBoxContainer.new()
-	branches.add_theme_constant_override("separation", 16)
-	skills.add_child(branches)
-	for branch in ["Craft", "Trade"]:
-		var path := VBoxContainer.new()
-		path.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		branches.add_child(path)
-		var heading := Label.new()
-		heading.text = branch + " · each rank costs 1 skill point"
-		path.add_child(heading)
-		for key in PROGRESSION.SKILLS:
-			var definition: Dictionary = PROGRESSION.SKILLS[key]
-			if definition.branch != branch:
-				continue
-			var button := Button.new()
-			button.focus_mode = Control.FOCUS_NONE
-			button.pressed.connect(func(): buy_skill(key))
-			path.add_child(button)
-			skill_buttons[key] = button
-			var detail := Label.new()
-			detail.text = definition.effect.replace("anvil, grinder and forge", "metalwork")
-			detail.add_theme_font_size_override("font_size", 12)
-			path.add_child(detail)
-	init_transport_ui()
-	init_expansion_ui(layer)
-	catalog.hide()
 
 func _process(_delta: float) -> void:
 	if build_ghost == null:
@@ -1057,21 +958,21 @@ func _process(_delta: float) -> void:
 	var carrying_kit: bool = active and cycle.phase not in ["summary", "transition"] and workshop.pending.has(id)
 	build_ghost.visible = carrying_kit
 	if carrying_kit:
-		catalog.hide()
+		workshop_ui.hide()
 		var at: Vector2 = workshop.snap(world.get_local_mouse_position())
 		build_ghost.position = at + Vector2(8, -16)
 		build_ghost.texture = STATION_VIEW.TEXTURES[workshop.pending[id].kind]
 		build_ghost.modulate = Color(0.4, 1, 0.5, 0.7) if workshop.can_place(at) else Color(1, 0.3, 0.3, 0.7)
 	if active and transport.pending.has(id) and cycle.phase not in ["summary", "transition"]:
-		catalog.hide()
+		workshop_ui.hide()
 		var at: Vector2 = transport.snap_rail(world.get_local_mouse_position())
 		build_ghost.visible = true
 		build_ghost.texture = preload("res://assets/textures/rail.svg")
 		build_ghost.position = at - Vector2(0, 2)
 		build_ghost.modulate = Color(0.4, 1, 0.5, 0.7) if transport.can_rail(at) else Color(1, 0.3, 0.3, 0.7)
 	if not active:
-		catalog.hide()
-	refresh_room_buttons()
+		workshop_ui.hide()
+	refresh_expansions()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if active and build_ghost != null and build_ghost.visible and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -1223,73 +1124,6 @@ func purchase_skill_for(id: int, skill: String) -> void:
 	refresh_orders()
 	refresh_mining()
 
-func refresh_progression() -> void:
-	for id in players:
-		players[id].walking_multiplier = progression.speed(id, "walking") * needs.walking(id)
-	var local := multiplayer.get_unique_id()
-	if progression_label == null:
-		return
-	progression_label.visible = active
-	var text := "Level 1 · EXP 0 / 10 · 0 skill points"
-	if progression.dwarfs.has(local):
-		var dwarf: Dictionary = progression.dwarfs[local]
-		text = "Level %s · EXP %s / %s · %s skill points" % [dwarf.level, dwarf.exp, progression.required(dwarf.level), dwarf.points]
-	progression_label.text = text
-	if skill_summary != null:
-		skill_summary.text = text
-	for key in skill_buttons:
-		var definition: Dictionary = PROGRESSION.SKILLS[key]
-		var prerequisite: String = "" if definition.parent == "" else "← " + PROGRESSION.SKILLS[definition.parent].title + " · "
-		skill_buttons[key].text = "%s%s [%s/%s] +" % [prerequisite, definition.title, progression.rank(local, key), definition.max]
-		skill_buttons[key].disabled = not progression.can_buy(local, key)
-	if mobile_bin_button != null:
-		mobile_bin_button.text = "Movable parts bin (10) · %s coins" % progression.purchase_price(local, ORE_STATE.BIN_PRICE)
-	refresh_room_buttons()
-	for kind in station_buttons:
-		station_buttons[kind].text = "%s · %s coins" % [WORKSHOP_STATE.display_name(kind), progression.purchase_price(local, WORKSHOP_STATE.PRICES[kind])]
-
-func init_day_ui(layer: CanvasLayer) -> void:
-	day_label = Label.new()
-	day_label.position = Vector2(24, 12)
-	layer.add_child(day_label)
-	open_button = Button.new()
-	open_button.position = Vector2(24, 44)
-	open_button.text = "Open shop · Start shop hours"
-	open_button.focus_mode = Control.FOCUS_NONE
-	open_button.pressed.connect(advance_day)
-	layer.add_child(open_button)
-	# A full-screen blocker makes the shared summary modal.
-	var modal := Control.new()
-	modal.name = "DayModal"
-	modal.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	modal.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(modal)
-	var shade := ColorRect.new()
-	shade.name = "Shade"
-	shade.color = Color(0, 0, 0, 0.7)
-	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	modal.add_child(shade)
-	day_popup = PanelContainer.new()
-	day_popup.position = Vector2(430, 160)
-	day_popup.custom_minimum_size = Vector2(420, 350)
-	modal.add_child(day_popup)
-	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 16)
-	day_popup.add_child(column)
-	day_summary = Label.new()
-	column.add_child(day_summary)
-	next_day_button = Button.new()
-	next_day_button.text = "Close summary · Next morning"
-	next_day_button.focus_mode = Control.FOCUS_NONE
-	next_day_button.pressed.connect(advance_day)
-	column.add_child(next_day_button)
-	blackout = ColorRect.new()
-	blackout.color = Color(0, 0, 0, 0)
-	blackout.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	blackout.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(blackout)
-	refresh_day()
-
 func advance_day() -> void:
 	if multiplayer.is_server():
 		advance_day_for(1, cycle.day)
@@ -1316,34 +1150,6 @@ func receive_day(state: Dictionary) -> void:
 	refresh_day()
 	refresh_orders()
 	refresh_mining()
-
-func refresh_day() -> void:
-	if day_label == null:
-		return
-	day_label.visible = active
-	day_label.text = "Day %s · %s%s" % [cycle.day, cycle.phase.capitalize(), " · %d:%02d" % [ceili(cycle.remaining) / 60, ceili(cycle.remaining) % 60] if cycle.phase == "shop" else ""]
-	open_button.visible = active and cycle.phase == "morning"
-	day_popup.get_parent().visible = active and cycle.phase == "summary"
-	if cycle.phase in ["summary", "transition"]:
-		catalog.hide()
-		build_ghost.hide()
-	if cycle.phase == "summary":
-		var report: Dictionary = cycle.summary
-		day_summary.text = "Day %s complete\n\nCustomers: %s\nServed requests: %s\nFailed requests: %s\nRejected / unanswered: %s\nMoney gained: %s\nMoney spent: %s\nRefunds: %s" % [cycle.day, report.customers, report.served, report.failed, report.rejected, report.earned, report.spent, report.refunds]
-	if cycle.phase == "transition":
-		if fade_tween != null:
-			fade_tween.kill()
-		blackout.color.a = clampf(cycle.fade / DAY_STATE.FADE_DURATION, 0, 1)
-	elif cycle.phase == "morning" and last_day_phase == "transition":
-		blackout.color.a = 1
-		fade_tween = create_tween()
-		fade_tween.tween_property(blackout, "color:a", 0.0, DAY_STATE.FADE_DURATION)
-	elif not active:
-		if fade_tween != null:
-			fade_tween.kill()
-		blackout.color.a = 0
-	blackout.visible = active
-	last_day_phase = cycle.phase
 
 @rpc("any_peer", "call_remote", "reliable")
 func request_storage_cycle() -> void:
@@ -1386,7 +1192,7 @@ func nearest_mobile_bin(at: Vector2) -> int:
 	return nearest
 
 func buy_mobile_bin() -> void:
-	catalog.hide()
+	workshop_ui.hide()
 	if multiplayer.is_server(): purchase_mobile_bin_for(1)
 	else: request_mobile_bin.rpc_id(1)
 
@@ -1407,7 +1213,7 @@ func purchase_mobile_bin_for(id: int) -> void:
 	broadcast_state("receive_ore", [ore.snapshot()], true)
 	broadcast_state("receive_orders", [orders.snapshot()])
 	refresh_orders()
-	catalog.hide()
+	workshop_ui.hide()
 	feedback_for(id, "Movable parts bin: Q drops, F throws. Holds 10 intermediate products. E takes a product; C lifts the bin.")
 
 
@@ -1432,26 +1238,6 @@ func init_transport_world() -> void:
 	shape.one_way_collision_margin = 1.0
 	shape.position.y = 2
 	body.add_child(shape)
-
-func init_transport_ui() -> void:
-	var tab := VBoxContainer.new()
-	tab.name = "Transport"
-	catalog_tabs.add_child(tab)
-	transport_info = Label.new()
-	tab.add_child(transport_info)
-	for level in range(1, 4):
-		var button := Button.new()
-		button.focus_mode = Control.FOCUS_NONE
-		button.pressed.connect(func(): transport_buy("lift", level))
-		tab.add_child(button)
-		transport_buttons[level] = button
-	for kind in ["rail", "cart"]:
-		var button := Button.new()
-		button.focus_mode = Control.FOCUS_NONE
-		button.pressed.connect(func(): transport_buy(kind, 0))
-		tab.add_child(button)
-		transport_buttons[kind] = button
-	refresh_transport()
 
 func transport_buy(kind: String, level: int) -> void:
 	if multiplayer.is_server(): buy_transport_for(1, kind, level)
@@ -1626,14 +1412,8 @@ func refresh_transport() -> void:
 		cart_nodes[id].position = transport.carts[id].at
 		cart_nodes[id].get_node("Catch").monitoring = active and multiplayer.is_server()
 		cart_nodes[id].get_node("Count").text = "%s/25" % transport.carts[id].items.size()
-	if transport_info != null:
-		transport_info.text = "Elevator: %s/3 segments · Rails: %s · Carts: %s" % [transport.upgrades, transport.tracks.size(), transport.carts.size()]
-		var id := multiplayer.get_unique_id()
-		for level in range(1, 4):
-			transport_buttons[level].text = "Upgrade elevator to mine level %s · %s coins" % [level, progression.purchase_price(id, TRANSPORT.UPGRADE_PRICE)]
-			transport_buttons[level].disabled = level != transport.upgrades + 1 or level > rooms.depth()
-		transport_buttons.rail.text = "Buy rail section · %s coins" % progression.purchase_price(id, TRANSPORT.RAIL_PRICE)
-		transport_buttons.cart.text = "Buy mine cart · %s coins (stand beside rails)" % progression.purchase_price(id, TRANSPORT.CART_PRICE)
+	if workshop_ui != null:
+		workshop_ui.refresh_transport(multiplayer.get_unique_id(), progression, transport, rooms.depth())
 
 @rpc("authority", "call_remote", "reliable")
 func initialize_hud_events() -> void:
@@ -1647,75 +1427,6 @@ func merchant_card_buy() -> void:
 	var kind: String = visiting_merchant().kind
 	if multiplayer.is_server(): buy_goods_for(1, kind)
 	else: request_goods.rpc_id(1, kind)
-
-func init_expansion_ui(layer: CanvasLayer) -> void:
-	expansion_layer = Control.new()
-	expansion_layer.name = "ExpansionIndicators"
-	expansion_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(expansion_layer)
-	layer.move_child(expansion_layer, 0)
-	refresh_room_buttons()
-
-func refresh_room_buttons() -> void:
-	if expansion_layer == null: return
-	# Keep controls alive when only prices/funds change; replace them after layout changes.
-	var id := multiplayer.get_unique_id()
-	var at: Vector2 = players[id].position if players.has(id) else Vector2(INF, INF)
-	var targets: Dictionary = rooms.expansion_targets(at)
-	if rooms.can_open_mine() and rooms.current_room(at) == Vector3i(ROOMS.SHAFT_COLUMN, 1, 0):
-		targets[Vector3i(1, 0, 1)] = {"at": Vector2(390, 242), "direction": Vector2i.ZERO}
-	if targets != expansion_targets:
-		for button in room_buttons.values(): button.queue_free()
-		room_buttons.clear()
-		expansion_targets = targets
-		for key in targets:
-			var button := Button.new()
-			button.name = "Expansion_%s_%s_%s" % [key.x, key.y, key.z]
-			button.focus_mode = Control.FOCUS_NONE
-			button.custom_minimum_size = Vector2(64, 32)
-			button.icon = preload("res://assets/textures/expand_room.svg")
-			button.expand_icon = true
-			button.add_theme_constant_override("icon_max_width", 20)
-			button.pressed.connect(func(): buy_room(key.z == 1, Vector2i(key.x, key.y)))
-			expansion_layer.add_child(button)
-			room_buttons[key] = button
-	entrance_button = room_buttons.get(Vector3i(1, 0, 1))
-	for key in room_buttons:
-		var entrance: bool = key == Vector3i(1, 0, 1)
-		var base: int = ROOMS.ENTRANCE_PRICE if entrance else (ROOMS.DEPTH_PRICES[key.y] if key.z == 1 else ROOMS.PRICES[key.y])
-		var cost: int = progression.purchase_price(id, base)
-		var button: Button = room_buttons[key]
-		var direction: Vector2i = targets[key].direction
-		var arrow: String = "⛏" if entrance else ("←" if direction.x < 0 else ("→" if direction.x > 0 else ("↑" if direction.y < 0 else "↓")))
-		button.text = "%s %s" % [arrow, cost]
-		button.disabled = orders.coins < cost
-		button.tooltip_text = "%s · %s coins" % ["Open mine + first chamber" if entrance else ("Mine level %s" % key.y if key.z == 1 else ROOMS.NAMES[key.y]), cost]
-	update_expansion_indicators()
-
-func update_expansion_indicators() -> void:
-	if expansion_layer == null: return
-	expansion_layer.visible = active and cycle.phase not in ["summary", "transition"] and not catalog.visible and not build_ghost.visible and not Input.is_physical_key_pressed(KEY_F1)
-	var viewport_rect := get_viewport().get_visible_rect().grow(-20)
-	for key in room_buttons:
-		var button: Button = room_buttons[key]
-		var transform := world.get_global_transform_with_canvas()
-		var target: Dictionary = expansion_targets[key]
-		var point: Vector2 = transform * target.at
-		# Slide top/bottom markers along the same outside edge to keep the HUD clear.
-		if hud != null and target.direction.y != 0:
-			var room: Rect2 = target.room
-			var left: float = (transform * room.position).x + button.size.x / 2 + 8
-			var right: float = (transform * room.end).x - button.size.x / 2 - 8
-			for panel in hud.panels:
-				var occupied: Rect2 = panel.get_global_rect()
-				if panel.is_visible_in_tree() and occupied.intersects(Rect2(point - button.size / 2, button.size)):
-					var beside: float = occupied.end.x + button.size.x / 2 + 8
-					if beside <= right and beside >= left: point.x = beside
-					else:
-						beside = occupied.position.x - button.size.x / 2 - 8
-						if beside >= left and beside <= right: point.x = beside
-		button.position = (point - button.size / 2).round()
-		button.visible = viewport_rect.has_point(point)
 
 func buy_room(mine: bool, cell: Vector2i) -> void:
 	if multiplayer.is_server(): purchase_room_for(1, mine, cell)
@@ -1768,7 +1479,7 @@ func apply_room_layout() -> void:
 		configure_camera(dwarf.get_node("FollowCamera"))
 	sync_veins()
 	refresh_mining()
-	refresh_room_buttons()
+	refresh_expansions()
 	refresh_transport()
 	update_overview()
 
@@ -1847,3 +1558,49 @@ func buy_goods_for(id: int, kind: String) -> void:
 	broadcast_state("receive_supplies", [supplies.snapshot()])
 	refresh_orders()
 	refresh_merchant()
+
+func init_ui(layer: CanvasLayer) -> void:
+	build_ghost = Sprite2D.new()
+	build_ghost.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	world.add_child(build_ghost)
+	build_ghost.hide()
+	workshop_ui = CATALOG_SCENE.instantiate()
+	layer.add_child(workshop_ui)
+	workshop_ui.station_requested.connect(buy_station)
+	workshop_ui.skill_requested.connect(buy_skill)
+	workshop_ui.mobile_bin_requested.connect(buy_mobile_bin)
+	workshop_ui.transport_requested.connect(transport_buy)
+	day_ui = DAY_UI_SCENE.instantiate()
+	layer.add_child(day_ui)
+	day_ui.advance_requested.connect(advance_day)
+	expansion_ui = EXPANSION_SCENE.instantiate()
+	layer.add_child(expansion_ui)
+	expansion_ui.room_requested.connect(buy_room)
+	refresh_transport()
+	refresh_day()
+	refresh_expansions()
+
+func refresh_progression() -> void:
+	refresh_walking()
+	if hud != null: hud.refresh_progression()
+	if workshop_ui != null: workshop_ui.refresh_progression(multiplayer.get_unique_id(), progression)
+	refresh_expansions()
+
+func refresh_day() -> void:
+	if hud != null: hud.refresh_day()
+	if day_ui != null: day_ui.refresh(active, cycle)
+	if workshop_ui != null and cycle.phase in ["summary", "transition"]:
+		workshop_ui.hide()
+		build_ghost.hide()
+
+func refresh_expansions() -> void:
+	if expansion_ui == null: return
+	var local := multiplayer.get_unique_id()
+	var at: Vector2 = players[local].position if players.has(local) else Vector2(INF, INF)
+	expansion_ui.refresh(at, rooms, progression, local, orders.coins)
+	var obstacles: Array[Rect2] = []
+	if hud != null:
+		for panel in hud.panels:
+			if panel.is_visible_in_tree(): obstacles.append(panel.get_global_rect())
+	var shown: bool = active and cycle.phase not in ["summary", "transition"] and not workshop_ui.visible and not build_ghost.visible and not Input.is_physical_key_pressed(KEY_F1)
+	expansion_ui.project(world.get_global_transform_with_canvas(), get_viewport().get_visible_rect(), obstacles, shown)

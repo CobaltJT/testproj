@@ -1,0 +1,35 @@
+[gd_scene load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/ui/workshop_catalog.gd" id="1"]
+[node name="WorkshopCatalog" type="PanelContainer"]
+visible = false
+custom_minimum_size = Vector2(730, 430)
+offset_left = 500.0
+offset_top = 160.0
+offset_right = 1230.0
+offset_bottom = 590.0
+script = ExtResource("1")
+[node name="Tabs" type="TabContainer" parent="."]
+layout_mode = 2
+[node name="Build" type="VBoxContainer" parent="Tabs"]
+layout_mode = 2
+[node name="Title" type="Label" parent="Tabs/Build"]
+layout_mode = 2
+text = "Buy furniture, stations or storage (empty hands)"
+[node name="Choices" type="HBoxContainer" parent="Tabs/Build"]
+layout_mode = 2
+theme_override_constants/separation = 24
+[node name="Stations" type="VBoxContainer" parent="Tabs/Build/Choices"]
+layout_mode = 2
+[node name="Storage" type="VBoxContainer" parent="Tabs/Build/Choices"]
+layout_mode = 2
+[node name="Skills" type="VBoxContainer" parent="Tabs"]
+layout_mode = 2
+[node name="Summary" type="Label" parent="Tabs/Skills"]
+layout_mode = 2
+[node name="Branches" type="HBoxContainer" parent="Tabs/Skills"]
+layout_mode = 2
+theme_override_constants/separation = 16
+[node name="Transport" type="VBoxContainer" parent="Tabs"]
+layout_mode = 2
+[node name="Info" type="Label" parent="Tabs/Transport"]
+layout_mode = 2

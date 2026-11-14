@@ -428,8 +428,8 @@ func client_scenarios() -> void:
 	await stage("skills")
 	check(await until(func(): return session.progression.dwarfs.has(id) and session.progression.dwarfs[id].points >= 1), "Personal earned EXP and points received")
 	await press("build_menu")
-	session.catalog_tabs.current_tab = 1
-	session.skill_buttons.walking.pressed.emit()
+	session.workshop_ui.tabs.current_tab = 1
+	session.workshop_ui.skill_buttons.walking.pressed.emit()
 	check(await until(func(): return session.progression.rank(id, "walking") == 1), "Real Skills button sends validated purchase")
 	check(is_equal_approx(session.players[id].walking_multiplier, 1.1), "Purchased speed replicated")
 	session.request_skill.rpc_id(1, "unknown")
@@ -438,8 +438,8 @@ func client_scenarios() -> void:
 	done("skills")
 	await stage("storage_build")
 	if role == "client1":
-		session.catalog_tabs.current_tab = 0
-		session.station_buttons.finished_small.pressed.emit()
+		session.workshop_ui.tabs.current_tab = 0
+		session.workshop_ui.station_buttons.finished_small.pressed.emit()
 		check(await until(func(): return session.workshop.pending.has(id)), "Storage catalog purchase gives client placement kit")
 		session.request_place.rpc_id(1, Vector2(456, 216))
 	check(await until(func(): return sid("finished_small") != -1), "Placed storage arrives on both clients")
@@ -468,7 +468,7 @@ func client_scenarios() -> void:
 	done("parts_throw")
 	await stage("mobile_buy")
 	if role == "client2":
-		session.mobile_bin_button.pressed.emit()
+		session.workshop_ui.mobile_bin_button.pressed.emit()
 		check(await until(func(): return session.ore.carried_by(id) != -1 and session.ore.pieces[session.ore.carried_by(id)].kind == "ore_bin"), "Client buys physical ore bin into hands")
 		await press("push_cart")
 		await press("interact")
@@ -510,13 +510,13 @@ func client_scenarios() -> void:
 		check(job("anvil").slots.has("ingot") and is_equal_approx(job("anvil").progress, 1.25) and session.ore.pieces[8].consumed, "Reconnect preserves paused station ingredients and physical material states")
 	done("rejoin")
 	await stage("day_summary")
-	check(await until(func(): return session.cycle.phase == "summary" and session.day_popup.get_parent().visible), "Shared daily popup appears")
+	check(await until(func(): return session.cycle.phase == "summary" and session.day_ui.popup.get_parent().visible), "Shared daily popup appears")
 	check(session.cycle.summary.earned == 55 and session.cycle.summary.served == 2, "Daily report includes actual shared deliveries")
 	done("day_summary")
 	await stage("next_morning")
-	if role == "client1": session.next_day_button.pressed.emit()
+	if role == "client1": session.day_ui.next_day_button.pressed.emit()
 	check(await until(func(): return session.cycle.day == 2 and session.cycle.phase == "morning"), "Shared fade leads to morning")
-	check(session.open_button.visible and not session.day_popup.get_parent().visible, "Morning controls replace summary")
+	check(session.hud.open_button.visible and not session.day_ui.popup.get_parent().visible, "Morning controls replace summary")
 	check(session.ore.pieces[mobile].contents.size() == 1, "Loaded movable bin persists into next day")
 	check(session.workshop.stations[sid("finished_small")].items == [6], "Stored contents persist into next day")
 	done("next_morning")

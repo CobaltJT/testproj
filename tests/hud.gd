@@ -22,10 +22,10 @@ func run() -> void:
 	check("Coins: 100" in session.hud.shop.text and "Rep: 0" in session.hud.shop.text and session.hud.held.text == "" and not session.hud.held.visible, "HUD reports shop and player inventory")
 	for panel in session.hud.panels:
 		check(root.get_visible_rect().encloses(panel.get_global_rect()), "HUD card fits the default viewport")
-	var old_day: Vector2 = session.day_label.get_global_rect().position
+	var old_day: Vector2 = session.hud.day_label.get_global_rect().position
 	session.players[1].position = Vector2(500, 528)
 	await frames(10)
-	check(session.day_label.get_global_rect().position == old_day, "HUD remains fixed while camera travels underground")
+	check(session.hud.day_label.get_global_rect().position == old_day, "HUD remains fixed while camera travels underground")
 	Input.action_press("show_help")
 	await frames(5)
 	check(session.hud.help_layer.visible and root.get_visible_rect().encloses(session.hud.help_panel.get_global_rect()), "Holding F1 shows viewport-sized guide")
@@ -41,10 +41,10 @@ func run() -> void:
 	check(not session.hud.held.visible and session.hud.held_icon.texture != null, "Held item uses an icon without persistent text")
 	for i in range(2): session.award_exp(1, "delivery")
 	await frames(3)
-	check("+1 skill" in session.progression_label.text, "Level-up leaves visible unspent skill indicator")
+	check("+1 skill" in session.hud.progression_label.text, "Level-up leaves visible unspent skill indicator")
 	session.purchase_skill_for(1, "walking")
 	await frames(3)
-	check("+1 skill" not in session.progression_label.text, "Spending skill point clears indicator")
+	check("+1 skill" not in session.hud.progression_label.text, "Spending skill point clears indicator")
 	session.interaction_feedback("E: pick up/load · Hold E: work")
 	await frames(3)
 	check(not session.hint.visible, "Control feedback does not restore persistent HUD clutter")

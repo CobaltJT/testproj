@@ -18,6 +18,7 @@ static func display_name(kind: String) -> String:
 
 const MAP = preload("res://scripts/map_layout.gd")
 const FLOORS = MAP.FLOORS
+var room_layout: RefCounted
 var stations: Dictionary = {}
 var pending: Dictionary = {}
 var next_id := 1
@@ -40,13 +41,18 @@ func can_place(at: Vector2) -> bool:
 	if rect.position.x < 52 or rect.end.x > MAP.RIGHT_WALL - 4:
 		return false
 	# Keep the storefront, merchant, ladders, landing space, and mine usable.
-	var blocked: Array[Rect2] = []
+	var blocked: Array = []
 	if at.y == 136:
 		blocked = [Rect2(344, 96, 48, 40)]
 	elif at.y == 216:
 		blocked = [Rect2(52, 176, 172, 40), Rect2(344, 176, 48, 40)]
 	else:
 		blocked = [Rect2(88, 248, 48, 40), Rect2(328, 248, 100, 40)]
+	if room_layout != null:
+		if not room_layout.supports_station(at, rect): return false
+		blocked = [Rect2(52, 176, 172, 40)] if at.y == 216 else []
+		for ladder in room_layout.ladders():
+			blocked.append(Rect2(ladder.get_center().x - 8, ladder.position.y - 40, 16, ladder.size.y + 40))
 	for zone in blocked:
 		if rect.intersects(zone):
 			return false

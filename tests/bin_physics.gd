@@ -15,6 +15,7 @@ func run() -> void:
 	session = load("res://scenes/session.tscn").instantiate()
 	root.add_child(session)
 	session.host_game()
+	preload("res://tests/world_fixture.gd").prepare(session)
 	for size in ["small", "medium", "large"]:
 		var kind: String = "intermediate_" + size
 		session.purchase_for(1, kind)

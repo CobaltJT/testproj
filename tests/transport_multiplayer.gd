@@ -48,6 +48,7 @@ func run() -> void:
 	print("MULTIPLAYER RESULT ", role, ": ", failures, " failures")
 	quit(1 if failures else 0)
 func host() -> void:
+	preload("res://tests/world_fixture.gd").prepare(session)
 	sync.begin.rpc("upgrade")
 	check(await until(func(): return reports("upgrade")), "Concurrent purchases settle")
 	check(session.transport.upgrades == 1 and session.orders.coins == 70, "Repeated/skipped upgrades charge once and unlock only level one")

@@ -30,6 +30,10 @@ var lift_node: Node2D
 var lift_riders: Dictionary = {}
 var transport_buttons: Dictionary = {}
 var transport_info: Label
+const ROOMS = preload("res://scripts/room_state.gd")
+var rooms = ROOMS.new()
+var room_buttons: Dictionary = {}
+var entrance_button: Button
 const MAP = preload("res://scripts/map_layout.gd")
 var overview_camera: Camera2D
 const WORKSHOP_STATE = preload("res://scripts/workshop_state.gd")
@@ -59,8 +63,8 @@ const EXTRA_TEXTURES = {
 	"ore_bin": preload("res://assets/textures/ore_bin.svg")
 }
 const MINING_STATE = preload("res://scripts/mining_state.gd")
-const MINE_POSITION := Vector2(240, 368)
-const MINE_OUTPUT := Vector2(194, 356)
+const MINE_POSITION := Vector2(320, 368)
+const MINE_OUTPUT := Vector2(274, 356)
 var mine_veins: Dictionary = {}
 var vein_nodes: Dictionary = {}
 var mining = MINING_STATE.new()
@@ -105,13 +109,6 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(update_overview)
 	update_overview()
 	overview_camera.make_current()
-	for vein in range(MAP.VEINS.size()):
-		var view := preload("res://scenes/mining_station.tscn").instantiate()
-		view.position = MAP.VEINS[vein] - Vector2(390, 288)
-		world.add_child(view)
-		vein_nodes[vein] = view
-	mining_station = vein_nodes[0]
-	reset_mining()
 	merchant_node = preload("res://scenes/merchant.tscn").instantiate()
 	world.add_child(merchant_node)
 	init_transport_world()
@@ -234,6 +231,7 @@ func client_ready() -> void:
 	for existing in players:
 		spawn_player.rpc_id(id, existing, players[existing].position)
 	broadcast_state("spawn_player", [id, Vector2(210 + (players.size() % 6) * 22, 216)], true)
+	receive_rooms.rpc_id(id, rooms.snapshot())
 	receive_ore.rpc_id(id, ore.snapshot())
 	receive_ore_motion.rpc_id(id, ore_motion())
 	receive_workshop.rpc_id(id, workshop.snapshot())
@@ -260,6 +258,9 @@ func spawn_player(id: int, at: Vector2) -> void:
 	var local := id == multiplayer.get_unique_id()
 	dwarf.set_camera_active(local)
 	dwarf.get_node("Sprite2D").modulate = Color.WHITE if local else Color.from_hsv(fmod(id * 0.137, 1.0), 0.45, 1.0)
+	dwarf.set_ladders(rooms.ladders())
+	dwarf.mine_ladder_top = 288.0 + transport.upgrades * 80
+	configure_camera(dwarf.get_node("FollowCamera"))
 	players[id] = dwarf
 	progression.add(id)
 	active = true
@@ -622,7 +623,7 @@ func create_ore_body(id: int, simulate: bool, at: Vector2) -> RigidBody2D:
 	return body
 
 func vein_at(at: Vector2) -> int:
-	for vein in range(MAP.VEINS.size()):
+	for vein in mine_veins:
 		var target: Vector2 = MAP.VEINS[vein]
 		if absf(at.x - target.x) <= 20 and absf(at.y - target.y) <= 6: return vein
 	return -1
@@ -632,8 +633,25 @@ func near_mine(dwarf: CharacterBody2D) -> bool:
 
 func reset_mining() -> void:
 	mine_veins.clear()
-	for vein in range(MAP.VEINS.size()): mine_veins[vein] = MINING_STATE.new()
-	mining = mine_veins[0]
+	sync_veins()
+
+func sync_veins() -> void:
+	for vein in range(MAP.VEINS.size()):
+		var enabled: bool = rooms.contains_floor(MAP.VEINS[vein], true)
+		if enabled:
+			if not mine_veins.has(vein): mine_veins[vein] = MINING_STATE.new()
+			if not vein_nodes.has(vein):
+				var view := preload("res://scenes/mining_station.tscn").instantiate()
+				view.position = MAP.VEINS[vein] - Vector2(390, 288)
+				world.add_child(view)
+				vein_nodes[vein] = view
+		else:
+			mine_veins.erase(vein)
+			if vein_nodes.has(vein):
+				vein_nodes[vein].free()
+				vein_nodes.erase(vein)
+	mining = mine_veins.get(0, MINING_STATE.new())
+	mining_station = vein_nodes.get(0)
 
 func mining_snapshot() -> Dictionary:
 	var state: Dictionary = {}
@@ -665,7 +683,7 @@ func step_mining(delta: float) -> void:
 @rpc("authority", "call_remote", "reliable")
 func receive_mining(state: Dictionary) -> void:
 	for vein in mine_veins:
-		mine_veins[vein].restore(state[vein])
+		if state.has(vein): mine_veins[vein].restore(state[vein])
 	refresh_mining()
 
 func refresh_mining() -> void:
@@ -830,13 +848,17 @@ func reset_ore(simulate: bool) -> void:
 	ore_bodies.clear()
 	throw_grace.clear()
 	hit_cooldowns.clear()
+	rooms = ROOMS.new()
 	ore = ORE_STATE.new()
 	transport = TRANSPORT.new()
+	transport.room_layout = rooms
 	lift_riders.clear()
 	refresh_transport()
 	progression = PROGRESSION.new()
 	refresh_progression()
 	workshop = WORKSHOP_STATE.new()
+	workshop.room_layout = rooms
+	apply_room_layout()
 	refresh_workshop()
 	reset_mining()
 	refresh_mining()
@@ -848,7 +870,7 @@ func reset_ore(simulate: bool) -> void:
 	refresh_merchant()
 	work_held.clear()
 	for id in ore.pieces:
-		create_ore_body(id, simulate, Vector2(210 + id * 8, 281 - (id % 2) * 3))
+		create_ore_body(id, simulate, Vector2(310 + id * 8, 209 - (id % 2) * 3))
 	refresh_ore()
 
 func choose_recipe(id: int, choice: String) -> void:
@@ -976,6 +998,7 @@ func init_build_ui(layer: CanvasLayer) -> void:
 			detail.add_theme_font_size_override("font_size", 12)
 			path.add_child(detail)
 	init_transport_ui()
+	init_rooms_ui()
 	catalog.hide()
 
 func _process(_delta: float) -> void:
@@ -1076,13 +1099,22 @@ func sync_build() -> void:
 	broadcast_state("receive_workshop", [workshop.snapshot()])
 	broadcast_state("receive_orders", [orders.snapshot()])
 
+func configure_camera(camera: Camera2D) -> void:
+	var bounds: Rect2 = rooms.bounds().grow(32)
+	if bounds.size.y < MAP.CAMERA_HEIGHT:
+		bounds = bounds.grow_individual(0, MAP.CAMERA_HEIGHT - bounds.size.y, 0, 0)
+	camera.limit_left = floori(bounds.position.x * MAP.SCALE)
+	camera.limit_top = floori(bounds.position.y * MAP.SCALE)
+	camera.limit_right = ceili(bounds.end.x * MAP.SCALE)
+	camera.limit_bottom = ceili(bounds.end.y * MAP.SCALE)
+
 func update_overview() -> void:
 	var size := get_viewport().get_visible_rect().size
-	var factor := minf(size.x / (MAP.WIDTH * MAP.SCALE), (size.y - 80) / (MAP.HEIGHT * MAP.SCALE))
+	var bounds: Rect2 = rooms.bounds().grow(32)
+	var factor := minf(size.x / (bounds.size.x * MAP.SCALE), (size.y - 80) / (bounds.size.y * MAP.SCALE))
 	overview_camera.zoom = Vector2.ONE * maxf(factor, 0.01)
-	overview_camera.global_position = Vector2(MAP.WIDTH, MAP.HEIGHT) * MAP.SCALE / 2.0
-	if not active:
-		overview_camera.force_update_scroll()
+	overview_camera.global_position = bounds.get_center() * MAP.SCALE
+	if not active: overview_camera.force_update_scroll()
 
 @rpc("any_peer", "call_remote", "reliable")
 func request_order_decision(order_id: int, accept: bool) -> void:
@@ -1162,6 +1194,7 @@ func refresh_progression() -> void:
 		skill_buttons[key].disabled = not progression.can_buy(local, key)
 	if mobile_bin_button != null:
 		mobile_bin_button.text = "Movable parts bin (10) · %s coins" % progression.purchase_price(local, ORE_STATE.BIN_PRICE)
+	refresh_room_buttons()
 	for kind in station_buttons:
 		station_buttons[kind].text = "%s · %s coins" % [WORKSHOP_STATE.display_name(kind), progression.purchase_price(local, WORKSHOP_STATE.PRICES[kind])]
 
@@ -1544,7 +1577,7 @@ func refresh_transport() -> void:
 		var id := multiplayer.get_unique_id()
 		for level in range(1, 4):
 			transport_buttons[level].text = "Upgrade elevator to mine level %s · %s coins" % [level, progression.purchase_price(id, TRANSPORT.UPGRADE_PRICE)]
-			transport_buttons[level].disabled = level != transport.upgrades + 1
+			transport_buttons[level].disabled = level != transport.upgrades + 1 or level > rooms.depth()
 		transport_buttons.rail.text = "Buy rail section · %s coins" % progression.purchase_price(id, TRANSPORT.RAIL_PRICE)
 		transport_buttons.cart.text = "Buy mine cart · %s coins (stand beside rails)" % progression.purchase_price(id, TRANSPORT.CART_PRICE)
 
@@ -1559,3 +1592,117 @@ func customer_card_decision(order_id: int, accept: bool) -> void:
 func merchant_card_buy() -> void:
 	if multiplayer.is_server(): buy_wood_for(1)
 	else: request_wood.rpc_id(1)
+
+func init_rooms_ui() -> void:
+	var tab := VBoxContainer.new()
+	tab.name = "Rooms"
+	catalog_tabs.add_child(tab)
+	var title := Label.new()
+	title.text = "Expand beside an owned room · prices in coins"
+	tab.add_child(title)
+	var grid := GridContainer.new()
+	grid.columns = ROOMS.COLUMNS + 1
+	tab.add_child(grid)
+	for heading in ["Level", "Room 1", "Room 2", "Room 3", "Room 4", "Room 5"]:
+		var label := Label.new()
+		label.text = heading
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		grid.add_child(label)
+	for mine in [false, true]:
+		for row in ([1, 2, 3] if mine else [-2, -1, 0, 1]):
+			var label := Label.new()
+			label.text = "Mine %s" % row if mine else ROOMS.NAMES[row]
+			grid.add_child(label)
+			for col in range(ROOMS.COLUMNS):
+				var cell := Vector2i(col, row)
+				var button := Button.new()
+				button.custom_minimum_size.x = 98
+				button.focus_mode = Control.FOCUS_NONE
+				button.pressed.connect(func(): buy_room(mine, cell))
+				grid.add_child(button)
+				room_buttons[Vector3i(col, row, int(mine))] = button
+	entrance_button = Button.new()
+	entrance_button.focus_mode = Control.FOCUS_NONE
+	entrance_button.pressed.connect(func(): buy_room(true, Vector2i(1, 0)))
+	tab.add_child(entrance_button)
+	var note := Label.new()
+	note.text = "Mine entrance: basement room 2 + first chamber\nDeeper levels: expand down the shaft in room 2 first.\nLadders connect rooms automatically; keep their paths clear."
+	note.add_theme_font_size_override("font_size", 13)
+	tab.add_child(note)
+	refresh_room_buttons()
+
+func refresh_room_buttons() -> void:
+	var id := multiplayer.get_unique_id()
+	for key in room_buttons:
+		var mine: bool = key.z == 1
+		var cell := Vector2i(key.x, key.y)
+		var button: Button = room_buttons[key]
+		var owned: bool = rooms.owned(mine, cell)
+		var available: bool = rooms.can_buy(mine, cell)
+		var cost: int = progression.purchase_price(id, ROOMS.DEPTH_PRICES[cell.y] if mine else ROOMS.PRICES[cell.y])
+		button.text = "✓ Room %s" % (key.x + 1) if owned else ("+ %s" % cost if available else "—")
+		button.disabled = not available
+		button.tooltip_text = "%s · Room %s · %s coins" % ["Mine %s" % cell.y if mine else ROOMS.NAMES[cell.y], cell.x + 1, cost]
+	if entrance_button != null:
+		entrance_button.text = "Mine entrance owned" if rooms.mine_open else "Buy mine entrance + first chamber · %s coins" % progression.purchase_price(id, ROOMS.ENTRANCE_PRICE)
+		entrance_button.disabled = not rooms.can_open_mine()
+
+func buy_room(mine: bool, cell: Vector2i) -> void:
+	if multiplayer.is_server(): purchase_room_for(1, mine, cell)
+	else: request_room.rpc_id(1, mine, cell)
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_room(mine: bool, cell: Vector2i) -> void:
+	if multiplayer.is_server(): purchase_room_for(multiplayer.get_remote_sender_id(), mine, cell)
+
+func purchase_room_for(id: int, mine: bool, cell: Vector2i) -> void:
+	if not transport_allowed(id): return
+	var candidate = ROOMS.new()
+	candidate.restore(rooms.snapshot())
+	var entrance := mine and cell == Vector2i(1, 0)
+	var available: bool = candidate.can_open_mine() if entrance else candidate.can_buy(mine, cell)
+	if not available:
+		feedback_for(id, "Room unavailable: expand beside owned rooms.")
+		return
+	if entrance:
+		candidate.mine_open = true
+		candidate.underground[Vector2i(1, 1)] = true
+	else:
+		var cells: Dictionary = candidate.underground if mine else candidate.building
+		cells[cell] = true
+	# Reject newly opened ladder paths through existing furniture before charging.
+	for ladder in candidate.ladders():
+		var zone := Rect2(ladder.get_center().x - 8, ladder.position.y - 40, 16, ladder.size.y + 40)
+		for station in workshop.stations.values():
+			if workshop.footprint(station.at).intersects(zone):
+				feedback_for(id, "Move the station blocking the new ladder first.")
+				return
+	var multiplier: float = 1.0 - 0.1 * progression.rank(id, "purchasing")
+	var bought: bool = rooms.buy_entrance(orders, multiplier) if entrance else rooms.buy(mine, cell, orders, multiplier)
+	if not bought:
+		feedback_for(id, "Not enough coins for this expansion.")
+		return
+	apply_room_layout()
+	broadcast_state("receive_rooms", [rooms.snapshot()])
+	broadcast_state("receive_mining", [mining_snapshot()])
+	broadcast_state("receive_orders", [orders.snapshot()])
+	refresh_orders()
+	feedback_for(id, "Mine entrance opened." if entrance else "Room purchased.")
+
+func apply_room_layout() -> void:
+	world.configure(rooms)
+	workshop.room_layout = rooms
+	transport.room_layout = rooms
+	for dwarf in players.values():
+		dwarf.set_ladders(rooms.ladders())
+		configure_camera(dwarf.get_node("FollowCamera"))
+	sync_veins()
+	refresh_mining()
+	refresh_room_buttons()
+	refresh_transport()
+	update_overview()
+
+@rpc("authority", "call_remote", "reliable")
+func receive_rooms(state: Dictionary) -> void:
+	rooms.restore(state)
+	apply_room_layout()

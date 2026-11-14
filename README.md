@@ -5,12 +5,36 @@ Open `project.godot` and press **F5**. One player hosts; others enter that playe
 LAN IP and use the same UDP port (default **24567**). Allow that port through the
 host's LAN firewall. `127.0.0.1` is for multiple instances on one computer.
 
-## Larger map and player cameras
+## Expand the smithy
 
-The smithy is now **640 pixels wide** instead of 480, with about **42% more usable
-floor space** on all three levels. The right wing has solid floors, matching
-walls, and room for more stations. The counter and building ladders remain, with a mine entrance in the basement
-in their familiar locations.
+Start with **two ground-floor rooms** and no mine or workstations. Open
+**TAB → Rooms** to purchase adjoining rooms. Each row represents a level and
+each column a room, left to right. Owned rooms are checked; available expansions
+show their coin price. Ladders connect vertically adjacent building rooms
+automatically. Move any workstation blocking a new ladder before expanding.
+
+| Building level | Cost per room |
+| --- | --- |
+| Basement | 15 |
+| Ground floor | 25 |
+| First floor | 45 |
+| Second floor | 70 |
+
+Buy **basement room 2**, then its **mine entrance for 30 coins**, including the
+first underground chamber. Expand sideways at a purchased depth, or down the
+central shaft in room 2 to unlock the next depth. Deeper shaft rooms must be
+bought in order. Additional chambers cost **25 / 40 / 60 coins** at depths 1 / 2 / 3.
+Each underground room unlocks its own ore vein. This first version supports five
+room columns, four building levels and three underground depths.
+
+Expansion changes walls, floors, ladders, mine access and camera bounds for all
+players. Stations and rails require purchased floor space; elevator upgrades
+require the corresponding mine depth. Purchases use shared coins, count in daily
+spending, and receive the buyer's Bargainer discount. Duplicate purchases never
+charge twice. Rooms remain across days and reconnects; starting a new hosted
+session restores the two-room layout.
+
+## Player cameras
 
 Each player has a personal camera following their own dwarf, horizontally and
 between floors. The default resolution is **1280×720**. The view is **160 world pixels high**,
@@ -22,11 +46,11 @@ coverage. The connection menu returns to an overview of the whole building.
 
 ## Build your workshop
 
-The starting building has **no workstations**. The mine entrance, counter, ladders, door,
-walls, and floors are fixed. You start with **100 shared coins** and eight loose
-ore pieces in the basement.
+The starting building has **no workstations**. The counter and door are fixed;
+rooms, mine access and furniture are purchased. You start with **100 shared coins**
+and eight loose ore pieces on the ground floor.
 
-Press **Tab** or click **Build / Skills** to open the menu. Its **Build** tab offers:
+Press **Tab** or click **Workshop** to open the menu. Its **Build** tab offers:
 
 | Station | Cost | Purpose |
 | --- | --- | --- |
@@ -39,7 +63,7 @@ Buy with empty hands, then move the mouse and **left-click a green preview** to
 place the kit on a floor. Placement snaps to an 8-pixel grid. Red previews mean
 blocked placement: fixed fixtures, storefront/merchant space, ladders and their
 landings, mine access, walls, floor gaps, and existing stations stay clear.
-You can place multiple stations of each type and use all three floors.
+You can place multiple stations of each type and use all purchased building floors.
 
 A purchase charges once and reserves one kit per player. Invalid placement keeps
 the kit. **Esc** cancels an unplaced kit for a full refund. Stand beside an empty
@@ -110,13 +134,11 @@ Furniture lets dwarfs walk past it; output trays collide with physical items.
 
 ## Mine ore and buy wood
 
-The old basement mining spot at **(390, 288)** is now the **mine entrance**.
-Use **Down / Up** on its single continuous ladder to travel through three
-underground floors at y=368, 448, and 528. The ladder passes through openings in
-each floor; walk sideways onto a landing to leave it. The local camera follows
-through the entire mine while keeping its existing two-floor viewport height.
-
-There are **two ore veins on each level**, at x=240 and x=500. Stand beside a
+Purchase the basement entrance at **(390, 288)** through the Rooms tab.
+Its ladder starts with one underground floor and extends as deeper central
+chambers are bought, reaching y=368, 448, and 528. Walk sideways onto a landing
+to leave the ladder. The local camera follows through the mine with a two-floor
+viewport. Each purchased underground room has one ore vein. Stand beside a
 vein with empty hands, stay still, and **hold E for three seconds** to produce a
 physical ore piece beside that vein. Each vein has independent work progress:
 release E, move away, jump, or get hit to pause; another dwarf can finish the
@@ -350,7 +372,7 @@ rank costs one point. Buying a branch root unlocks its child skills:
 | Requires Sure-footed | Metalworker | +20% anvil, grinder, forge work speed | 3 |
 | Requires Sure-footed | Prospector | +20% mining speed | 3 |
 | Requires Sure-footed | Woodworker | +20% woodbench speed | 3 |
-| Trade root | Bargainer | −10% workstation and merchant wood prices | 3 |
+| Trade root | Bargainer | −10% purchase prices, including rooms and transport | 3 |
 | Requires Bargainer | Salesperson | +10% delivery sale prices | 3 |
 | Requires Bargainer | Diplomat | −1 reputation lost on explicit rejection | 2 |
 
@@ -376,8 +398,8 @@ interpolation remain future work. Verification uses one host and two clients on
 loopback; separate-computer LAN play still needs user testing.
 
 Leave returns to the menu. Host departure ends the session. New hosted games
-reset stations, resources, budget, reputation, day, and clocks. No persistence,
-upgrades, dedicated servers, internet matchmaking, or mine depletion yet.
+reset stations, resources, budget, reputation, day, and clocks. No disk persistence,
+dedicated servers, internet matchmaking, or mine depletion yet.
 
 ## Validation
 
@@ -385,6 +407,8 @@ Run **`bash tools/check.sh`** with Godot 4.6.x and Python 3 available. It isolat
 Godot's writable settings in temporary folders, imports and starts the project,
 and runs:
 
+- Room pricing, adjacency, locked areas, mine unlocking, ladder connections,
+  world collision changes, purchase races and room restoration for late joiners.
 - Camera ownership, follow motion, floor-height framing, map bounds, resize,
   overview restoration, zoomed placement, and new-wing floors/build areas.
 - Movement, ladder, collision, loose-item physics, and knockback checks.

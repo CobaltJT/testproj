@@ -20,6 +20,7 @@ func run() -> void:
 	session = load("res://scenes/session.tscn").instantiate()
 	root.add_child(session)
 	session.host_game()
+	preload("res://tests/world_fixture.gd").prepare(session)
 	await frames(5)
 	var dwarf = session.players[1]
 	session.purchase_for(1, "anvil")

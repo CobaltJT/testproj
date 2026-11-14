@@ -35,6 +35,7 @@ func run() -> void:
 	session = load("res://scenes/session.tscn").instantiate()
 	root.add_child(session)
 	session.host_game()
+	preload("res://tests/world_fixture.gd").prepare(session)
 	session.players[1].position = Vector2(166, 216)
 	session.cycle.phase = "shop"
 	session.orders.until_arrival = 100

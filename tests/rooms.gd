@@ -1,0 +1,43 @@
+extends SceneTree
+const ROOMS = preload("res://scripts/room_state.gd")
+const ECONOMY = preload("res://scripts/customer_state.gd")
+var failures := 0
+func check(ok: bool, message: String) -> void:
+	if ok: print("PASS rooms: ", message)
+	else:
+		failures += 1
+		push_error(message)
+func _initialize() -> void:
+	var layout = ROOMS.new()
+	var economy = ECONOMY.new()
+	check(layout.building.size() == 2 and layout.underground.is_empty() and not layout.mine_open, "Exactly two ground rooms and no mine at start")
+	check(not layout.buy(false, Vector2i(4, 0), economy) and not layout.buy(false, Vector2i(0, -2), economy), "Cannot buy isolated rooms or skip floors")
+	check(not layout.buy_entrance(economy) and not layout.buy(true, Vector2i(1, 1), economy), "Mine requires basement access")
+	check(layout.buy(false, Vector2i(1, 1), economy) and economy.coins == 85, "Basement costs 15 and connects by ladder")
+	check(layout.buy_entrance(economy) and economy.coins == 55 and layout.underground.size() == 1 and layout.depth() == 1, "30-coin entrance includes first underground room")
+	var transport = preload("res://scripts/transport_state.gd").new()
+	transport.room_layout = layout
+	var transport_budget = ECONOMY.new()
+	check(transport.upgrade(1, transport_budget) and transport.buy_cart(Vector2(422, 368), transport_budget) != -1, "Both elevator rail anchors and carts fit in first purchased chamber")
+	check(not transport.can_rail(Vector2(454, 368)) and not transport.supported(Vector2(454, 368)), "Rails and carts cannot extend through a locked room wall")
+	check(not layout.buy_entrance(economy) and economy.coins == 55, "Repeated entrance purchase cannot charge twice")
+	check(not layout.buy(true, Vector2i(1, 3), economy), "Cannot skip underground depths")
+	check(layout.buy(true, Vector2i(2, 1), economy) and economy.coins == 30, "Underground expands sideways from owned chamber")
+	check(not layout.buy(true, Vector2i(1, 2), economy) and economy.coins == 30, "Unaffordable expansion changes nothing")
+	economy.coins = 1000
+	check(layout.buy(false, Vector2i(0, -1), economy) and economy.coins == 955, "First floor costs 45")
+	check(layout.buy(false, Vector2i(0, -2), economy) and economy.coins == 885, "Second floor costs 70")
+	check(layout.buy(false, Vector2i(2, 0), economy) and economy.coins == 860, "Ground room costs 25")
+	check(layout.buy(true, Vector2i(1, 2), economy) and economy.coins == 820, "Second depth costs 40")
+	check(layout.buy(true, Vector2i(1, 3), economy) and economy.coins == 760, "Third depth costs 60")
+	check(layout.ladders().any(func(rect): return rect.position == Vector2(374, 288) and rect.end.y == 528), "Mine ladder grows across purchased depths")
+	var copy = ROOMS.new()
+	copy.restore(layout.snapshot())
+	check(copy.building == layout.building and copy.underground == layout.underground and copy.mine_open, "Room ownership survives snapshot restoration")
+	copy.building.erase(Vector2i(0, 0))
+	check(layout.building.has(Vector2i.ZERO), "Snapshot ownership is independent")
+	var discounted = ROOMS.new()
+	check(discounted.buy(false, Vector2i(0, 1), economy, 0.9) and economy.coins == 746, "Bargainer price rounds up and expenses are recorded")
+	check(economy.spent == 324, "All room and entrance costs enter daily spending exactly once")
+	print("ROOMS RESULT: ", failures, " failures")
+	quit(1 if failures else 0)

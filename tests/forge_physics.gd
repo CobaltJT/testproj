@@ -20,6 +20,7 @@ func run() -> void:
 	session = load("res://scenes/session.tscn").instantiate()
 	root.add_child(session)
 	session.host_game()
+	preload("res://tests/world_fixture.gd").prepare(session)
 	check(session.workshop.stations.is_empty(), "Forge is not preinstalled")
 	session.purchase_for(1, "forge")
 	session.place_for(1, Vector2(256, 216))

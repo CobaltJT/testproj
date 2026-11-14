@@ -88,6 +88,7 @@ func run() -> void:
 	print("MULTIPLAYER RESULT ", role, ": ", failures, " failures")
 	quit(1 if failures else 0)
 func host_scenarios() -> void:
+	preload("res://tests/world_fixture.gd").prepare(session)
 	session.advance_day()
 	check(session.workshop.stations.is_empty() and session.orders.coins == 100, "Host starts with empty workshop")
 	# Keep recipe fixtures clear of the loose-pickup radius at the woodbench.

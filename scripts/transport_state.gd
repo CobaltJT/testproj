@@ -1,9 +1,11 @@
 extends RefCounted
+const MAP = preload("res://scripts/map_layout.gd")
 const STOPS := [288.0, 368.0, 448.0, 528.0]
 const UPGRADE_PRICE := 30
 const RAIL_PRICE := 5
 const CART_PRICE := 25
 const CART_CAPACITY := 25
+var room_layout: RefCounted
 var upgrades := 0
 var lift_y := 288.0
 var target := 0
@@ -20,6 +22,7 @@ func pay(economy: RefCounted, cost: int) -> bool:
 	return true
 
 func upgrade(level: int, economy: RefCounted, price: int = UPGRADE_PRICE) -> bool:
+	if room_layout != null and (not room_layout.mine_open or level > room_layout.depth()): return false
 	if level != upgrades + 1 or level > 3 or moving or not pay(economy, price): return false
 	upgrades = level
 	for floor in range(upgrades + 1):
@@ -36,7 +39,10 @@ func snap_rail(at: Vector2) -> Vector2:
 	return Vector2(base + snappedf(at.x - base, 32), y)
 
 func can_rail(at: Vector2) -> bool:
-	if not at.is_finite() or upgrades == 0 or at.y not in STOPS or STOPS.find(at.y) > upgrades or at.x < 70 or at.x > 566 or at in tracks or absf(at.x - 390) < 32: return false
+	if not at.is_finite() or upgrades == 0 or at.y not in STOPS or STOPS.find(at.y) > upgrades or at.x < 70 or at.x > (MAP.RIGHT_WALL - 20 if room_layout != null else 566) or at in tracks or absf(at.x - 390) < 32: return false
+	if room_layout != null:
+		var mine := at.y > 288
+		if not room_layout.contains_floor(at - Vector2(16, 0), mine) or not room_layout.contains_floor(at + Vector2(16, 0), mine): return false
 	return at + Vector2(32, 0) in tracks or at - Vector2(32, 0) in tracks
 
 func buy_rail(player: int, economy: RefCounted, price: int = RAIL_PRICE) -> bool:
@@ -57,6 +63,9 @@ func cancel(player: int, economy: RefCounted) -> void:
 		pending.erase(player)
 
 func supported(at: Vector2) -> bool:
+	if room_layout != null:
+		var mine := at.y > 288
+		if not room_layout.contains_floor(at - Vector2(20, 0), mine) or not room_layout.contains_floor(at + Vector2(20, 0), mine): return false
 	for rail in tracks:
 		if is_equal_approx(rail.y, at.y) and absf(rail.x - at.x) <= 16.001: return true
 	return upgrades > 0 and not moving and is_equal_approx(at.y, lift_y) and absf(at.x - 390) <= 16.001

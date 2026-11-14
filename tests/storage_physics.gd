@@ -20,6 +20,7 @@ func run() -> void:
 	session = load("res://scenes/session.tscn").instantiate()
 	root.add_child(session)
 	session.host_game()
+	preload("res://tests/world_fixture.gd").prepare(session)
 	await frames(5)
 	await press("build_menu")
 	check(session.station_buttons.size() == 10 and Rect2(Vector2.ZERO, root.get_visible_rect().size).encloses(session.catalog.get_global_rect()), "Build catalog includes all six storage options and fits viewport")

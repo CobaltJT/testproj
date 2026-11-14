@@ -15,6 +15,7 @@ func run() -> void:
 	session = load("res://scenes/session.tscn").instantiate()
 	root.add_child(session)
 	session.host_game()
+	preload("res://tests/world_fixture.gd").prepare(session)
 	await frames(5)
 	check(not session.order_label.visible and not session.hud.customer_badge.visible and not session.hud.merchant_badge.visible, "No text customer panel or inactive visitor indicators")
 	check(not session.hud.held.visible and session.hud.held.text == "", "No empty-hands or held-item text")

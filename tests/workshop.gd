@@ -37,7 +37,7 @@ func _initialize() -> void:
 		check(model.place(1, at) == -1 and model.pending.has(1), "Reject blocked, off-floor, off-grid, or nonfinite placement")
 	for y in [136, 216, 288]:
 		check(model.can_place(Vector2(512, y)), "New wing supports station placement on floor %s" % y)
-	check(not model.can_place(Vector2(592, 216)), "New right wall still blocks out-of-map stations")
+	check(not model.can_place(Vector2(WORKSHOP.MAP.RIGHT_WALL, 216)), "New right wall still blocks out-of-map stations")
 	var anvil: int = model.place(1, Vector2(256, 216))
 	check(anvil > 0 and model.opened and model.stations.size() == 1, "Manual anvil placement opens workshop")
 	check(model.purchase(2, "grinder", economy, materials) and model.place(2, Vector2(256, 216)) == -1, "Overlapping placement rejected without spending again")

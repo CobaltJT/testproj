@@ -22,6 +22,7 @@ func run() -> void:
 	await frames(3)
 	check(root.get_camera_2d() == session.overview_camera, "Menu shows building overview")
 	session.host_game()
+	preload("res://tests/world_fixture.gd").prepare(session)
 	await frames(10)
 	var dwarf = session.players[1]
 	var camera: Camera2D = dwarf.get_node("FollowCamera")
@@ -57,7 +58,7 @@ func run() -> void:
 	await frames(5)
 	check(session.workshop.stations.size() == 1 and session.workshop.stations.values()[0].at == at, "Zoomed placement click reaches correct new-wing grid position")
 	for y in [136, 216, 288]:
-		dwarf.position = Vector2(582, y)
+		dwarf.position = Vector2(MAP.RIGHT_WALL - 10, y)
 		dwarf.velocity = Vector2.ZERO
 		await frames(60)
 		var screen_center := camera.get_screen_center_position()

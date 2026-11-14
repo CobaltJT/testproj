@@ -25,6 +25,12 @@ func _initialize() -> void:
 func run() -> void:
 	var world = load("res://scenes/smithy.tscn").instantiate()
 	root.add_child(world)
+	var layout = preload("res://scripts/room_state.gd").new()
+	preload("res://tests/world_fixture.gd").fill(layout)
+	layout.building.erase(Vector2i(1, 1))
+	layout.building.erase(Vector2i(1, -2))
+	world.configure(layout)
+	world.get_node("Player").set_ladders([Rect2(304, 136, 32, 80), Rect2(96, 216, 32, 72)])
 	player = world.get_node("Player")
 	await frames(10)
 	check(player.is_on_floor() and absf(player.position.y - 216) < 1, "Spawn rests on ground floor")
@@ -36,17 +42,17 @@ func run() -> void:
 	check(player.position.y < 205, "Jump leaves ground")
 	await frames(80)
 	check(player.is_on_floor(), "Jump lands on floor")
-	player.position = Vector2(560, 216)
+	player.position = Vector2(1056, 216)
 	player.velocity = Vector2.ZERO
 	await frames(5)
 	await hold("move_right", 60)
-	check(player.position.x > 581 and player.position.x <= 582.1, "Expanded right wall contains moving dwarf")
+	check(player.position.x > 1077 and player.position.x <= 1078.1, "Expanded right wall contains moving dwarf")
 	player.position = Vector2(70, 216)
 	player.velocity = Vector2.ZERO
 	await frames(5)
 	await hold("move_left", 60)
 	check(player.position.x >= 57.9, "Left wall contains dwarf")
-	for entry in [[Vector2(368, 216), "climb_up", 136.0], [Vector2(368, 136), "climb_down", 216.0], [Vector2(112, 216), "climb_down", 288.0], [Vector2(112, 288), "climb_up", 216.0]]:
+	for entry in [[Vector2(320, 216), "climb_up", 136.0], [Vector2(320, 136), "climb_down", 216.0], [Vector2(112, 216), "climb_down", 288.0], [Vector2(112, 288), "climb_up", 216.0]]:
 		player.position = entry[0]
 		player.velocity = Vector2.ZERO
 		player.climbing = false
@@ -54,11 +60,11 @@ func run() -> void:
 		await frames(5)
 		check(absf(player.position.y - entry[2]) < 2, "Ladder route %s to %s" % [entry[0], entry[2]])
 	# Attaching off-center must preserve horizontal position.
-	player.position = Vector2(364, 180)
+	player.position = Vector2(316, 180)
 	player.velocity = Vector2.ZERO
 	player.climbing = false
 	await hold("climb_up", 1)
-	check(player.climbing and absf(player.position.x - 364) < 0.01, "Attach without centering")
+	check(player.climbing and absf(player.position.x - 316) < 0.01, "Attach without centering")
 	var diagonal_start := player.position
 	Input.action_press("move_right")
 	await hold("climb_up", 3)
@@ -68,16 +74,16 @@ func run() -> void:
 	await hold("move_left", 3)
 	check(player.climbing and player.position.x < sideways_start.x and absf(player.position.y - sideways_start.y) < 0.01, "Horizontal ladder movement stays attached")
 	await hold("move_left", 20)
-	check(not player.climbing and player.position.x < 352, "Leaving ladder width detaches")
-	player.position = Vector2(368, 180)
+	check(not player.climbing and player.position.x < 304, "Leaving ladder width detaches")
+	player.position = Vector2(320, 180)
 	player.velocity = Vector2.ZERO
 	player.climbing = false
 	await hold("climb_up", 100)
-	check(player.climbing and absf(player.position.x - 368) < 0.01 and absf(player.position.y - 136) < 0.3, "Top stops upward motion without teleporting")
+	check(player.climbing and absf(player.position.x - 320) < 0.01 and absf(player.position.y - 136) < 0.3, "Top stops upward motion without teleporting")
 	await hold("move_left", 25)
 	await frames(10)
 	check(not player.climbing and player.is_on_floor() and absf(player.position.y - 136) < 1, "Walk from ladder top onto upper floor")
-	player.position = Vector2(368, 180)
+	player.position = Vector2(320, 180)
 	player.velocity = Vector2.ZERO
 	player.climbing = false
 	await hold("climb_up", 2)
@@ -90,7 +96,7 @@ func run() -> void:
 		Input.action_release("climb_up")
 		Input.action_release("climb_down")
 		await frames(1)
-		player.position = Vector2(368, 190)
+		player.position = Vector2(320, 190)
 		player.velocity = Vector2.ZERO
 		player.climbing = false
 		Input.action_press(direction)
@@ -107,7 +113,7 @@ func run() -> void:
 	Input.action_release("climb_up")
 	Input.action_release("climb_down")
 	await frames(1)
-	player.position = Vector2(368, 190)
+	player.position = Vector2(320, 190)
 	player.velocity = Vector2.ZERO
 	player.climbing = false
 	Input.action_press("climb_up")
@@ -124,7 +130,7 @@ func run() -> void:
 	check(caught_at_apex and player.position.y > 163 and player.position.y < 170, "Held Up catches ladder at jump apex")
 	Input.action_release("climb_up")
 	await frames(1)
-	player.position = Vector2(368, 190)
+	player.position = Vector2(320, 190)
 	player.velocity = Vector2.ZERO
 	player.climbing = false
 	Input.action_press("climb_down")

@@ -6,7 +6,9 @@ const JUMP_SPEED := -300.0
 const GRAVITY := 1000.0
 const CLIMB_SPEED := 110.0
 const MAP = preload("res://scripts/map_layout.gd")
-const LADDERS: Array[Rect2] = MAP.LADDERS
+var ladders: Array[Rect2] = []
+var mine_ladder_index := -1
+var mine_ladder_bottom := 528.0
 var transport_locked := false
 var mine_ladder_top := 288.0
 var walking_multiplier := 1.0
@@ -44,18 +46,18 @@ func _physics_process(delta: float) -> void:
 	previous_jump = jump_held
 	var holding_climb := climb_held if networked else (Input.is_action_pressed("climb_up") or Input.is_action_pressed("climb_down"))
 	set_collision_mask_value(5, not (vertical > 0 and position.x >= 374 and position.x <= 406 and position.y >= mine_ladder_top - 2))
-	if climbing and active_ladder == 2 and (mine_ladder_top >= 528 or position.y < mine_ladder_top - 2): climbing = false
+	if climbing and active_ladder == mine_ladder_index and (mine_ladder_top >= mine_ladder_bottom or position.y < mine_ladder_top - 2): climbing = false
 	if not holding_climb:
 		ladder_jump_locked = false
 	# A held Up can catch the ladder as an upward jump reaches its apex.
 	if ladder_jump_locked and vertical < 0 and velocity.y < 0 and velocity.y + GRAVITY * delta >= 0:
 		ladder_jump_locked = false
 	if hit_stun == 0 and not climbing and not ladder_jump_locked and not jump_pressed and not is_zero_approx(vertical):
-		for i in range(LADDERS.size()):
-			var ladder := LADDERS[i]
-			if i == 2:
-				if mine_ladder_top >= 528: continue
-				ladder = Rect2(374, mine_ladder_top, 32, 528 - mine_ladder_top)
+		for i in range(ladders.size()):
+			var ladder := ladders[i]
+			if i == mine_ladder_index:
+				if mine_ladder_top >= mine_ladder_bottom: continue
+				ladder = Rect2(374, mine_ladder_top, 32, mine_ladder_bottom - mine_ladder_top)
 			if position.x >= ladder.position.x and position.x <= ladder.end.x and position.y >= ladder.position.y - 3 and position.y <= ladder.end.y + 1:
 				if vertical < 0 and position.y <= ladder.position.y:
 					continue
@@ -63,8 +65,8 @@ func _physics_process(delta: float) -> void:
 				climbing = true
 				break
 	if climbing:
-		var ladder := LADDERS[active_ladder]
-		if active_ladder == 2: ladder = Rect2(374, mine_ladder_top, 32, 528 - mine_ladder_top)
+		var ladder := ladders[active_ladder]
+		if active_ladder == mine_ladder_index: ladder = Rect2(374, mine_ladder_top, 32, mine_ladder_bottom - mine_ladder_top)
 		velocity = Vector2(horizontal * SPEED * walking_multiplier, vertical * CLIMB_SPEED)
 		if jump_pressed:
 			climbing = false
@@ -93,7 +95,7 @@ func _physics_process(delta: float) -> void:
 		ladder_jump_locked = false
 
 	if climbing:
-		var ladder := LADDERS[active_ladder]
+		var ladder := ladders[active_ladder]
 		if position.x < ladder.position.x or position.x > ladder.end.x:
 			climbing = false
 
@@ -103,3 +105,19 @@ func apply_ore_hit(impulse: Vector2) -> void:
 	hit_stun = 0.25
 	knockback_x = clampf(impulse.x, -260, 260)
 	velocity.y = minf(velocity.y, -100.0)
+
+func set_ladders(value: Array) -> void:
+	var old_x: float = ladders[active_ladder].get_center().x if climbing and active_ladder >= 0 and active_ladder < ladders.size() else -9999
+	ladders.assign(value)
+	mine_ladder_index = -1
+	for i in range(ladders.size()):
+		if ladders[i].position == Vector2(374, 288):
+			mine_ladder_index = i
+			mine_ladder_bottom = ladders[i].end.y
+	climbing = false
+	active_ladder = -1
+	for i in range(ladders.size()):
+		if ladders[i].get_center().x == old_x and position.y >= ladders[i].position.y - 1 and position.y <= ladders[i].end.y + 1:
+			active_ladder = i
+			climbing = true
+			break

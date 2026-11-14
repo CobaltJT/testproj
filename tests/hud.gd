@@ -15,6 +15,7 @@ func run() -> void:
 	session = load("res://scenes/session.tscn").instantiate()
 	root.add_child(session)
 	session.host_game()
+	preload("res://tests/world_fixture.gd").prepare(session)
 	await frames(10)
 	check(session.hud.visible and not session.hud.help_layer.visible, "Compact HUD is visible and guide is hidden by default")
 	check(not session.hud.connection_panel.visible and not session.recipe_label.visible and not session.hint.visible, "Network panel and persistent control hint lines are hidden during play")

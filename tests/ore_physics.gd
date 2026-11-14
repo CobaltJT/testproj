@@ -15,6 +15,7 @@ func run() -> void:
 	session = load("res://scenes/session.tscn").instantiate()
 	root.add_child(session)
 	session.host_game()
+	preload("res://tests/world_fixture.gd").prepare(session)
 	await frames(150)
 	var resting := true
 	for body in session.ore_bodies.values():

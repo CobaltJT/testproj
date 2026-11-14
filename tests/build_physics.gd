@@ -43,6 +43,7 @@ func run() -> void:
 	session = load("res://scenes/session.tscn").instantiate()
 	root.add_child(session)
 	session.host_game()
+	preload("res://tests/world_fixture.gd").prepare(session)
 	await frames(5)
 	check(session.station_nodes.is_empty() and session.orders.number == 0, "New world has no stations and stays closed")
 	await press("build_menu")

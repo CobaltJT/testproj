@@ -17,6 +17,7 @@ func run() -> void:
 	session = load("res://scenes/session.tscn").instantiate()
 	root.add_child(session)
 	session.host_game()
+	preload("res://tests/world_fixture.gd").prepare(session)
 	session.advance_day()
 	var dwarf = session.players[1]
 	dwarf.position = Vector2(390, 216)

@@ -15,6 +15,7 @@ func run() -> void:
 	session = load("res://scenes/session.tscn").instantiate()
 	root.add_child(session)
 	session.host_game()
+	preload("res://tests/world_fixture.gd").prepare(session)
 	var dwarf = session.players[1]
 	dwarf.position = session.MINE_POSITION
 	await frames(5)

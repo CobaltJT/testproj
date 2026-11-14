@@ -20,6 +20,7 @@ func run() -> void:
 	session = load("res://scenes/session.tscn").instantiate()
 	root.add_child(session)
 	session.host_game()
+	preload("res://tests/world_fixture.gd").prepare(session)
 	await frames(5)
 	check(session.transport_buttons[2].disabled and not session.transport_buttons[1].disabled, "Transport UI only offers next elevator segment")
 	session.buy_transport_for(1, "lift", 2)

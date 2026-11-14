@@ -15,6 +15,7 @@ func run() -> void:
 	session = load("res://scenes/session.tscn").instantiate()
 	root.add_child(session)
 	session.host_game()
+	preload("res://tests/world_fixture.gd").prepare(session)
 	session.advance_day()
 	var dwarf = session.players[1]
 	check(session.mine_veins.size() == 6 and session.vein_nodes.size() == 6, "Two independently mineable veins on each of three levels")
@@ -34,7 +35,7 @@ func run() -> void:
 		dwarf.position = Vector2(390, level - 0.25)
 		dwarf.velocity = Vector2.ZERO
 		dwarf.climbing = true
-		dwarf.active_ladder = 2
+		dwarf.active_ladder = dwarf.mine_ladder_index
 		Input.action_press("move_right")
 		await frames(30)
 		Input.action_release("move_right")
@@ -61,6 +62,6 @@ func run() -> void:
 	Input.action_release("interact")
 	check(session.mine_veins[5].extracted == 1, "Evening closes underground mining")
 	session.disconnect_game("Done")
-	check(session.mine_veins.size() == 6 and session.mine_veins[5].extracted == 0, "New session resets every vein")
+	check(session.mine_veins.is_empty() and session.vein_nodes.is_empty(), "New session resets every vein")
 	print("MINE LEVELS RESULT: ", failures, " failures")
 	quit(1 if failures else 0)

@@ -318,6 +318,8 @@ func host_scenarios() -> void:
 	await frames(10)
 func client_scenarios() -> void:
 	var id: int = session.multiplayer.get_unique_id()
+	var before: Dictionary = session.ore.snapshot()
+	check(not session.route_interaction(id, &"interact") and before == session.ore.snapshot(), "Clients cannot execute the authoritative interaction router locally")
 	sync.report.rpc_id(1, "role-%s-%s" % [role, id])
 	await stage("build")
 	var kind := "grinder" if role == "client1" else "woodbench"

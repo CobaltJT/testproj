@@ -125,8 +125,8 @@ func restore(state: Dictionary) -> void:
 	next_id = state.next_id
 	opened = state.opened
 
-func storage_transfer(player: int, at: Vector2, materials: RefCounted) -> bool:
-	var id := nearest(at)
+func storage_transfer(player: int, at: Vector2, materials: RefCounted, selected: int = -1) -> bool:
+	var id := resolve_station(at, selected)
 	if player <= 0 or id == -1 or pending.has(player) or stations[id].kind not in STORAGE:
 		return false
 	var entry: Dictionary = stations[id]
@@ -162,8 +162,8 @@ func stored_kinds(id: int, materials: RefCounted) -> Array:
 		if kind not in result: result.append(kind)
 	return result
 
-func cycle_storage(player: int, at: Vector2, materials: RefCounted) -> bool:
-	var id := nearest(at)
+func cycle_storage(player: int, at: Vector2, materials: RefCounted, selected: int = -1) -> bool:
+	var id := resolve_station(at, selected)
 	if player <= 0 or id == -1 or pending.has(player) or stations[id].kind not in STORAGE:
 		return false
 	var kinds := stored_kinds(id, materials)
@@ -182,3 +182,11 @@ func catch_intermediate(id: int, piece: int, materials: RefCounted) -> bool:
 	entry.items.append(piece)
 	if entry.selected == "": entry.selected = materials.pieces[piece].kind
 	return true
+
+func resolve_station(at: Vector2, selected: int) -> int:
+	if not at.is_finite(): return -1
+	if selected == -1: return nearest(at)
+	# Reuse discovery, but still validate the specific target's current range.
+	if not stations.has(selected): return -1
+	var target: Vector2 = stations[selected].at
+	return selected if absf(target.x - at.x) <= 22 and absf(target.y - at.y) <= 6 else -1

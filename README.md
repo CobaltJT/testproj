@@ -477,6 +477,40 @@ owners for later refactoring milestones. `tests/ui_components.gd` checks the
 extracted scenes independently, while the existing input and multiplayer tests
 exercise the same player actions through their new control owners.
 
+## Interaction routing
+
+E, C and T requests reach the host through their existing RPCs. The host checks
+the player and day phase, preserves E's input debounce, and creates an
+`scripts/interaction/context.gd` containing the actor, action, authoritative position
+and carried-item ID. Client input never supplies target IDs or positions.
+
+`scripts/interaction/router.gd` calls an ordered `Array[Callable]`, configured in
+`session.gd:init_interactions`. Methods from different controllers can be
+interleaved without changing their ownership:
+
+- `scripts/controllers/movable_objects.gd`: loose pickup, bin/cart transfers and carrying.
+- `scripts/controllers/placeables.gd`: mining interaction, storage, care, loading and T cycling.
+- `scripts/controllers/npcs.gd`: front-customer deliveries.
+
+Each method accepts the context and returns a boolean. **True consumes the
+input**, including intentional no-ops such as E on an empty movable bin.
+**False declines it**, without gameplay changes or feedback, so the next method
+can try. There is no separate preflight method or blocked-result type. Candidate
+lookups are lazy and cached for that dispatch; storage reuses the selected
+station while still validating its current range.
+
+E priority remains: loose items/bin retrieval, cart inventory, carried-product
+bin deposit, ore veins, counter delivery, storage, beds/tables, then ingredients.
+C preserves drop/release and nearest-bin-versus-cart selection. T cycles anvil
+recipes or stored products. Registration changes affect the next dispatch, not
+an interaction already being traversed.
+
+Controllers emit change/feedback signals after consuming an interaction. The
+session handles replication, presentation refreshes and EXP. Controller state
+dependencies are rebound on reset so new games cannot mutate the previous game's
+models. Physics simulation, F/Q release, continuous held-E work, purchases and
+network endpoints retain their existing owners for subsequent milestones.
+
 ## Validation
 
 Run **`bash tools/check.sh`** with Godot 4.6.x and Python 3 available. It isolates

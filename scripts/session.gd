@@ -1,4 +1,13 @@
 extends Node
+const INTERACTION_CONTEXT = preload("res://scripts/interaction/context.gd")
+const INTERACTION_ROUTER = preload("res://scripts/interaction/router.gd")
+const MOVABLE_OBJECTS = preload("res://scripts/controllers/movable_objects.gd")
+const PLACEABLES = preload("res://scripts/controllers/placeables.gd")
+const NPCS = preload("res://scripts/controllers/npcs.gd")
+var interaction_router = INTERACTION_ROUTER.new()
+var movable_objects = MOVABLE_OBJECTS.new()
+var placeables = PLACEABLES.new()
+var npcs = NPCS.new()
 const NEEDS = preload("res://scripts/needs_state.gd")
 var needs = NEEDS.new()
 var supplies = preload("res://scripts/merchant_state.gd").new()
@@ -90,6 +99,7 @@ var active := false
 var tick := 0
 
 func _ready() -> void:
+	init_interactions()
 	world = WORLD.instantiate()
 	add_child(world)
 	world.get_node("Player").free()
@@ -769,70 +779,12 @@ func material_texture(kind: String) -> Texture2D:
 	return EXTRA_TEXTURES.get(kind, ORE_TEXTURE)
 
 func interact_for(id: int) -> void:
-	if not multiplayer.is_server() or not players.has(id) or workshop.pending.has(id) or cycle.phase in ["summary", "transition"]:
-		return
+	if not transport_allowed(id) or workshop.pending.has(id): return
 	var now := Time.get_ticks_msec()
-	if now - last_interaction.get(id, -1000) < 150:
-		return
+	if now - last_interaction.get(id, -1000) < 150: return
 	last_interaction[id] = now
-	var dwarf = players[id]
-	var carried: int = ore.carried_by(id)
-	var message := "E: pick up/load · Hold E: work · Tab: build · R: pack idle station"
-	var object: int = nearest_loose(dwarf.position)
-	var bin: int = nearest_mobile_bin(dwarf.position)
-	var cart: int = nearest_cart(dwarf.position)
-	if carried == -1 and object != -1 and ore.pieces[object].kind == "ore_bin" and ore.pieces[object].contents.is_empty(): return
-	if carried == -1 and object != -1 and ore.pieces[object].kind == "ore_bin" and not ore.pieces[object].contents.is_empty() and ore.take_from_bin(id, object):
-		message = "Took one intermediate product."
-	elif carried == -1 and object != -1 and ore.pickup(id, object):
-		message = "Picked up %s. F: throw · Q: drop" % ("movable parts bin" if ore.pieces[object].kind == "ore_bin" else ore.pieces[object].kind.replace("_", " "))
-	elif carried == -1 and cart != -1:
-		message = "Took one ore from cart." if transport.take(cart, id, ore) else "Cart is empty. C: push cart."
-		sync_transport()
-	elif carried != -1 and cart != -1 and transport.deposit(cart, id, ore):
-		message = "Ore loaded into cart. E: take ore with empty hands · C: push cart."
-		sync_transport()
-	elif carried != -1 and bin != -1 and ore.deposit_in_bin(id, bin):
-		message = "Intermediate product stored."
-	elif near_mine(dwarf):
-		message = "Mine closed until shop hours." if cycle.phase != "shop" else "Hold E with empty hands to mine ore. Prospector speeds up extraction."
-	elif absf(dwarf.position.x - 166) <= 30 and absf(dwarf.position.y - 216) <= 6 and not orders.queue.is_empty() and carried != -1:
-		var request: Dictionary = orders.queue[0]
-		var product: String = request.kind
-		var completed_before: int = orders.completed
-		var sold: bool = orders.deliver(id, dwarf.position, ore, 1.0 + 0.1 * progression.rank(id, "sales"))
-		if sold:
-			var result := "Order complete! +2 reputation." if orders.completed > completed_before else "%s more needed." % (request.get("quantity", 1) - request.delivered)
-			message = "%s delivered! +%s coins. %s" % [product.capitalize(), progression.sale_price(id, CUSTOMER_STATE.PRICES[product]), result]
-		else:
-			message = "Accept the request first." if not request.accepted else "Front customer needs a %s." % product
-		if sold:
-			award_exp(id, "delivery")
-		broadcast_state("receive_orders", [orders.snapshot()])
-		refresh_orders()
-	else:
-		var station_id: int = workshop.nearest(dwarf.position)
-		if station_id != -1 and workshop.stations[station_id].kind in WORKSHOP_STATE.STORAGE:
-			var transferred: bool = workshop.storage_transfer(id, dwarf.position, ore)
-			message = "Stored item." if transferred and carried != -1 else ("Retrieved item. T: select another stored product." if transferred else "Storage: check category, capacity and selected product. T: cycle products.")
-			broadcast_state("receive_workshop", [workshop.snapshot()])
-			refresh_workshop()
-		elif station_id != -1 and workshop.stations[station_id].kind in WORKSHOP_STATE.CARE:
-			var entry: Dictionary = workshop.stations[station_id]
-			if entry.kind == "bed": message = "Hold E with empty hands to sleep."
-			elif carried != -1 and needs.dwarfs[id].food < 100 and entry.job.load_material(id, ore):
-				message = "Meal loaded. Hold E to eat."
-			else: message = "Carry food to an empty table, then hold E to eat."
-			broadcast_state("receive_workshop", [workshop.snapshot()])
-			refresh_workshop()
-		elif carried != -1 and station_id != -1:
-			var job = workshop.stations[station_id].job
-			message = "Ingredient loaded. Hold E with empty hands to work." if job.load_material(id, ore) else ("Throw ore into the attached forge bin, then hold E to smelt." if job.kind == "forge" else "Wrong or duplicate ingredient for this station recipe.")
-			broadcast_state("receive_workshop", [workshop.snapshot()])
-			refresh_workshop()
-
-	broadcast_state("receive_ore", [ore.snapshot()], true)
-	feedback_for(id, message)
+	if not route_interaction(id, &"interact"):
+		feedback_for(id, "E: pick up/load · Hold E: work · Tab: build · R: pack idle station")
 
 func feedback_for(id: int, message: String) -> void:
 	if id == 1:
@@ -894,6 +846,7 @@ func reset_ore(simulate: bool) -> void:
 	for id in ore.pieces:
 		create_ore_body(id, simulate, Vector2(310 + id * 8, 209 - (id % 2) * 3))
 	refresh_ore()
+	bind_interaction_state()
 
 func choose_recipe(id: int, choice: String) -> void:
 	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
@@ -1157,39 +1110,7 @@ func request_storage_cycle() -> void:
 		cycle_storage_for(multiplayer.get_remote_sender_id())
 
 func cycle_storage_for(id: int) -> void:
-	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
-		return
-	var station: int = workshop.nearest(players[id].position)
-	if station != -1 and workshop.stations[station].kind == "anvil":
-		var job = workshop.stations[station].job
-		var next: String = STATION_JOB.ANVIL_RECIPES[(STATION_JOB.ANVIL_RECIPES.find(job.recipe) + 1) % STATION_JOB.ANVIL_RECIPES.size()]
-		choose_recipe(id, next)
-		return
-	if workshop.cycle_storage(id, players[id].position, ore):
-		broadcast_state("receive_workshop", [workshop.snapshot()])
-		refresh_workshop()
-
-func nearest_loose(at: Vector2) -> int:
-	var nearest := -1
-	var distance := 24.0
-	for piece in ore_bodies:
-		if not ore.is_loose(piece): continue
-		var offset: Vector2 = world.to_local(ore_bodies[piece].global_position) - (at - Vector2(0, 8))
-		if absf(offset.y) <= 18 and offset.length() < distance:
-			nearest = piece
-			distance = offset.length()
-	return nearest
-
-func nearest_mobile_bin(at: Vector2) -> int:
-	var nearest := -1
-	var distance := 32.0
-	for piece in ore_bodies:
-		if ore.pieces[piece].kind != "ore_bin" or not ore.is_loose(piece): continue
-		var offset: Vector2 = world.to_local(ore_bodies[piece].global_position) - (at - Vector2(0, 8))
-		if absf(offset.y) <= 18 and offset.length() < distance:
-			nearest = piece
-			distance = offset.length()
-	return nearest
+	route_interaction(id, &"cycle_storage")
 
 func buy_mobile_bin() -> void:
 	workshop_ui.hide()
@@ -1273,41 +1194,12 @@ func place_rail_for(id: int, at: Vector2) -> void:
 		transport.place_rail(id, at)
 		sync_transport()
 
-func nearest_cart(at: Vector2) -> int:
-	var nearest := -1
-	var distance := 36.0
-	for id in transport.carts:
-		var offset: Vector2 = transport.carts[id].at - at
-		if absf(offset.y) <= 8 and offset.length() < distance:
-			nearest = id
-			distance = offset.length()
-	return nearest
-
 @rpc("any_peer", "call_remote", "reliable")
 func request_cart_toggle() -> void:
 	if multiplayer.is_server(): toggle_cart_for(multiplayer.get_remote_sender_id())
 
 func toggle_cart_for(id: int) -> void:
-	if not transport_allowed(id): return
-	var held: int = ore.carried_by(id)
-	if held != -1 and ore.pieces[held].kind == "ore_bin":
-		release_ore(id, true)
-		return
-	for cart in transport.carts.values():
-		if cart.driver == id:
-			cart.driver = 0
-			players[id].transport_locked = false
-			sync_transport()
-			return
-	var cart := nearest_cart(players[id].position)
-	var bin := nearest_mobile_bin(players[id].position)
-	if bin != -1 and (cart == -1 or (world.to_local(ore_bodies[bin].global_position) - (players[id].position - Vector2(0, 8))).length() < transport.carts[cart].at.distance_to(players[id].position)):
-		if ore.pickup(id, bin):
-			broadcast_state("receive_ore", [ore.snapshot()], true)
-		return
-	if cart != -1 and ore.carried_by(id) == -1 and transport.carts[cart].driver == 0 and not transport.moving:
-		transport.carts[cart].driver = id
-		sync_transport()
+	route_interaction(id, &"push_cart")
 
 @rpc("any_peer", "call_remote", "reliable")
 func request_lift(direction: int) -> void:
@@ -1604,3 +1496,49 @@ func refresh_expansions() -> void:
 			if panel.is_visible_in_tree(): obstacles.append(panel.get_global_rect())
 	var shown: bool = active and cycle.phase not in ["summary", "transition"] and not workshop_ui.visible and not build_ghost.visible and not Input.is_physical_key_pressed(KEY_F1)
 	expansion_ui.project(world.get_global_transform_with_canvas(), get_viewport().get_visible_rect(), obstacles, shown)
+
+func init_interactions() -> void:
+	# Priority is independent of controller boundaries. Only true consumes input.
+	interaction_router.handlers.assign([
+		movable_objects.try_pickup,
+		movable_objects.try_cart_inventory,
+		movable_objects.try_bin_deposit,
+		placeables.try_mine,
+		npcs.try_deliver,
+		placeables.try_storage,
+		placeables.try_care,
+		placeables.try_load,
+		movable_objects.try_carry,
+		placeables.try_cycle,
+	])
+	for controller in [movable_objects, placeables, npcs]:
+		controller.items_changed.connect(sync_interaction_items)
+		controller.feedback_requested.connect(feedback_for)
+	movable_objects.transport_changed.connect(sync_transport)
+	movable_objects.drop_requested.connect(func(id: int): release_ore(id, true))
+	placeables.workshop_changed.connect(sync_interaction_workshop)
+	npcs.orders_changed.connect(sync_interaction_orders)
+	npcs.experience_requested.connect(award_exp)
+
+func bind_interaction_state() -> void:
+	# New sessions replace models; refresh explicit dependencies instead of capturing
+	# the old models in closures. The router's ordered method references stay valid.
+	movable_objects.bind(world, players, ore_bodies, ore, transport)
+	placeables.bind(workshop, ore, needs, cycle, vein_at)
+	npcs.bind(ore, orders, progression)
+
+func route_interaction(id: int, action: StringName) -> bool:
+	if not transport_allowed(id): return false
+	var context = INTERACTION_CONTEXT.new(id, action, players[id].position, ore.carried_by(id))
+	return interaction_router.route(context)
+
+func sync_interaction_items() -> void:
+	broadcast_state("receive_ore", [ore.snapshot()], true)
+
+func sync_interaction_workshop() -> void:
+	broadcast_state("receive_workshop", [workshop.snapshot()])
+	refresh_workshop()
+
+func sync_interaction_orders() -> void:
+	broadcast_state("receive_orders", [orders.snapshot()])
+	refresh_orders()

@@ -1,15 +1,15 @@
 extends Node2D
-const PRODUCT_ICONS := {
+const PRODUCT_ICONS := {"food": preload("res://assets/textures/food.svg"),
 	"horseshoe": preload("res://assets/textures/horseshoe.svg"), "dull_sword": preload("res://assets/textures/dull_sword.svg"), "axe_head": preload("res://assets/textures/axe_head.svg"), "axe": preload("res://assets/textures/axe.svg"), "sword": preload("res://assets/textures/sword.svg"), "shaft": preload("res://assets/textures/shaft.svg"), "ingot": preload("res://assets/textures/ingot.svg")
 }
-const TEXTURES = {"anvil": preload("res://assets/textures/station_anvil.svg"), "grinder": preload("res://assets/textures/station_grinder.svg"), "woodbench": preload("res://assets/textures/station_woodbench.svg"), "forge": preload("res://assets/textures/station_forge.svg"), "intermediate_small": preload("res://assets/textures/storage_intermediate_small.svg"), "intermediate_medium": preload("res://assets/textures/storage_intermediate_medium.svg"), "intermediate_large": preload("res://assets/textures/storage_intermediate_large.svg"), "finished_small": preload("res://assets/textures/storage_finished_small.svg"), "finished_medium": preload("res://assets/textures/storage_finished_medium.svg"), "finished_large": preload("res://assets/textures/storage_finished_large.svg")}
+const TEXTURES = {"bed": preload("res://assets/textures/station_bed.svg"), "dining": preload("res://assets/textures/station_dining.svg"), "anvil": preload("res://assets/textures/station_anvil.svg"), "grinder": preload("res://assets/textures/station_grinder.svg"), "woodbench": preload("res://assets/textures/station_woodbench.svg"), "forge": preload("res://assets/textures/station_forge.svg"), "intermediate_small": preload("res://assets/textures/storage_intermediate_small.svg"), "intermediate_medium": preload("res://assets/textures/storage_intermediate_medium.svg"), "intermediate_large": preload("res://assets/textures/storage_intermediate_large.svg"), "finished_small": preload("res://assets/textures/storage_finished_small.svg"), "finished_medium": preload("res://assets/textures/storage_finished_medium.svg"), "finished_large": preload("res://assets/textures/storage_finished_large.svg")}
 func update_view(entry: Dictionary, materials: RefCounted) -> void:
 	position = entry.at
 	$Sprite.texture = TEXTURES[entry.kind]
 	var storage: bool = entry.kind in preload("res://scripts/workshop_state.gd").STORAGE
 	$Sprite.position = Vector2(8, -$Sprite.texture.get_height() / 2.0) if storage else Vector2(8, -16)
 	$Progress.visible = not storage and entry.job.progress > 0
-	$TrayBody.collision_layer = 0 if storage else 8
+	$TrayBody.collision_layer = 0 if storage or entry.kind in ["bed", "dining"] else 8
 	$Progress.value = entry.job.progress
 	var forge: bool = entry.kind == "forge"
 	$BinWalls.collision_layer = 8 if forge else 0

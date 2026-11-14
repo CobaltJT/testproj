@@ -5,7 +5,7 @@ const SKILLS := {
 	"smithing": {"title": "Metalworker", "branch": "Craft", "parent": "walking", "max": 3, "effect": "+20% anvil, grinder and forge speed per rank"},
 	"mining": {"title": "Prospector", "branch": "Craft", "parent": "walking", "max": 3, "effect": "+20% mining speed per rank"},
 	"woodworking": {"title": "Woodworker", "branch": "Craft", "parent": "walking", "max": 3, "effect": "+20% woodbench speed per rank"},
-	"purchasing": {"title": "Bargainer", "branch": "Trade", "parent": "", "max": 3, "effect": "-10% workstation and wood prices per rank"},
+	"purchasing": {"title": "Bargainer", "branch": "Trade", "parent": "", "max": 3, "effect": "-10% purchase prices per rank"},
 	"sales": {"title": "Salesperson", "branch": "Trade", "parent": "purchasing", "max": 3, "effect": "+10% delivery prices per rank"},
 	"diplomacy": {"title": "Diplomat", "branch": "Trade", "parent": "purchasing", "max": 2, "effect": "-1 reputation lost per explicit rejection per rank"}
 }

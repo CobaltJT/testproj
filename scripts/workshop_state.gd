@@ -1,6 +1,7 @@
 extends RefCounted
 const JOB = preload("res://scripts/station_job.gd")
-const PRICES := {"anvil": 20, "grinder": 25, "woodbench": 25, "forge": 25, "intermediate_small": 10, "intermediate_medium": 20, "intermediate_large": 35, "finished_small": 10, "finished_medium": 20, "finished_large": 35}
+const CARE := ["bed", "dining"]
+const PRICES := {"bed": 15, "dining": 15, "anvil": 20, "grinder": 25, "woodbench": 25, "forge": 25, "intermediate_small": 10, "intermediate_medium": 20, "intermediate_large": 35, "finished_small": 10, "finished_medium": 20, "finished_large": 35}
 const STORAGE := {
 	"intermediate_small": {"capacity": 5, "group": "intermediate", "size": "Small"},
 	"intermediate_medium": {"capacity": 15, "group": "intermediate", "size": "Medium"},
@@ -14,7 +15,7 @@ const STORAGE_PRODUCTS := {"intermediate": ["ingot", "dull_sword", "axe_head", "
 static func display_name(kind: String) -> String:
 	if kind in STORAGE:
 		return "%s · %s (%s items)" % [STORAGE[kind].group.capitalize(), STORAGE[kind].size, STORAGE[kind].capacity]
-	return "Forge + bin" if kind == "forge" else kind.capitalize()
+	return "Dining table" if kind == "dining" else ("Forge + bin" if kind == "forge" else kind.capitalize())
 
 const MAP = preload("res://scripts/map_layout.gd")
 const FLOORS = MAP.FLOORS
@@ -101,7 +102,7 @@ func nearest(at: Vector2) -> int:
 
 func pack(player: int, at: Vector2, materials: RefCounted) -> bool:
 	var id := nearest(at)
-	if player <= 0 or id == -1 or pending.has(player) or materials.carried_by(player) != -1 or not stations[id].job.slots.is_empty() or not stations[id].job.ore_queue.is_empty() or not stations[id].items.is_empty():
+	if player <= 0 or id == -1 or pending.has(player) or materials.carried_by(player) != -1 or stations[id].job.worker != 0 or not stations[id].job.slots.is_empty() or not stations[id].job.ore_queue.is_empty() or not stations[id].items.is_empty():
 		return false
 	pending[player] = {"id": id, "kind": stations[id].kind, "paid": stations[id].paid, "items": stations[id].items.duplicate(), "selected": stations[id].selected}
 	stations.erase(id)

@@ -23,7 +23,7 @@ func run() -> void:
 	preload("res://tests/world_fixture.gd").prepare(session)
 	await frames(5)
 	await press("build_menu")
-	check(session.station_buttons.size() == 10 and Rect2(Vector2.ZERO, root.get_visible_rect().size).encloses(session.catalog.get_global_rect()), "Build catalog includes all six storage options and fits viewport")
+	check(session.station_buttons.size() == 12 and Rect2(Vector2.ZERO, root.get_visible_rect().size).encloses(session.catalog.get_global_rect()), "Build catalog includes all six storage options and fits viewport")
 	session.station_buttons.finished_small.pressed.emit()
 	await frames(5)
 	check(session.build_ghost.visible and session.build_ghost.texture == session.STATION_VIEW.TEXTURES.finished_small, "Storage purchase uses its own image texture preview")

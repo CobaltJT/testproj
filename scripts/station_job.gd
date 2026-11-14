@@ -1,8 +1,9 @@
 extends RefCounted
 const DURATION := 5.0
 const ANVIL_RECIPES := ["horseshoe", "blade", "head", "axe"]
-const INPUTS := {"horseshoe": ["ingot"], "blade": ["ingot"], "head": ["ingot"], "axe": ["axe_head", "shaft"], "sharpen": ["dull_sword"], "shaft": ["wood"], "smelt": ["ore"]}
-const OUTPUTS := {"horseshoe": "horseshoe", "blade": "dull_sword", "head": "axe_head", "axe": "axe", "sharpen": "sword", "shaft": "shaft", "smelt": "ingot"}
+const INPUTS := {"rest": [], "eat": ["food"], "horseshoe": ["ingot"], "blade": ["ingot"], "head": ["ingot"], "axe": ["axe_head", "shaft"], "sharpen": ["dull_sword"], "shaft": ["wood"], "smelt": ["ore"]}
+const OUTPUTS := {"rest": "", "eat": "food", "horseshoe": "horseshoe", "blade": "dull_sword", "head": "axe_head", "axe": "axe", "sharpen": "sword", "shaft": "shaft", "smelt": "ingot"}
+var diner := 0
 var kind := "anvil"
 var recipe := "horseshoe"
 var slots: Dictionary = {}
@@ -12,6 +13,9 @@ var ore_queue: Array[int] = []
 
 func configure(value: String) -> void:
 	kind = value
+	if kind in ["bed", "dining"]:
+		recipe = "rest" if kind == "bed" else "eat"
+		return
 	recipe = "smelt" if kind == "forge" else ("sharpen" if kind == "grinder" else ("shaft" if kind == "woodbench" else "horseshoe"))
 
 func select(choice: String) -> bool:
@@ -21,7 +25,7 @@ func select(choice: String) -> bool:
 	return true
 
 func load_material(player: int, materials: RefCounted) -> bool:
-	if player <= 0 or kind == "forge":
+	if player <= 0 or kind in ["forge", "bed"]:
 		return false
 	var id: int = materials.carried_by(player)
 	if id == -1:
@@ -32,6 +36,7 @@ func load_material(player: int, materials: RefCounted) -> bool:
 	materials.release_carrier(player)
 	materials.pieces[id].processing = true
 	slots[ingredient] = id
+	if kind == "dining": diner = player
 	return true
 
 func ready() -> bool:
@@ -41,6 +46,7 @@ func ready() -> bool:
 	return true
 
 func step(delta: float, eligible: Array[int], materials: RefCounted) -> int:
+	if kind in ["bed", "dining"]: return -1
 	if worker not in eligible:
 		worker = eligible[0] if not eligible.is_empty() else 0
 	if kind == "forge" and worker != 0 and slots.is_empty() and not ore_queue.is_empty():
@@ -63,9 +69,10 @@ func step(delta: float, eligible: Array[int], materials: RefCounted) -> int:
 	return primary
 
 func snapshot() -> Dictionary:
-	return {"kind": kind, "recipe": recipe, "slots": slots.duplicate(), "progress": progress, "worker": worker, "ore_queue": ore_queue.duplicate()}
+	return {"diner": diner, "kind": kind, "recipe": recipe, "slots": slots.duplicate(), "progress": progress, "worker": worker, "ore_queue": ore_queue.duplicate()}
 
 func restore(state: Dictionary) -> void:
+	diner = state.get("diner", 0)
 	kind = state.kind
 	recipe = state.recipe
 	slots = state.slots.duplicate()

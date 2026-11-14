@@ -3,6 +3,9 @@ extends Control
 var game: Node
 var connection_panel: Control
 var shop: Label
+var needs_label: Label
+var energy_bar: ProgressBar
+var food_bar: ProgressBar
 var held: Label
 var held_icon: TextureRect
 var exp_bar: ProgressBar
@@ -104,9 +107,23 @@ func setup(session: Node, layer: CanvasLayer, menu_panel: Control) -> void:
 	game.open_button.reparent(day)
 	game.open_button.position = Vector2.ZERO
 	game.open_button.text = "Open shop"
-	var player := card(Vector2(0, 1), Vector2(16, -90), 320)
+	var player := card(Vector2(0, 1), Vector2(16, -140), 320)
 	move_label(game.progression_label, player, 14)
 	exp_bar = bar(player)
+	needs_label = label("Energy 100% · Food 100%", 12)
+	player.add_child(needs_label)
+	energy_bar = bar(player)
+	energy_bar.max_value = 100
+	var energy_fill := StyleBoxFlat.new()
+	energy_fill.bg_color = Color("79b7d5")
+	energy_bar.add_theme_stylebox_override("fill", energy_fill)
+	energy_bar.tooltip_text = "Energy · Hold E at a bed to sleep"
+	food_bar = bar(player)
+	food_bar.max_value = 100
+	var food_fill := StyleBoxFlat.new()
+	food_fill.bg_color = Color("8dcb87")
+	food_bar.add_theme_stylebox_override("fill", food_fill)
+	food_bar.tooltip_text = "Food satisfaction · Carry food to a dining table, then hold E"
 	var row := HBoxContainer.new()
 	player.add_child(row)
 	held_icon = TextureRect.new()
@@ -199,7 +216,7 @@ func make_help() -> void:
 	column.add_child(grid)
 	var guides := [
 		"[b]MOVEMENT[/b]\nA/D or arrows: move\nW/S or up/down: climb / elevator\nSpace: jump\n\n[b]INTERACTION[/b]\nE: pick up / interact\nHold E: work / mine\nF: throw\nQ: drop",
-		"[b]WORKSHOP[/b]\nTab: menu\nLeft click: place\nEsc: close / cancel\nR: pack empty placeable\n\n[b]ANVIL[/b]\nT: cycle recipe",
+		"[b]WORKSHOP[/b]\nTab: menu\nHold E: sleep / eat\nLeft click: place\nEsc: close / cancel\nR: pack empty placeable\n\n[b]ANVIL[/b]\nT: cycle recipe",
 		"[b]CUSTOMERS & TRADE[/b]\nGreen check: accept order\nRed cross: reject / fail order\nCoin bag: buy wood\n\n[b]STORAGE & CARTS[/b]\nT: cycle anvil recipe / stored product\nC: lift / drop bin, couple cart\nA/D: push cart\nSpace: release cart"
 	]
 	for text in guides:
@@ -219,7 +236,7 @@ func make_help() -> void:
 
 func notify(message: String) -> void:
 	last_message = message
-	for quiet in ["Order accepted", "Request accepted:", "Stored item", "Retrieved item", "Ingredient loaded", "Intermediate product stored", "Ore loaded into cart", "Took one intermediate product", "Took one ore from cart"]:
+	for quiet in ["Order accepted", "Request accepted:", "Stored item", "Retrieved item", "Ingredient loaded", "Meal loaded", "Intermediate product stored", "Ore loaded into cart", "Took one intermediate product", "Took one ore from cart"]:
 		if message.begins_with(quiet): return
 	var short := message.split(". ")[0]
 	if "Order complete!" in message: return # Shared completion event supplies one toast.
@@ -250,7 +267,7 @@ func event_toast(text: String) -> void:
 		toast_queue.append(text)
 
 func event_totals() -> Dictionary:
-	return {"arrivals": game.orders.number, "failed": game.orders.missed, "served": game.orders.completed, "unanswered": game.orders.unanswered, "visits": game.merchant.visits, "merchant_present": game.merchant.remaining > 0, "phase": game.cycle.phase, "day": game.cycle.day}
+	return {"arrivals": game.orders.number, "failed": game.orders.missed, "served": game.orders.completed, "unanswered": game.orders.unanswered, "visits": game.merchant.visits + game.supplies.visits, "merchant_present": game.visiting_merchant().remaining > 0, "phase": game.cycle.phase, "day": game.cycle.day}
 
 func reset_events() -> void:
 	seen = event_totals()
@@ -304,7 +321,7 @@ func tether(card: Control, npc: Node2D) -> void:
 func update_visitors() -> void:
 	customer_badge.visible = not game.orders.queue.is_empty()
 	customer_count.text = str(game.orders.queue.size())
-	merchant_badge.visible = game.merchant.remaining > 0
+	merchant_badge.visible = game.visiting_merchant().remaining > 0
 	var live: Dictionary = {}
 	for index in range(game.orders.queue.size()):
 		var order: Dictionary = game.orders.queue[index]
@@ -323,13 +340,16 @@ func update_visitors() -> void:
 		if not live.has(id):
 			order_cards[id].free()
 			order_cards.erase(id)
-	merchant_card.visible = game.merchant.remaining > 0
+	var visiting = game.visiting_merchant()
+	merchant_card.visible = visiting.remaining > 0
 	if merchant_card.visible:
 		var local: int = game.multiplayer.get_unique_id()
-		var can_buy: bool = game.players.has(local) and game.cycle.phase == "shop" and game.merchant.stock > 0 and game.ore.carried_by(local) == -1 and not game.workshop.pending.has(local) and game.orders.coins >= game.progression.purchase_price(local, game.MERCHANT_STATE.WOOD_PRICE)
+		var cost: int = game.progression.purchase_price(local, game.MERCHANT_STATE.PRICES[visiting.kind])
+		var can_buy: bool = game.players.has(local) and game.cycle.phase == "shop" and visiting.stock > 0 and game.ore.carried_by(local) == -1 and not game.workshop.pending.has(local) and not game.transport.pending.has(local) and game.orders.coins >= cost
 		if can_buy: can_buy = absf(game.players[local].position.x - game.MERCHANT_STATE.POSITION.x) <= 12 and absf(game.players[local].position.y - game.MERCHANT_STATE.POSITION.y) <= 6
 		merchant_card.set_merchant(can_buy)
-		merchant_card.update_card(game.material_texture("wood"), game.merchant.stock, game.merchant.remaining, game.MERCHANT_STATE.STAY, Color("b59ad3"), game.progression.purchase_price(game.multiplayer.get_unique_id(), game.MERCHANT_STATE.WOOD_PRICE))
+		merchant_card.buy_button.tooltip_text = "Buy " + visiting.kind
+		merchant_card.update_card(game.material_texture(visiting.kind), visiting.stock, visiting.remaining, game.MERCHANT_STATE.STAY, Color("b59ad3"), cost)
 		tether(merchant_card, game.merchant_node)
 
 func _process(_delta: float) -> void:
@@ -352,6 +372,12 @@ func _process(_delta: float) -> void:
 	game.merchant_label.visible = false
 	game.merchant_label.text = "Wood %sc · %s left · %ss" % [game.progression.purchase_price(game.multiplayer.get_unique_id(), game.MERCHANT_STATE.WOOD_PRICE), game.merchant.stock, ceili(game.merchant.remaining)]
 	var local: int = game.multiplayer.get_unique_id()
+	if game.needs.dwarfs.has(local):
+		var vitals: Dictionary = game.needs.dwarfs[local]
+		energy_bar.value = vitals.energy
+		food_bar.value = vitals.food
+		needs_label.text = "Energy %s%% · Food %s%%%s" % [ceili(vitals.energy), ceili(vitals.food), " · Exhausted" if game.needs.level(local) <= 0 else (" · Low" if game.needs.level(local) < 10 else "")]
+		needs_label.modulate = Color("ee9885") if game.needs.level(local) < 10 else Color.WHITE
 	var item: int = game.ore.carried_by(local)
 	held_icon.texture = null
 	held.text = ""

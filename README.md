@@ -65,6 +65,8 @@ Press **Tab** or click **Workshop** to open the menu. Its **Build** tab offers:
 | Grinder | 25 | Sharpen unfinished swords |
 | Woodworking bench | 25 | Turn purchased wood into shafts |
 | Forge with attached bin | 25 | Collect thrown ore and smelt ingots |
+| Bed | 15 | Hold E with empty hands to restore energy |
+| Dining table | 15 | Load carried food with E, then hold E to eat |
 
 Buy with empty hands, then move the mouse and **left-click a green preview** to
 place the kit on a floor. Placement snaps to an 8-pixel grid. Red previews mean
@@ -139,6 +141,39 @@ Carried intermediate products can also be deposited into a nearby movable
 parts bin before using a placeable; carried ore can be deposited into mine carts.
 Furniture lets dwarfs walk past it; output trays collide with physical items.
 
+## Energy and food satisfaction
+
+Each connected dwarf starts with **100% energy and food satisfaction**. Both
+meters appear in the player HUD: blue for energy, green for food. Needs remain
+across days; joining as a new dwarf starts fresh. Daily summary and fade screens
+pause needs. Morning, shop hours and evening drain them normally.
+
+| Condition | Walking speed | Production speed |
+| --- | --- | --- |
+| Both meters at least 10% | 100% | 100% |
+| Either meter below 10% | 70% | 50% |
+| Either meter empty | 40% | Cannot work |
+
+Skill bonuses multiply these factors. Empty meters pause mining, smelting,
+smithing, sharpening and woodworking without losing the loaded job. Rest and
+food recovery remain available when depleted.
+
+Base drain is **0.10 energy and 0.08 satisfaction per second**. Actual production
+adds **1.0 energy and 0.5 satisfaction per second** for the worker advancing the
+job; idle helpers and paused/unloaded jobs do not pay that extra cost.
+
+Buy and place a **bed** or **dining table** through TAB → Build. Each costs
+**15 coins** before Bargainer discounts. Stand beside a bed with empty hands and
+**hold E** to restore **12 energy per second**. At a table, carry food and press
+**E** to reserve it for your dwarf, then hold E with empty hands. A food item
+restores **up to 40 satisfaction over five seconds** and is consumed once, or
+when the dwarf becomes full. Release E, move, jump, or get hit to pause. A loaded
+meal stays reserved for its diner and cannot be packed; leaving the session
+discards that dwarf's unfinished meal. Resting and eating grant no EXP.
+
+Food is a physical item: buy it, pick it up, and carry it to a table. It can also
+be dropped or thrown. Raw food is excluded from product bins and finished shelves.
+
 ## Mine ore and buy wood
 
 Purchase the basement entrance at **(390, 288)** using its signpost marker.
@@ -160,7 +195,7 @@ persists across days and reconnects. The ladder remains navigable. Placeable
 workstations remain limited to the building, while movable parts bins can be
 carried underground. The entrance itself no longer produces ore.
 
-Wood comes **only from the merchant**. The merchant first visits 12 seconds after
+Wood comes **only from the wood merchant**. The merchant first visits 12 seconds after
 opening, stays 20 seconds, and returns every 45 seconds. Each visit offers four
 wood at **5 coins each**. Stand beside the purple merchant between the counter
 and the ground-floor build area with empty hands, then click the **coin-bag
@@ -168,6 +203,14 @@ buy button** on the merchant card. It is disabled without stock, funds, proximit
 or free hands; the host rechecks those conditions.
 Pick up the physical wood and take it to a woodworking bench. Buying is checked
 by the host for stock, funds, position, and free hands.
+
+Ore and food traders also visit **randomly during shop hours**. They use the
+same visitor spot and card, taking turns with the wood merchant. The product
+icon identifies what is being sold; the card shows the current price and stock. Supply visits randomly offer **8 ore at 3 coins each** or **6 food at
+4 coins each**, before Bargainer discounts. Prices use shared coins and count
+in daily spending. Purchases require proximity, stock and empty hands; bought
+goods appear as physical items beside the trader. A supply trader yields the
+spot when the regular wood merchant arrives. All traders leave at closing.
 
 ## Storage containers
 
@@ -267,7 +310,7 @@ reconnects and day changes. The host owns all transport movement and purchases.
 ## HUD and help
 
 The gameplay HUD shows shared coins/reputation, the day phase and shop clock,
-the held item's icon, EXP, and highlighted unspent skill points. Small customer
+energy and food satisfaction, the held item's icon, EXP, and highlighted unspent skill points. Small customer
 and merchant icons appear only while those visitors are present; the customer
 icon includes the waiting count. There is no text customer panel or empty-hands
 label.

@@ -1,4 +1,7 @@
 extends Node
+const NEEDS = preload("res://scripts/needs_state.gd")
+var needs = NEEDS.new()
+var supplies = preload("res://scripts/merchant_state.gd").new()
 const HUD = preload("res://scripts/hud.gd")
 var hud: Control
 ## ENet LAN session. Only the host simulates physics; clients send controls.
@@ -53,7 +56,7 @@ var merchant_node: Node2D
 var merchant_label: Label
 var customer_nodes: Dictionary = {}
 var recipe_label: Label
-const EXTRA_TEXTURES = {
+const EXTRA_TEXTURES = {"food": preload("res://assets/textures/food.svg"),
 	"horseshoe": preload("res://assets/textures/horseshoe.svg"),
 	"sword": preload("res://assets/textures/sword.svg"),
 	"axe": preload("res://assets/textures/axe.svg"),
@@ -242,6 +245,8 @@ func client_ready() -> void:
 	receive_mining.rpc_id(id, mining_snapshot())
 	receive_merchant.rpc_id(id, merchant.snapshot())
 	receive_progression.rpc_id(id, progression.snapshot())
+	receive_needs.rpc_id(id, needs.snapshot())
+	receive_supplies.rpc_id(id, supplies.snapshot())
 	receive_day.rpc_id(id, cycle.snapshot())
 	receive_transport.rpc_id(id, transport.snapshot())
 	initialize_hud_events.rpc_id(id)
@@ -266,6 +271,7 @@ func spawn_player(id: int, at: Vector2) -> void:
 	configure_camera(dwarf.get_node("FollowCamera"))
 	players[id] = dwarf
 	progression.add(id)
+	needs.add(id)
 	active = true
 	refresh_progression()
 	refresh_ore()
@@ -277,9 +283,15 @@ func _physics_process(delta: float) -> void:
 	if multiplayer.is_server():
 		var previous_phase: String = cycle.phase
 		cycle.step(delta, orders, merchant)
+		if cycle.phase == "shop": supplies.step_supplies(delta, merchant.remaining > 0)
+		else: supplies.remaining = 0
+		if previous_phase == "transition" and cycle.phase == "morning":
+			supplies.until_visit = 20
+			supplies.stock = 0
 		if previous_phase != cycle.phase:
 			broadcast_state("receive_orders", [orders.snapshot()])
 			broadcast_state("receive_merchant", [merchant.snapshot()])
+			broadcast_state("receive_supplies", [supplies.snapshot()])
 			refresh_orders()
 			refresh_merchant()
 			refresh_mining()
@@ -343,8 +355,11 @@ func _physics_process(delta: float) -> void:
 				apply_controls(id, Vector2.ZERO, false, false)
 				work_held[id] = false
 		step_transport(delta)
+		needs.step(delta)
+		step_care(delta)
 		step_workstations(delta)
 		step_mining(delta)
+		refresh_walking()
 		refresh_orders()
 		refresh_merchant()
 		tick += 1
@@ -360,6 +375,8 @@ func _physics_process(delta: float) -> void:
 			broadcast_state("receive_mining", [mining_snapshot()], false)
 			broadcast_state("receive_transport", [transport.snapshot()])
 			broadcast_state("receive_merchant", [merchant.snapshot()], false)
+			broadcast_state("receive_supplies", [supplies.snapshot()])
+			broadcast_state("receive_needs", [needs.snapshot()])
 	else:
 		send_controls.rpc_id(1, axis, jump, climb, Input.is_action_pressed("interact"))
 
@@ -411,6 +428,16 @@ func remove_player(id: int) -> void:
 		players[id].free()
 		players.erase(id)
 	progression.dwarfs.erase(id)
+	needs.dwarfs.erase(id)
+	for entry in workshop.stations.values():
+		if entry.job.diner == id:
+			for piece in entry.job.slots.values():
+				ore.pieces[piece].consumed = true
+				ore.pieces[piece].processing = false
+			entry.job.slots.clear()
+			entry.job.progress = 0
+			entry.job.worker = 0
+			entry.job.diner = 0
 	refresh_progression()
 	last_input.erase(id)
 	work_held.erase(id)
@@ -669,11 +696,14 @@ func step_mining(delta: float) -> void:
 		if cycle.phase == "shop":
 			for id in players:
 				var dwarf = players[id]
-				if not workshop.pending.has(id) and work_held.get(id, false) and vein_at(dwarf.position) == vein and not dwarf.transport_locked and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
+				if not workshop.pending.has(id) and needs.working(id) > 0 and work_held.get(id, false) and vein_at(dwarf.position) == vein and not dwarf.transport_locked and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
 					eligible.append(id)
 		eligible.sort()
 		var worker: int = job.worker if job.worker in eligible else (eligible[0] if not eligible.is_empty() else 0)
-		if job.step(delta * progression.speed(worker, "mining"), eligible):
+		var before: float = job.progress
+		var finished: bool = job.step(delta * progression.speed(worker, "mining") * needs.working(worker), eligible)
+		if worker != 0 and (job.progress > before or finished): needs.exert(worker, delta)
+		if finished:
 			award_exp(worker, "mining")
 			var piece_id: int = ore.add_mined_ore()
 			var output: Vector2 = MAP.VEINS[vein] + Vector2(-46, -12)
@@ -737,7 +767,9 @@ func receive_merchant(state: Dictionary) -> void:
 	refresh_merchant()
 
 func refresh_merchant() -> void:
-	merchant_node.visible = active and merchant.remaining > 0
+	var visiting = visiting_merchant()
+	merchant_node.visible = active and visiting.remaining > 0
+	merchant_node.modulate = {"wood": Color.WHITE, "ore": Color(0.65, 0.9, 1), "food": Color(0.7, 1, 0.65)}[visiting.kind]
 	if merchant_label != null:
 		merchant_label.visible = false
 		if cycle.phase != "shop":
@@ -810,6 +842,14 @@ func interact_for(id: int) -> void:
 			message = "Stored item." if transferred and carried != -1 else ("Retrieved item. T: select another stored product." if transferred else "Storage: check category, capacity and selected product. T: cycle products.")
 			broadcast_state("receive_workshop", [workshop.snapshot()])
 			refresh_workshop()
+		elif station_id != -1 and workshop.stations[station_id].kind in WORKSHOP_STATE.CARE:
+			var entry: Dictionary = workshop.stations[station_id]
+			if entry.kind == "bed": message = "Hold E with empty hands to sleep."
+			elif carried != -1 and needs.dwarfs[id].food < 100 and entry.job.load_material(id, ore):
+				message = "Meal loaded. Hold E to eat."
+			else: message = "Carry food to an empty table, then hold E to eat."
+			broadcast_state("receive_workshop", [workshop.snapshot()])
+			refresh_workshop()
 		elif carried != -1 and station_id != -1:
 			var job = workshop.stations[station_id].job
 			message = "Ingredient loaded. Hold E with empty hands to work." if job.load_material(id, ore) else ("Throw ore into the attached forge bin, then hold E to smelt." if job.kind == "forge" else "Wrong or duplicate ingredient for this station recipe.")
@@ -870,6 +910,9 @@ func reset_ore(simulate: bool) -> void:
 	cycle = DAY_STATE.new()
 	refresh_day()
 	merchant = MERCHANT_STATE.new()
+	supplies = MERCHANT_STATE.new()
+	supplies.configure_supplies()
+	needs = NEEDS.new()
 	refresh_orders()
 	refresh_merchant()
 	work_held.clear()
@@ -889,17 +932,19 @@ func step_workstations(delta: float) -> void:
 	var changed := false
 	for station_id in workshop.stations:
 		var entry: Dictionary = workshop.stations[station_id]
-		if entry.kind in WORKSHOP_STATE.STORAGE:
+		if entry.kind in WORKSHOP_STATE.STORAGE or entry.kind in WORKSHOP_STATE.CARE:
 			continue
 		var eligible: Array[int] = []
 		for id in players:
 			var dwarf = players[id]
-			if work_held.get(id, false) and workshop.nearest(dwarf.position) == station_id and not workshop.pending.has(id) and not dwarf.transport_locked and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
+			if needs.working(id) > 0 and work_held.get(id, false) and workshop.nearest(dwarf.position) == station_id and not workshop.pending.has(id) and not dwarf.transport_locked and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
 				eligible.append(id)
 		eligible.sort()
 		var worker: int = entry.job.worker if entry.job.worker in eligible else (eligible[0] if not eligible.is_empty() else 0)
 		var specialty := "woodworking" if entry.kind == "woodbench" else "smithing"
-		var output: int = entry.job.step(delta * progression.speed(worker, specialty), eligible, ore)
+		var before: float = entry.job.progress
+		var output: int = entry.job.step(delta * progression.speed(worker, specialty) * needs.working(worker), eligible, ore)
+		if worker != 0 and (entry.job.progress > before or output != -1): needs.exert(worker, delta)
 		if output != -1:
 			award_exp(worker, "crafting")
 			position_ore(ore_bodies[output], entry.at + Vector2(28, -18), Vector2(0, 20))
@@ -954,7 +999,7 @@ func init_build_ui(layer: CanvasLayer) -> void:
 	column.name = "Build"
 	catalog_tabs.add_child(column)
 	var title := Label.new()
-	title.text = "Buy stations or storage (empty hands)"
+	title.text = "Buy furniture, stations or storage (empty hands)"
 	column.add_child(title)
 	var choices := HBoxContainer.new()
 	choices.add_theme_constant_override("separation", 24)
@@ -1180,7 +1225,7 @@ func purchase_skill_for(id: int, skill: String) -> void:
 
 func refresh_progression() -> void:
 	for id in players:
-		players[id].walking_multiplier = progression.speed(id, "walking")
+		players[id].walking_multiplier = progression.speed(id, "walking") * needs.walking(id)
 	var local := multiplayer.get_unique_id()
 	if progression_label == null:
 		return
@@ -1599,8 +1644,9 @@ func customer_card_decision(order_id: int, accept: bool) -> void:
 	else: request_order_decision.rpc_id(1, order_id, accept)
 
 func merchant_card_buy() -> void:
-	if multiplayer.is_server(): buy_wood_for(1)
-	else: request_wood.rpc_id(1)
+	var kind: String = visiting_merchant().kind
+	if multiplayer.is_server(): buy_goods_for(1, kind)
+	else: request_goods.rpc_id(1, kind)
 
 func init_expansion_ui(layer: CanvasLayer) -> void:
 	expansion_layer = Control.new()
@@ -1730,3 +1776,74 @@ func apply_room_layout() -> void:
 func receive_rooms(state: Dictionary) -> void:
 	rooms.restore(state)
 	apply_room_layout()
+
+func refresh_walking() -> void:
+	for id in players: players[id].walking_multiplier = progression.speed(id, "walking") * needs.walking(id)
+
+@rpc("authority", "call_remote", "reliable")
+func receive_needs(state: Dictionary) -> void:
+	needs.restore(state)
+	refresh_walking()
+
+func care_eligible(id: int, station: int) -> bool:
+	var dwarf = players[id]
+	return work_held.get(id, false) and workshop.nearest(dwarf.position) == station and not workshop.pending.has(id) and not dwarf.transport_locked and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1
+
+func step_care(delta: float) -> void:
+	var changed := false
+	for station in workshop.stations:
+		var entry: Dictionary = workshop.stations[station]
+		if entry.kind not in WORKSHOP_STATE.CARE: continue
+		var eligible: Array[int] = []
+		for id in players:
+			if care_eligible(id, station) and (entry.kind == "bed" and needs.dwarfs[id].energy < 100 or entry.kind == "dining" and entry.job.diner == id and needs.dwarfs[id].food < 100): eligible.append(id)
+		eligible.sort()
+		var job = entry.job
+		job.worker = job.worker if job.worker in eligible else (eligible[0] if not eligible.is_empty() else 0)
+		if job.worker == 0: continue
+		if entry.kind == "bed":
+			needs.change(job.worker, NEEDS.SLEEP_RATE * delta, 0)
+		elif job.slots.has("food"):
+			var rate: float = NEEDS.MEAL_FOOD / NEEDS.MEAL_DURATION
+			var elapsed := minf(delta, minf(NEEDS.MEAL_DURATION - job.progress, (100 - needs.dwarfs[job.worker].food) / rate))
+			needs.change(job.worker, 0, elapsed * rate)
+			job.progress += elapsed
+			if job.progress >= NEEDS.MEAL_DURATION - 0.00001 or needs.dwarfs[job.worker].food >= 100 - 0.00001:
+				ore.pieces[job.slots.food].processing = false
+				ore.pieces[job.slots.food].consumed = true
+				job.slots.clear()
+				job.diner = 0
+				job.worker = 0
+				job.progress = 0
+				changed = true
+	if changed: broadcast_state("receive_ore", [ore.snapshot()], true)
+
+func visiting_merchant() -> RefCounted:
+	return merchant if merchant.remaining > 0 else supplies
+
+@rpc("authority", "call_remote", "reliable")
+func receive_supplies(state: Dictionary) -> void:
+	supplies.restore(state)
+	refresh_merchant()
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_goods(kind: String) -> void:
+	if multiplayer.is_server(): buy_goods_for(multiplayer.get_remote_sender_id(), kind)
+
+func buy_goods_for(id: int, kind: String) -> void:
+	if not transport_allowed(id) or cycle.phase != "shop" or workshop.pending.has(id) or transport.pending.has(id): return
+	var visiting = visiting_merchant()
+	if visiting.kind != kind or kind not in MERCHANT_STATE.PRICES: return
+	var piece: int = visiting.buy(id, players[id].position, orders, ore, progression.purchase_price(id, MERCHANT_STATE.PRICES[kind]))
+	if piece == -1:
+		feedback_for(id, "Purchase unavailable: check proximity, stock, coins and empty hands.")
+		return
+	var body := create_ore_body(piece, true, Vector2(222, 202))
+	position_ore(body, Vector2(222, 202), Vector2(0, 20))
+	broadcast_state("receive_ore", [ore.snapshot()], true)
+	broadcast_state("receive_ore_motion", [ore_motion()])
+	broadcast_state("receive_orders", [orders.snapshot()])
+	broadcast_state("receive_merchant", [merchant.snapshot()])
+	broadcast_state("receive_supplies", [supplies.snapshot()])
+	refresh_orders()
+	refresh_merchant()

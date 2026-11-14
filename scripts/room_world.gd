@@ -7,12 +7,14 @@ const STONE = preload("res://assets/textures/room_stone.svg")
 const LADDER = preload("res://assets/textures/room_ladder.svg")
 var generated: Node2D
 var collision: StaticBody2D
+var entrance: Node2D
 
 func _enter_tree() -> void:
-	var marker := Marker2D.new()
-	marker.name = "MineEntrance"
-	marker.position = Vector2(390, 288)
-	add_child(marker)
+	entrance = Node2D.new()
+	entrance.name = "MineEntrance"
+	entrance.position = Vector2(390, 288)
+	entrance.z_index = -8
+	add_child(entrance)
 
 func _ready() -> void:
 	configure(ROOMS.new())
@@ -58,7 +60,7 @@ func configure(layout: RefCounted) -> void:
 		var cells: Dictionary = layout.underground if mine else layout.building
 		for cell in cells:
 			var rect: Rect2 = layout.room_rect(mine, cell)
-			picture(generated, ROCK if mine else BRICK, rect.position, rect.size)
+			picture(generated, ROCK if mine else BRICK, rect.position, rect.size).z_index = -1
 			var hole: float = layout.floor_hole(mine, cell)
 			if hole < 0: floor_piece(rect.position.x, rect.end.y, rect.size.x, mine)
 			else:
@@ -75,6 +77,20 @@ func configure(layout: RefCounted) -> void:
 			if not above:
 				solid(Rect2(rect.position.x, rect.position.y - 4, rect.size.x, 4))
 				picture(generated, STONE, rect.position - Vector2(0, 4), Vector2(rect.size.x, 4))
+	# Earth separates the basement from the first chamber; only the shaft is open.
+	for cell in layout.underground:
+		if cell.y != 1: continue
+		var rect: Rect2 = layout.room_rect(true, cell)
+		var band := Rect2(rect.position.x, 288, rect.size.x, ROOMS.MAP.MINE_GAP)
+		picture(generated, ROCK, band.position, band.size).z_index = -1
+		if cell.x == ROOMS.SHAFT_COLUMN:
+			solid(Rect2(band.position, Vector2(374 - band.position.x, band.size.y)))
+			solid(Rect2(406, band.position.y, band.end.x - 406, band.size.y))
+			picture(generated, preload("res://assets/textures/mine_shaft.svg"), Vector2(374, 288), Vector2(32, ROOMS.MAP.MINE_GAP))
+		else: solid(band)
+	for child in entrance.get_children(): child.free()
+	entrance.visible = layout.mine_open or layout.can_open_mine()
+	picture(entrance, preload("res://assets/textures/mine_entrance.svg") if layout.mine_open else preload("res://assets/textures/mine_sign.svg"), Vector2(-22, -36))
 	for ladder in layout.ladders():
 		var y: float = ladder.position.y
 		while y < ladder.end.y:

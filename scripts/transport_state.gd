@@ -1,6 +1,6 @@
 extends RefCounted
 const MAP = preload("res://scripts/map_layout.gd")
-const STOPS := [288.0, 368.0, 448.0, 528.0]
+const STOPS := [288.0, 448.0, 528.0, 608.0]
 const UPGRADE_PRICE := 30
 const RAIL_PRICE := 5
 const CART_PRICE := 25

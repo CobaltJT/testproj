@@ -7,11 +7,12 @@ host's LAN firewall. `127.0.0.1` is for multiple instances on one computer.
 
 ## Expand the smithy
 
-Start with **two ground-floor rooms** and no mine or workstations. Open
-**TAB → Rooms** to purchase adjoining rooms. Each row represents a level and
-each column a room, left to right. Owned rooms are checked; available expansions
-show their coin price. Ladders connect vertically adjacent building rooms
-automatically. Move any workstation blocking a new ladder before expanding.
+Start with **two ground-floor rooms** and no mine or workstations. Click the
+**green + markers at room edges** to purchase adjoining rooms.
+Arrows show the expansion direction and each marker shows its coin price.
+Walk toward a room edge to bring its marker into your camera view. Room purchases
+are separate from the workshop menu. Ladders connect vertically adjacent
+building rooms automatically. Move any workstation blocking a new ladder before expanding.
 
 | Building level | Cost per room |
 | --- | --- |
@@ -20,8 +21,8 @@ automatically. Move any workstation blocking a new ladder before expanding.
 | First floor | 45 |
 | Second floor | 70 |
 
-Buy **basement room 2**, then its **mine entrance for 30 coins**, including the
-first underground chamber. Expand sideways at a purchased depth, or down the
+Buy **basement room 2**, then click the **mine signpost purchase marker**
+for its **30-coin entrance**, including the first underground chamber. Expand sideways at a purchased depth, or down the
 central shaft in room 2 to unlock the next depth. Deeper shaft rooms must be
 bought in order. Additional chambers cost **25 / 40 / 60 coins** at depths 1 / 2 / 3.
 Each underground room unlocks its own ore vein. This first version supports five
@@ -134,9 +135,12 @@ Furniture lets dwarfs walk past it; output trays collide with physical items.
 
 ## Mine ore and buy wood
 
-Purchase the basement entrance at **(390, 288)** through the Rooms tab.
+Purchase the basement entrance at **(390, 288)** using its signpost marker.
+The purchased entrance has a timber frame and pickaxe sign. An **80-pixel rock
+layer** separates the basement from the first mine chamber; the ladder runs
+through a narrow shaft in that layer.
 Its ladder starts with one underground floor and extends as deeper central
-chambers are bought, reaching y=368, 448, and 528. Walk sideways onto a landing
+chambers are bought, reaching y=448, 528, and 608. Walk sideways onto a landing
 to leave the ladder. The local camera follows through the mine with a two-floor
 viewport. Each purchased underground room has one ore vein. Stand beside a
 vein with empty hands, stay still, and **hold E for three seconds** to produce a

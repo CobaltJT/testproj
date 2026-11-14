@@ -26,7 +26,7 @@ func run() -> void:
 	session.buy_transport_for(1, "lift", 2)
 	check(session.transport.upgrades == 0 and session.orders.coins == 100, "Host rejects skipped upgrade")
 	session.transport_buttons[1].pressed.emit()
-	check(session.transport.upgrades == 1 and session.lift_node.visible and session.players[1].mine_ladder_top == 368, "Purchase replaces top ladder segment with elevator")
+	check(session.transport.upgrades == 1 and session.lift_node.visible and session.players[1].mine_ladder_top == 448, "Purchase replaces top ladder segment with elevator")
 	session.transport_buy("rail", 0)
 	session.place_rail_for(1, Vector2(326, 288))
 	var dwarf = session.players[1]
@@ -62,18 +62,18 @@ func run() -> void:
 	dwarf.velocity = Vector2.ZERO
 	await frames(3)
 	await press("climb_down")
-	await frames(65)
-	check(session.transport.lift_y == 368 and absf(dwarf.position.y - 368) < 2 and session.transport.carts[1].at.y == 368, "Elevator carries dwarf and loaded cart to first mine floor")
+	await frames(125)
+	check(session.transport.lift_y == 448 and absf(dwarf.position.y - 448) < 2 and session.transport.carts[1].at.y == 448, "Elevator carries dwarf and loaded cart to first mine floor")
 	check(session.ore.pieces[piece].processing and session.transport.carts[1].items == [piece], "Ore remains stored during elevator travel")
-	dwarf.position = Vector2(390, 448)
+	dwarf.position = Vector2(390, 528)
 	dwarf.velocity = Vector2.ZERO
 	dwarf.climbing = false
 	Input.action_press("climb_up")
 	await frames(105)
 	Input.action_release("climb_up")
-	check(absf(dwarf.position.y - 368) < 2, "Remaining ladder can reach the lowest upgraded platform from below")
+	check(absf(dwarf.position.y - 448) < 2, "Remaining ladder can reach the lowest upgraded platform from below")
 	session.buy_transport_for(1, "lift", 2)
-	check(session.transport.upgrades == 2 and session.players[1].mine_ladder_top == 448, "Second upgrade extends elevator in required order")
+	check(session.transport.upgrades == 2 and session.players[1].mine_ladder_top == 528, "Second upgrade extends elevator in required order")
 	session.cycle.phase = "summary"
 	session.cycle.summary = session.cycle.totals(session.orders)
 	session.buy_transport_for(1, "rail", 0)

@@ -23,12 +23,12 @@ func run() -> void:
 	dwarf.position = Vector2(390, 288)
 	dwarf.velocity = Vector2.ZERO
 	Input.action_press("climb_down")
-	await frames(280)
+	await frames(370)
 	Input.action_release("climb_down")
-	check(absf(dwarf.position.y - 528) < 2 and dwarf.climbing, "One continuous ladder traverses all three mine levels without floor obstruction")
+	check(absf(dwarf.position.y - 608) < 2 and dwarf.climbing, "One continuous ladder traverses all three mine levels without floor obstruction")
 	check(root.get_camera_2d().get_screen_center_position().y > 800, "Local camera follows dwarf into deepest mine level")
 	Input.action_press("climb_up")
-	await frames(280)
+	await frames(370)
 	Input.action_release("climb_up")
 	check(absf(dwarf.position.y - 288) < 2, "Continuous ladder returns to building entrance")
 	for level in session.MAP.MINE_FLOORS:

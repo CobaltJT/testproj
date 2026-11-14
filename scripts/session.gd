@@ -33,6 +33,8 @@ var transport_info: Label
 const ROOMS = preload("res://scripts/room_state.gd")
 var rooms = ROOMS.new()
 var room_buttons: Dictionary = {}
+var expansion_layer: Control
+var expansion_targets: Dictionary = {}
 var entrance_button: Button
 const MAP = preload("res://scripts/map_layout.gd")
 var overview_camera: Camera2D
@@ -63,8 +65,8 @@ const EXTRA_TEXTURES = {
 	"ore_bin": preload("res://assets/textures/ore_bin.svg")
 }
 const MINING_STATE = preload("res://scripts/mining_state.gd")
-const MINE_POSITION := Vector2(320, 368)
-const MINE_OUTPUT := Vector2(274, 356)
+const MINE_POSITION := Vector2(320, 448)
+const MINE_OUTPUT := Vector2(274, 436)
 var mine_veins: Dictionary = {}
 var vein_nodes: Dictionary = {}
 var mining = MINING_STATE.new()
@@ -179,6 +181,7 @@ func _ready() -> void:
 	multiplayer.server_disconnected.connect(func(): disconnect_game("Host disconnected."))
 	hud = HUD.new()
 	hud.setup(self, layer, panel)
+	layer.move_child(expansion_layer, 0)
 	# The same production entry points are used by the multi-process smoke test.
 	var args := OS.get_cmdline_user_args()
 	for arg in args:
@@ -259,7 +262,7 @@ func spawn_player(id: int, at: Vector2) -> void:
 	dwarf.set_camera_active(local)
 	dwarf.get_node("Sprite2D").modulate = Color.WHITE if local else Color.from_hsv(fmod(id * 0.137, 1.0), 0.45, 1.0)
 	dwarf.set_ladders(rooms.ladders())
-	dwarf.mine_ladder_top = 288.0 + transport.upgrades * 80
+	dwarf.mine_ladder_top = TRANSPORT.STOPS[transport.upgrades]
 	configure_camera(dwarf.get_node("FollowCamera"))
 	players[id] = dwarf
 	progression.add(id)
@@ -576,6 +579,7 @@ func receive_orders(state: Dictionary) -> void:
 	refresh_orders()
 
 func refresh_orders() -> void:
+	refresh_room_buttons()
 	var live: Dictionary = {}
 	for i in range(orders.queue.size()):
 		var order: Dictionary = orders.queue[i]
@@ -998,7 +1002,7 @@ func init_build_ui(layer: CanvasLayer) -> void:
 			detail.add_theme_font_size_override("font_size", 12)
 			path.add_child(detail)
 	init_transport_ui()
-	init_rooms_ui()
+	init_expansion_ui(layer)
 	catalog.hide()
 
 func _process(_delta: float) -> void:
@@ -1022,6 +1026,7 @@ func _process(_delta: float) -> void:
 		build_ghost.modulate = Color(0.4, 1, 0.5, 0.7) if transport.can_rail(at) else Color(1, 0.3, 0.3, 0.7)
 	if not active:
 		catalog.hide()
+	update_expansion_indicators()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if active and build_ghost != null and build_ghost.visible and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -1539,13 +1544,17 @@ func refresh_transport() -> void:
 	lift_node.visible = transport.upgrades > 0
 	lift_node.position = Vector2(390, transport.lift_y)
 	lift_node.get_child(1).collision_layer = 16 if transport.upgrades > 0 else 0
-	for id in players: players[id].mine_ladder_top = 288.0 + transport.upgrades * 80
+	for id in players: players[id].mine_ladder_top = TRANSPORT.STOPS[transport.upgrades]
 	while shaft_nodes.size() < transport.upgrades:
 		var sprite := Sprite2D.new()
 		sprite.texture = preload("res://assets/textures/shaft_lift.svg")
 		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		sprite.z_index = -9
-		sprite.position = Vector2(390, 328 + shaft_nodes.size() * 80)
+		var segment := shaft_nodes.size()
+		var top: float = TRANSPORT.STOPS[segment]
+		var bottom: float = TRANSPORT.STOPS[segment + 1]
+		sprite.position = Vector2(390, (top + bottom) / 2)
+		sprite.scale.y = (bottom - top) / 80.0
 		world.add_child(sprite)
 		shaft_nodes.append(sprite)
 	for i in range(shaft_nodes.size()): shaft_nodes[i].visible = i < transport.upgrades
@@ -1593,59 +1602,58 @@ func merchant_card_buy() -> void:
 	if multiplayer.is_server(): buy_wood_for(1)
 	else: request_wood.rpc_id(1)
 
-func init_rooms_ui() -> void:
-	var tab := VBoxContainer.new()
-	tab.name = "Rooms"
-	catalog_tabs.add_child(tab)
-	var title := Label.new()
-	title.text = "Expand beside an owned room · prices in coins"
-	tab.add_child(title)
-	var grid := GridContainer.new()
-	grid.columns = ROOMS.COLUMNS + 1
-	tab.add_child(grid)
-	for heading in ["Level", "Room 1", "Room 2", "Room 3", "Room 4", "Room 5"]:
-		var label := Label.new()
-		label.text = heading
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		grid.add_child(label)
-	for mine in [false, true]:
-		for row in ([1, 2, 3] if mine else [-2, -1, 0, 1]):
-			var label := Label.new()
-			label.text = "Mine %s" % row if mine else ROOMS.NAMES[row]
-			grid.add_child(label)
-			for col in range(ROOMS.COLUMNS):
-				var cell := Vector2i(col, row)
-				var button := Button.new()
-				button.custom_minimum_size.x = 98
-				button.focus_mode = Control.FOCUS_NONE
-				button.pressed.connect(func(): buy_room(mine, cell))
-				grid.add_child(button)
-				room_buttons[Vector3i(col, row, int(mine))] = button
-	entrance_button = Button.new()
-	entrance_button.focus_mode = Control.FOCUS_NONE
-	entrance_button.pressed.connect(func(): buy_room(true, Vector2i(1, 0)))
-	tab.add_child(entrance_button)
-	var note := Label.new()
-	note.text = "Mine entrance: basement room 2 + first chamber\nDeeper levels: expand down the shaft in room 2 first.\nLadders connect rooms automatically; keep their paths clear."
-	note.add_theme_font_size_override("font_size", 13)
-	tab.add_child(note)
+func init_expansion_ui(layer: CanvasLayer) -> void:
+	expansion_layer = Control.new()
+	expansion_layer.name = "ExpansionIndicators"
+	expansion_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(expansion_layer)
+	layer.move_child(expansion_layer, 0)
 	refresh_room_buttons()
 
 func refresh_room_buttons() -> void:
+	if expansion_layer == null: return
+	# Keep controls alive when only prices/funds change; replace them after layout changes.
+	var targets: Dictionary = rooms.expansion_targets()
+	if rooms.can_open_mine():
+		targets[Vector3i(1, 0, 1)] = {"at": Vector2(390, 242), "direction": Vector2i.ZERO}
+	if targets != expansion_targets:
+		for button in room_buttons.values(): button.queue_free()
+		room_buttons.clear()
+		expansion_targets = targets
+		for key in targets:
+			var button := Button.new()
+			button.name = "Expansion_%s_%s_%s" % [key.x, key.y, key.z]
+			button.focus_mode = Control.FOCUS_NONE
+			button.custom_minimum_size = Vector2(64, 32)
+			button.icon = preload("res://assets/textures/expand_room.svg")
+			button.expand_icon = true
+			button.add_theme_constant_override("icon_max_width", 20)
+			button.pressed.connect(func(): buy_room(key.z == 1, Vector2i(key.x, key.y)))
+			expansion_layer.add_child(button)
+			room_buttons[key] = button
+	entrance_button = room_buttons.get(Vector3i(1, 0, 1))
 	var id := multiplayer.get_unique_id()
 	for key in room_buttons:
-		var mine: bool = key.z == 1
-		var cell := Vector2i(key.x, key.y)
+		var entrance: bool = key == Vector3i(1, 0, 1)
+		var base: int = ROOMS.ENTRANCE_PRICE if entrance else (ROOMS.DEPTH_PRICES[key.y] if key.z == 1 else ROOMS.PRICES[key.y])
+		var cost: int = progression.purchase_price(id, base)
 		var button: Button = room_buttons[key]
-		var owned: bool = rooms.owned(mine, cell)
-		var available: bool = rooms.can_buy(mine, cell)
-		var cost: int = progression.purchase_price(id, ROOMS.DEPTH_PRICES[cell.y] if mine else ROOMS.PRICES[cell.y])
-		button.text = "✓ Room %s" % (key.x + 1) if owned else ("+ %s" % cost if available else "—")
-		button.disabled = not available
-		button.tooltip_text = "%s · Room %s · %s coins" % ["Mine %s" % cell.y if mine else ROOMS.NAMES[cell.y], cell.x + 1, cost]
-	if entrance_button != null:
-		entrance_button.text = "Mine entrance owned" if rooms.mine_open else "Buy mine entrance + first chamber · %s coins" % progression.purchase_price(id, ROOMS.ENTRANCE_PRICE)
-		entrance_button.disabled = not rooms.can_open_mine()
+		var direction: Vector2i = targets[key].direction
+		var arrow: String = "⛏" if entrance else ("←" if direction.x < 0 else ("→" if direction.x > 0 else ("↑" if direction.y < 0 else "↓")))
+		button.text = "%s %s" % [arrow, cost]
+		button.disabled = orders.coins < cost
+		button.tooltip_text = "%s · %s coins" % ["Open mine + first chamber" if entrance else ("Mine level %s" % key.y if key.z == 1 else ROOMS.NAMES[key.y]), cost]
+	update_expansion_indicators()
+
+func update_expansion_indicators() -> void:
+	if expansion_layer == null: return
+	expansion_layer.visible = active and cycle.phase not in ["summary", "transition"] and not catalog.visible and not build_ghost.visible and not Input.is_physical_key_pressed(KEY_F1)
+	var viewport_rect := get_viewport().get_visible_rect().grow(-20)
+	for key in room_buttons:
+		var button: Button = room_buttons[key]
+		var point: Vector2 = world.get_global_transform_with_canvas() * expansion_targets[key].at
+		button.position = (point - button.size / 2).round()
+		button.visible = viewport_rect.has_point(point)
 
 func buy_room(mine: bool, cell: Vector2i) -> void:
 	if multiplayer.is_server(): purchase_room_for(1, mine, cell)

@@ -38,10 +38,9 @@ func run() -> void:
 	await frames(35)
 	Input.action_release("move_right")
 	check(dwarf.position.x < 455 and dwarf.is_on_floor(), "Exterior room wall contains player")
-	session.catalog.show()
-	session.catalog_tabs.current_tab = 3
+	check(session.catalog_tabs.get_tab_count() == 3, "Building catalog contains no room purchase tab")
 	await click(session.room_buttons[Vector3i(2, 0, 0)])
-	check(session.rooms.building.has(Vector2i(2, 0)) and session.orders.coins == 75, "Rooms tab mouse button buys ground expansion")
+	check(session.rooms.building.has(Vector2i(2, 0)) and session.orders.coins == 75, "World expansion button buys the neighboring ground room")
 	session.catalog.hide()
 	Input.action_press("move_right")
 	await frames(50)
@@ -49,10 +48,15 @@ func run() -> void:
 	check(dwarf.position.x > 470 and dwarf.is_on_floor(), "Purchased room removes former wall and adds walkable floor")
 	check(session.workshop.can_place(Vector2(512, 216)), "Purchased floor supports furniture")
 	session.purchase_room_for(1, false, Vector2i(1, 1))
-	session.purchase_room_for(1, true, Vector2i(1, 0))
+	dwarf.position = Vector2(390, 288)
+	dwarf.velocity = Vector2.ZERO
+	await frames(40)
+	check(session.entrance_button != null and session.world.entrance.visible, "Mine signpost and purchase button appear in the basement")
+	await click(session.entrance_button)
+	check(session.world.entrance.get_child(0).texture == preload("res://assets/textures/mine_entrance.svg"), "Purchased entrance displays a timber mine marker")
 	await frames(5)
 	check(session.orders.coins == 30 and session.mine_veins.size() == 1 and session.rooms.depth() == 1, "Basement and mine entrance unlock one chamber and vein")
-	check(session.vein_at(Vector2(528, 368)) == -1 and session.vein_at(Vector2(320, 448)) == -1, "Locked chambers cannot be mined")
+	check(session.vein_at(Vector2(528, 448)) == -1 and session.vein_at(Vector2(320, 528)) == -1, "Locked chambers cannot be mined")
 	dwarf.position = Vector2(320, 216)
 	dwarf.velocity = Vector2.ZERO
 	Input.action_press("climb_down")
@@ -63,18 +67,37 @@ func run() -> void:
 	dwarf.velocity = Vector2.ZERO
 	dwarf.climbing = false
 	Input.action_press("climb_down")
-	await frames(100)
+	await frames(190)
 	Input.action_release("climb_down")
-	check(absf(dwarf.position.y - 368) < 1 and dwarf.climbing, "Entrance ladder reaches first chamber and stops at its floor")
+	check(absf(dwarf.position.y - 448) < 1 and dwarf.climbing, "Entrance ladder reaches first chamber and stops at its floor")
 	session.buy_transport_for(1, "lift", 2)
 	check(session.transport.upgrades == 0 and session.orders.coins == 30, "Elevator cannot upgrade into unpurchased depth")
 	session.orders.coins = 200
 	session.purchase_room_for(1, true, Vector2i(1, 2))
-	check(dwarf.climbing and absf(dwarf.position.y - 368) < 1, "Expansion preserves ladder attachment and position")
+	check(dwarf.climbing and absf(dwarf.position.y - 448) < 1, "Expansion preserves ladder attachment and position")
 	Input.action_press("climb_down")
 	await frames(100)
 	Input.action_release("climb_down")
-	check(absf(dwarf.position.y - 448) < 1 and session.mine_veins.size() == 2, "New shaft segment opens deeper floor and vein")
+	check(absf(dwarf.position.y - 528) < 1 and session.mine_veins.size() == 2, "New shaft segment opens deeper floor and vein")
+	check(session.rooms.room_rect(true, Vector2i(1, 1)).position.y - 288 == 80, "Mine begins one floor-height below the basement")
+	var space: PhysicsDirectSpaceState2D = session.world.get_world_2d().direct_space_state
+	var floors_solid := true
+	for y in [216, 288, 448, 528]:
+		var query := PhysicsRayQueryParameters2D.create(session.world.to_global(Vector2(280, y - 10)), session.world.to_global(Vector2(280, y + 12)), 1)
+		var hit := space.intersect_ray(query)
+		floors_solid = floors_solid and not hit.is_empty() and absf(session.world.to_local(hit.position).y - y) < 1
+	check(floors_solid, "Ground, basement and mine floors all retain solid collision away from ladders")
+	var query := PhysicsPointQueryParameters2D.new()
+	query.collision_mask = 1
+	query.position = session.world.to_global(Vector2(350, 328))
+	check(not space.intersect_point(query).is_empty(), "Gap contains solid earth beside the mine shaft")
+	query.position = session.world.to_global(Vector2(390, 328))
+	check(space.intersect_point(query).is_empty(), "Mine shaft remains open through the rock layer")
+	var floors_visible := true
+	for sprite in session.world.generated.get_children():
+		if sprite is Sprite2D and sprite.texture in [session.world.BRICK, session.world.ROCK]:
+			floors_visible = floors_visible and sprite.z_index < 0
+	check(floors_visible, "Room and rock backgrounds render behind floor and ceiling textures")
 	# New vertical access must not destroy or overlap an existing workstation.
 	session.purchase_for(1, "anvil")
 	session.place_for(1, Vector2(320, 216)) # Existing ladder: blocked.

@@ -1,5 +1,6 @@
 extends RefCounted
 ## Owned cells are the source of truth for world geometry and accessible space.
+const MAP = preload("res://scripts/map_layout.gd")
 const LEFT := 48.0
 const ROOM_WIDTH := 208.0
 const COLUMNS := 5
@@ -17,7 +18,7 @@ func column(x: float) -> int:
 	return floori((x - LEFT) / ROOM_WIDTH)
 
 func floor_y(mine: bool, row: int) -> float:
-	return 288.0 + row * 80 if mine else FLOOR_Y.get(row, -9999)
+	return MAP.MINE_FLOORS[row - 1] if mine and row in DEPTH_PRICES else FLOOR_Y.get(row, -9999)
 
 func owned(mine: bool, cell: Vector2i) -> bool:
 	return (underground if mine else building).has(cell)
@@ -97,7 +98,7 @@ func ladders() -> Array[Rect2]:
 				result.append(Rect2(ladder_x(col) - 16, start, 32, end - start))
 				start = -9999
 		if start != -9999: result.append(Rect2(ladder_x(col) - 16, start, 32, end - start))
-	if mine_open: result.append(Rect2(374, 288, 32, depth() * 80))
+	if mine_open: result.append(Rect2(374, 288, 32, MAP.MINE_GAP + depth() * 80))
 	return result
 
 func floor_hole(mine: bool, cell: Vector2i) -> float:
@@ -113,3 +114,20 @@ func restore(state: Dictionary) -> void:
 	building = state.building.duplicate()
 	underground = state.underground.duplicate()
 	mine_open = state.mine_open
+
+func expansion_targets() -> Dictionary:
+	var result: Dictionary = {}
+	for mine in [false, true]:
+		var cells: Dictionary = underground if mine else building
+		for cell in cells:
+			var rect := room_rect(mine, cell)
+			for offset in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+				var target: Vector2i = cell + offset
+				if not can_buy(mine, target): continue
+				var key := Vector3i(target.x, target.y, int(mine))
+				if result.has(key): continue
+				var at := rect.get_center()
+				if offset.x != 0: at.x = rect.end.x - 12 if offset.x > 0 else rect.position.x + 12
+				else: at.y = rect.end.y - 12 if offset.y > 0 else rect.position.y + 12
+				result[key] = {"at": at, "direction": offset}
+	return result

@@ -39,6 +39,7 @@ func run() -> void:
 	session.players[1].position = Vector2(166, 216)
 	session.cycle.phase = "shop"
 	session.orders.until_arrival = 100
+	session.orders.reputation = 20
 	session.orders.queue = [{"id": 501, "kind": "horseshoe", "age": 2.0, "remaining": 10.0, "accepted": false, "quantity": 1, "delivered": 0}, {"id": 502, "kind": "sword", "age": 2.0, "remaining": 10.0, "accepted": false, "quantity": 2, "delivered": 0}]
 	session.refresh_orders()
 	await frames(8)
@@ -47,9 +48,9 @@ func run() -> void:
 	check(not session.orders.queue[0].accepted and session.orders.queue[1].accepted, "Real mouse click accepts second queued customer's order")
 	check(not session.hud.order_cards[502].accept_button.visible and session.hud.order_cards[502].reject_button.visible, "Accepted order retains red failure button")
 	await click(session.hud.order_cards[502].reject_button)
-	check(session.orders.queue.size() == 1 and session.orders.queue[0].id == 501 and session.orders.missed == 1 and session.orders.reputation == -6, "Red button fails already accepted queued order for six reputation")
+	check(session.orders.queue.size() == 1 and session.orders.queue[0].id == 501 and session.orders.missed == 1 and session.orders.reputation == 14, "Red button fails already accepted queued order for six reputation")
 	await click(session.hud.order_cards[501].reject_button)
-	check(session.orders.rejected == 1 and session.orders.reputation == -9, "Red button declines unaccepted order for three reputation")
+	check(session.orders.rejected == 1 and session.orders.reputation == 11, "Red button declines unaccepted order for three reputation")
 	session.merchant.step(12)
 	session.refresh_merchant()
 	await frames(4)

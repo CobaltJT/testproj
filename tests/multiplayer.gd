@@ -389,7 +389,7 @@ func client_scenarios() -> void:
 		check(await until(func(): return not session.orders.queue.is_empty() and session.orders.queue[0].accepted), "Next remote acceptance replicated")
 		await press("interact")
 	await stage("expire")
-	check(session.orders.coins == 80 and session.orders.reputation == -2, "Shared rewards and expiry penalty replicated")
+	check(session.orders.coins == 80 and session.orders.reputation == 0, "Shared rewards and expiry penalty replicated")
 	done("expire")
 	await stage("move")
 	if role == "client1":

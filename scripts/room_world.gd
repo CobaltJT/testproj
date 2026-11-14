@@ -9,6 +9,7 @@ const LADDER = preload("res://assets/textures/room_ladder.svg")
 var generated: Node2D
 var collision: StaticBody2D
 var entrance: Node2D
+var landscape: Node2D
 
 func _enter_tree() -> void:
 	entrance = Node2D.new()
@@ -18,6 +19,7 @@ func _enter_tree() -> void:
 	add_child(entrance)
 
 func _ready() -> void:
+	create_landscape()
 	configure(ROOMS.new())
 
 func picture(parent: Node, texture: Texture2D, at: Vector2, size: Vector2 = Vector2.ZERO) -> Sprite2D:
@@ -83,7 +85,6 @@ func configure(layout: RefCounted) -> void:
 		if cell.y != 1: continue
 		var rect: Rect2 = layout.room_rect(true, cell)
 		var band := Rect2(rect.position.x, 288, rect.size.x, ROOMS.MAP.MINE_GAP)
-		picture(generated, EARTH, band.position, band.size).z_index = -1
 		if cell.x == ROOMS.SHAFT_COLUMN:
 			solid(Rect2(band.position, Vector2(374 - band.position.x, band.size.y)))
 			solid(Rect2(406, band.position.y, band.end.x - 406, band.size.y))
@@ -101,3 +102,27 @@ func configure(layout: RefCounted) -> void:
 	picture(generated, preload("res://assets/textures/room_door.svg"), Vector2(60, 180))
 	if has_node("Player"):
 		$Player.set_ladders(layout.ladders())
+
+func tiled_picture(parent: Node, texture: Texture2D, at: Vector2, size: Vector2) -> Sprite2D:
+	var sprite := picture(parent, texture, at)
+	sprite.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	sprite.region_enabled = true
+	sprite.region_rect = Rect2(Vector2.ZERO, size)
+	return sprite
+
+func create_landscape() -> void:
+	landscape = Node2D.new()
+	landscape.name = "Landscape"
+	landscape.z_index = -30
+	add_child(landscape)
+	# Extend past all camera bounds, including wide windows and the overview.
+	var sky := picture(landscape, preload("res://assets/textures/sky.svg"), Vector2(-4096, -4096), Vector2(8192, 4312))
+	sky.name = "Sky"
+	var earth := tiled_picture(landscape, EARTH, Vector2(-4096, 216), Vector2(8192, 8192))
+	earth.name = "Earth"
+	var grass := tiled_picture(landscape, preload("res://assets/textures/grass.svg"), Vector2(-4096, 210), Vector2(8192, 8))
+	grass.name = "Grass"
+	for row in range(3):
+		for col in range(15):
+			var cloud := picture(landscape, preload("res://assets/textures/cloud.svg"), Vector2(-512 + col * 160 + (row % 2) * 70, -56 + row * 80))
+			cloud.modulate.a = 0.65 if row == 1 else 0.85

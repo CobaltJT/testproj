@@ -37,6 +37,10 @@ spending, and receive the buyer's Bargainer discount. Duplicate purchases never
 charge twice. Rooms remain across days and reconnects; starting a new hosted
 session restores the two-room layout.
 
+The outdoor backdrop is blue sky with pixel clouds above ground and dark earth
+below the ground-floor surface, with a grass edge outside the building. Purchased
+rooms and the mine ladder tunnel appear in front of this backdrop.
+
 ## Player cameras
 
 Each player has a personal camera following their own dwarf, horizontally and
@@ -323,7 +327,8 @@ consecutive customers can request the same product. Each request contains
 **one product kind**, with a random quantity from 1 to the current maximum.
 
 Reputation sets the difficulty tier: one tier per **10 reputation**, capped at
-tier 9. Negative reputation uses tier 0. The first arrival of each day and every
+tier 9. Reputation never drops below **0**, including after rejection, failure,
+unanswered requests, or restoring a session snapshot. The first arrival of each day and every
 subsequent arrival use a freshly randomized interval:
 
 | Reputation | Random arrival interval | Quantity per request |

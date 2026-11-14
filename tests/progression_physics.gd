@@ -57,6 +57,7 @@ func run() -> void:
 	check(session.orders.coins == coins - 5, "Wood discount rounds up to whole coins")
 	dwarf.position = Vector2(166, 216)
 	session.orders.queue = [{"id": 1, "kind": "horseshoe", "remaining": 10.0, "age": 2.0, "accepted": false}]
+	session.orders.reputation = 10
 	var rep: int = session.orders.reputation
 	session.decide_order_for(1, 1, false)
 	check(session.orders.reputation == rep - 2, "Diplomat reduces explicit rejection by one")

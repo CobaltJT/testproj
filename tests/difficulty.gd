@@ -45,7 +45,7 @@ func _initialize() -> void:
 	check(gaps.size() > 100 and high_total < low_total / 2, "Arrival intervals vary and high reputation increases frequency")
 	low.reputation = -1000
 	high.reputation = 100000
-	check(low.max_quantity() == 1 and low.arrival_range() == Vector2(18, 26) and high.max_quantity() == 10 and high.arrival_range().x > 6, "Negative reputation uses starter difficulty and high reputation is capped")
+	check(low.reputation == 0 and low.max_quantity() == 1 and low.arrival_range() == Vector2(18, 26) and high.max_quantity() == 10 and high.arrival_range().x > 6, "Reputation floors at zero with starter difficulty and high reputation is capped")
 	low.reputation = 10
 	check(low.max_quantity() == 2, "Each ten reputation unlocks one more possible item")
 	var copy = ORDERS.new()
@@ -69,7 +69,7 @@ func _initialize() -> void:
 	ore.pickup(1, 2)
 	check(orders.deliver(1, counter, ore) and orders.queue.is_empty() and orders.completed == 1 and orders.reputation == 2 and orders.earned == 31, "Cooperative completion counts one request, rewards reputation once and applies each seller's bonus")
 	partial.step(30, false)
-	check(partial.missed == 1 and partial.reputation == -6 and partial.coins == 110, "Partial order still fails on original deadline; already delivered goods stay sold")
+	check(partial.missed == 1 and partial.reputation == 0 and partial.coins == 110, "Partial order still fails on original deadline; already delivered goods stay sold")
 	var a = ORDERS.new()
 	var b = ORDERS.new()
 	a.reputation = 80

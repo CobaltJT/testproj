@@ -66,7 +66,7 @@ func run() -> void:
 	session.hud.order_cards[2].reject_button.pressed.emit()
 	await frames(2)
 	await frames(3)
-	check(session.orders.rejected == 1 and session.orders.reputation == -1, "Reject card button declines request for three reputation")
+	check(session.orders.rejected == 1 and session.orders.reputation == 0, "Reject card button declines request for three reputation")
 	session.disconnect_game("Done")
 	check(session.orders.coins == 100 and session.orders.completed == 0 and not session.order_label.visible, "New session resets orders and earnings")
 	print("ORDER INTERACTION RESULT: ", failures, " failures")

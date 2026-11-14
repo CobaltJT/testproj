@@ -21,7 +21,9 @@ var earned := 0
 var spent := 0
 var refunds := 0
 var coins := 100
-var reputation := 0
+var reputation: int = 0:
+	set(value):
+		reputation = maxi(0, value)
 
 func _init() -> void:
 	rng.randomize()

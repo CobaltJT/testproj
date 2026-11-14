@@ -44,7 +44,7 @@ func _initialize() -> void:
 	check(copy.summary == day.summary and copy.phase == "summary", "Snapshot preserves report for joining clients")
 	check(day.advance(1) and not day.advance(1), "Summary closure begins one transition")
 	day.step(DAY.FADE_DURATION, orders, merchant)
-	check(day.day == 2 and day.phase == "morning" and orders.coins == 110 and orders.reputation == -4, "Next morning preserves economy and reputation")
+	check(day.day == 2 and day.phase == "morning" and orders.coins == 110 and orders.reputation == 0, "Next morning preserves economy and reputation")
 	check(not day.advance(1), "Stale previous-day button cannot open new day")
 	day.advance(2)
 	day.remaining = 0.01

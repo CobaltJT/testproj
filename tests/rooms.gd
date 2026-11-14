@@ -10,6 +10,12 @@ func check(ok: bool, message: String) -> void:
 func _initialize() -> void:
 	var layout = ROOMS.new()
 	var economy = ECONOMY.new()
+	check(layout.current_room(Vector2(220, 216)) == Vector3i(0, 0, 0) and layout.current_room(Vector2(280, 216)) == Vector3i(1, 0, 0), "Standing feet identify the correct individual room")
+	var nearby: Dictionary = layout.expansion_targets(Vector2(220, 216))
+	check(nearby.size() == 2 and nearby.has(Vector3i(0, -1, 0)) and nearby.has(Vector3i(0, 1, 0)), "Only expansions adjoining the occupied room are offered")
+	var rect: Rect2 = layout.room_rect(false, Vector2i.ZERO)
+	check(nearby.values().all(func(target): return not rect.grow(8).has_point(target.at)), "Room purchase markers sit outside the room and walls")
+	check(layout.expansion_targets(Vector2(390, 328)).is_empty(), "No room indicators while traversing the mine tunnel")
 	check(layout.building.size() == 2 and layout.underground.is_empty() and not layout.mine_open, "Exactly two ground rooms and no mine at start")
 	check(not layout.buy(false, Vector2i(4, 0), economy) and not layout.buy(false, Vector2i(0, -2), economy), "Cannot buy isolated rooms or skip floors")
 	check(not layout.buy_entrance(economy) and not layout.buy(true, Vector2i(1, 1), economy), "Mine requires basement access")

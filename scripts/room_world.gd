@@ -2,6 +2,7 @@ extends Node2D
 const ROOMS = preload("res://scripts/room_state.gd")
 const BRICK = preload("res://assets/textures/room_brick.svg")
 const ROCK = preload("res://assets/textures/room_rock.svg")
+const EARTH = preload("res://assets/textures/mine_earth.svg")
 const WOOD = preload("res://assets/textures/room_floor.svg")
 const STONE = preload("res://assets/textures/room_stone.svg")
 const LADDER = preload("res://assets/textures/room_ladder.svg")
@@ -82,7 +83,7 @@ func configure(layout: RefCounted) -> void:
 		if cell.y != 1: continue
 		var rect: Rect2 = layout.room_rect(true, cell)
 		var band := Rect2(rect.position.x, 288, rect.size.x, ROOMS.MAP.MINE_GAP)
-		picture(generated, ROCK, band.position, band.size).z_index = -1
+		picture(generated, EARTH, band.position, band.size).z_index = -1
 		if cell.x == ROOMS.SHAFT_COLUMN:
 			solid(Rect2(band.position, Vector2(374 - band.position.x, band.size.y)))
 			solid(Rect2(406, band.position.y, band.end.x - 406, band.size.y))

@@ -115,19 +115,27 @@ func restore(state: Dictionary) -> void:
 	underground = state.underground.duplicate()
 	mine_open = state.mine_open
 
-func expansion_targets() -> Dictionary:
-	var result: Dictionary = {}
+func current_room(at: Vector2) -> Vector3i:
+	# Feet rest on the bottom edge, which Rect2 normally excludes.
 	for mine in [false, true]:
 		var cells: Dictionary = underground if mine else building
 		for cell in cells:
-			var rect := room_rect(mine, cell)
-			for offset in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
-				var target: Vector2i = cell + offset
-				if not can_buy(mine, target): continue
-				var key := Vector3i(target.x, target.y, int(mine))
-				if result.has(key): continue
-				var at := rect.get_center()
-				if offset.x != 0: at.x = rect.end.x - 12 if offset.x > 0 else rect.position.x + 12
-				else: at.y = rect.end.y - 12 if offset.y > 0 else rect.position.y + 12
-				result[key] = {"at": at, "direction": offset}
+			if room_rect(mine, cell).has_point(at - Vector2(0, 1)):
+				return Vector3i(cell.x, cell.y, int(mine))
+	return Vector3i(-1, -99, -1)
+
+func expansion_targets(at: Vector2) -> Dictionary:
+	var result: Dictionary = {}
+	var current := current_room(at)
+	if current.z == -1: return result
+	var mine := current.z == 1
+	var cell := Vector2i(current.x, current.y)
+	var rect := room_rect(mine, cell)
+	for offset in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+		var target: Vector2i = cell + offset
+		if not can_buy(mine, target): continue
+		var point := rect.get_center()
+		if offset.x != 0: point.x = rect.end.x + 20 if offset.x > 0 else rect.position.x - 20
+		else: point.y = rect.end.y + 20 if offset.y > 0 else rect.position.y - 20
+		result[Vector3i(target.x, target.y, int(mine))] = {"at": point, "direction": offset, "room": rect}
 	return result

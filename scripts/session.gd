@@ -1026,7 +1026,7 @@ func _process(_delta: float) -> void:
 		build_ghost.modulate = Color(0.4, 1, 0.5, 0.7) if transport.can_rail(at) else Color(1, 0.3, 0.3, 0.7)
 	if not active:
 		catalog.hide()
-	update_expansion_indicators()
+	refresh_room_buttons()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if active and build_ghost != null and build_ghost.visible and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -1613,8 +1613,10 @@ func init_expansion_ui(layer: CanvasLayer) -> void:
 func refresh_room_buttons() -> void:
 	if expansion_layer == null: return
 	# Keep controls alive when only prices/funds change; replace them after layout changes.
-	var targets: Dictionary = rooms.expansion_targets()
-	if rooms.can_open_mine():
+	var id := multiplayer.get_unique_id()
+	var at: Vector2 = players[id].position if players.has(id) else Vector2(INF, INF)
+	var targets: Dictionary = rooms.expansion_targets(at)
+	if rooms.can_open_mine() and rooms.current_room(at) == Vector3i(ROOMS.SHAFT_COLUMN, 1, 0):
 		targets[Vector3i(1, 0, 1)] = {"at": Vector2(390, 242), "direction": Vector2i.ZERO}
 	if targets != expansion_targets:
 		for button in room_buttons.values(): button.queue_free()
@@ -1632,7 +1634,6 @@ func refresh_room_buttons() -> void:
 			expansion_layer.add_child(button)
 			room_buttons[key] = button
 	entrance_button = room_buttons.get(Vector3i(1, 0, 1))
-	var id := multiplayer.get_unique_id()
 	for key in room_buttons:
 		var entrance: bool = key == Vector3i(1, 0, 1)
 		var base: int = ROOMS.ENTRANCE_PRICE if entrance else (ROOMS.DEPTH_PRICES[key.y] if key.z == 1 else ROOMS.PRICES[key.y])
@@ -1651,7 +1652,22 @@ func update_expansion_indicators() -> void:
 	var viewport_rect := get_viewport().get_visible_rect().grow(-20)
 	for key in room_buttons:
 		var button: Button = room_buttons[key]
-		var point: Vector2 = world.get_global_transform_with_canvas() * expansion_targets[key].at
+		var transform := world.get_global_transform_with_canvas()
+		var target: Dictionary = expansion_targets[key]
+		var point: Vector2 = transform * target.at
+		# Slide top/bottom markers along the same outside edge to keep the HUD clear.
+		if hud != null and target.direction.y != 0:
+			var room: Rect2 = target.room
+			var left: float = (transform * room.position).x + button.size.x / 2 + 8
+			var right: float = (transform * room.end).x - button.size.x / 2 - 8
+			for panel in hud.panels:
+				var occupied: Rect2 = panel.get_global_rect()
+				if panel.is_visible_in_tree() and occupied.intersects(Rect2(point - button.size / 2, button.size)):
+					var beside: float = occupied.end.x + button.size.x / 2 + 8
+					if beside <= right and beside >= left: point.x = beside
+					else:
+						beside = occupied.position.x - button.size.x / 2 - 8
+						if beside >= left and beside <= right: point.x = beside
 		button.position = (point - button.size / 2).round()
 		button.visible = viewport_rect.has_point(point)
 

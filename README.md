@@ -8,8 +8,10 @@ host's LAN firewall. `127.0.0.1` is for multiple instances on one computer.
 ## Expand the smithy
 
 Start with **two ground-floor rooms** and no mine or workstations. Click the
-**green + markers at room edges** to purchase adjoining rooms.
+**green + markers outside the current room** to purchase adjoining rooms.
 Arrows show the expansion direction and each marker shows its coin price.
+Only markers adjoining your dwarf’s current room appear; entering another room
+updates them.
 Walk toward a room edge to bring its marker into your camera view. Room purchases
 are separate from the workshop menu. Ladders connect vertically adjacent
 building rooms automatically. Move any workstation blocking a new ladder before expanding.
@@ -136,7 +138,7 @@ Furniture lets dwarfs walk past it; output trays collide with physical items.
 ## Mine ore and buy wood
 
 Purchase the basement entrance at **(390, 288)** using its signpost marker.
-The purchased entrance has a timber frame and pickaxe sign. An **80-pixel rock
+The purchased entrance has a timber frame and pickaxe sign. An **80-pixel dark earth
 layer** separates the basement from the first mine chamber; the ladder runs
 through a narrow shaft in that layer.
 Its ladder starts with one underground floor and extends as deeper central

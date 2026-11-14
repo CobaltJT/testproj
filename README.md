@@ -472,8 +472,9 @@ RPCs. The views do not purchase objects or advance the simulation themselves.
 The HUD owns its day/status labels and Workshop/Open shop buttons directly;
 controls are no longer created by the session and reparented into the HUD.
 
-Gameplay state, physics, placement previews and networking remain in their current
-owners for later refactoring milestones. `tests/ui_components.gd` checks the
+Gameplay models remain separate from these views. The session coordinates
+simulation, placement previews and networking; domain controllers own extracted
+gameplay behavior. `tests/ui_components.gd` checks the
 extracted scenes independently, while the existing input and multiplayer tests
 exercise the same player actions through their new control owners.
 
@@ -508,8 +509,35 @@ an interaction already being traversed.
 Controllers emit change/feedback signals after consuming an interaction. The
 session handles replication, presentation refreshes and EXP. Controller state
 dependencies are rebound on reset so new games cannot mutate the previous game's
-models. Physics simulation, F/Q release, continuous held-E work, purchases and
-network endpoints retain their existing owners for subsequent milestones.
+models. The movable-object controller also owns item physics and F/Q release.
+Continuous held-E work, purchases and network endpoints retain their existing
+owners for subsequent milestones.
+
+## Movable-object ownership
+
+`scripts/controllers/movable_objects.gd` owns loose-item and movable-bin bodies,
+cart views, carried-item visuals, throw/drop motion, catch detection, knockback,
+and cart/driver movement. Its body registry, thrower grace and hit cooldowns are
+local controller state, not fields on the session. The HUD delegates nearby
+container/cart count visibility to that owner too.
+
+The controller receives explicit world, actor, inventory and transport-model
+references. Stationary bins and forges receive descending items through the
+placeable controller's `catch_item` callable, keeping their acceptance rules
+outside movable-object physics. Change signals request synchronization; the
+controller has no RPCs or direct session reference.
+
+The host's session advances the simulation and keeps the existing RPC entry
+points and motion payload. It coordinates the stationary elevator first, then
+passes passenger movement information to the cart simulation. Client replicas
+keep bodies frozen and non-colliding, applying the host's motion snapshots.
+
+`reset_game_state` creates fresh shared models and rebinds controller dependencies.
+The movable owner's `clear` frees its nodes, empties physics bookkeeping and
+disables simulation until rebound. Actor cleanup releases cart ownership and
+removes obsolete hit/grace records. `tests/movable_controller.gd` exercises this
+lifecycle and replica behavior without constructing a session; existing physics
+and multiplayer tests retain their behavioral assertions through the new owner.
 
 ## Validation
 

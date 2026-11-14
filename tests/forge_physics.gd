@@ -31,7 +31,7 @@ func run() -> void:
 	check(view.get_node("BinCatch").monitoring and view.get_node("BinWalls").collision_layer == 8, "Included bin has live sensor and physical walls")
 	var dwarf = session.players[1]
 	session.ore.pickup(1, 0)
-	session.refresh_ore()
+	session.movable_objects.refresh()
 	dwarf.position = Vector2(184, 216)
 	dwarf.velocity = Vector2.ZERO
 	dwarf.sprite.flip_h = false
@@ -39,7 +39,7 @@ func run() -> void:
 	for i in range(120):
 		await frames(1)
 		if forge.ore_queue.has(0): break
-	check(forge.ore_queue == [0] and not session.ore_bodies[0].visible, "Thrown ore lands in attached bin and is stored")
+	check(forge.ore_queue == [0] and not session.movable_objects.bodies[0].visible, "Thrown ore lands in attached bin and is stored")
 	await frames(20)
 	check(forge.ore_queue.size() == 1, "Bin cannot count same piece twice")
 	dwarf.position = Vector2(256, 216)
@@ -61,7 +61,7 @@ func run() -> void:
 		if session.ore.pieces[0].kind == "ingot": break
 	Input.action_release("interact")
 	await frames(40)
-	var body: RigidBody2D = session.ore_bodies[0]
+	var body: RigidBody2D = session.movable_objects.bodies[0]
 	check(session.ore.pieces[0].kind == "ingot" and body.visible and not body.freeze, "Forge outputs physical ingot")
 	var at: Vector2 = session.world.to_local(body.global_position)
 	check(absf(at.x - 284) < 8 and at.y > 200 and at.y < 216, "Ingot lands on forge output tray")

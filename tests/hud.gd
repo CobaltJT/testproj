@@ -36,7 +36,7 @@ func run() -> void:
 	await frames(3)
 	check(not session.hud.help_layer.visible, "Releasing F1 immediately hides guide")
 	session.ore.pickup(1, 0)
-	session.refresh_ore()
+	session.movable_objects.refresh()
 	await frames(3)
 	check(not session.hud.held.visible and session.hud.held_icon.texture != null, "Held item uses an icon without persistent text")
 	for i in range(2): session.award_exp(1, "delivery")

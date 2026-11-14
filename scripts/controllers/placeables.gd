@@ -11,13 +11,15 @@ var items: RefCounted
 var needs: RefCounted
 var cycle: RefCounted
 var find_vein: Callable
+var views: Dictionary = {}
 
-func bind(stations: RefCounted, inventory: RefCounted, vitals: RefCounted, day: RefCounted, mining_query: Callable) -> void:
+func bind(stations: RefCounted, inventory: RefCounted, vitals: RefCounted, day: RefCounted, mining_query: Callable, station_views: Dictionary = {}) -> void:
 	workshop = stations
 	items = inventory
 	needs = vitals
 	cycle = day
 	find_vein = mining_query
+	views = station_views
 
 func station(context: CONTEXT) -> int:
 	return context.query(&"station", workshop.nearest)
@@ -75,3 +77,18 @@ func try_cycle(context: CONTEXT) -> bool:
 	if workshop.stations[id].kind not in WORKSHOP.STORAGE: return false
 	if workshop.cycle_storage(context.player_id, context.position, items, id): workshop_changed.emit()
 	return true
+
+func catch_item(piece: int, body: RigidBody2D) -> bool:
+	if not items.is_loose(piece) or body.linear_velocity.y < 0: return false
+	for id in workshop.stations:
+		if not views.has(id): continue
+		var entry: Dictionary = workshop.stations[id]
+		var caught := false
+		if entry.kind in WORKSHOP.STORAGE and WORKSHOP.STORAGE[entry.kind].group == "intermediate" and views[id].get_node("PartsCatch").overlaps_body(body):
+			caught = workshop.catch_intermediate(id, piece, items)
+		elif entry.kind == "forge" and views[id].get_node("BinCatch").overlaps_body(body):
+			caught = entry.job.store_ore(piece, items)
+		if caught:
+			workshop_changed.emit()
+			return true
+	return false

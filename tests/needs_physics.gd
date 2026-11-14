@@ -89,7 +89,7 @@ func run() -> void:
 	check(vitals.food == 0, "Dining without carried/loaded food cannot restore satisfaction")
 	var food: int = session.ore.add_material("food")
 	session.ore.pickup(1, food)
-	session.refresh_ore()
+	session.movable_objects.refresh()
 	var quiet_notice: String = session.hud.notice.text
 	session.interact_for(1)
 	check(session.hud.notice.text == quiet_notice, "Loading food keeps routine interaction notifications quiet")

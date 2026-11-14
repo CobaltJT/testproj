@@ -48,7 +48,7 @@ func run() -> void:
 	dwarf.velocity = Vector2.ZERO
 	session.ore.pieces[0].kind = "horseshoe"
 	session.ore.pickup(1, 0)
-	session.refresh_ore()
+	session.movable_objects.refresh()
 	await frames(10)
 	Input.action_press("interact")
 	await frames(2)

@@ -26,28 +26,28 @@ func run() -> void:
 	session.purchase_for(1, "anvil")
 	session.place_for(1, Vector2(456, 216))
 	var station: int = session.workshop.nearest(Vector2(456, 216))
-	check(session.world.get_node("Building").z_index < session.station_nodes[station].z_index and session.station_nodes[station].z_index < dwarf.z_index and dwarf.z_index < session.ore_bodies[0].z_index, "Background, placeables, characters and loose objects use ordered draw layers")
+	check(session.world.get_node("Building").z_index < session.station_nodes[station].z_index and session.station_nodes[station].z_index < dwarf.z_index and dwarf.z_index < session.movable_objects.bodies[0].z_index, "Background, placeables, characters and loose objects use ordered draw layers")
 	dwarf.position = Vector2(456, 216)
 	await frames(5)
 	session.ore.pieces[0].kind = "ingot"
 	session.ore.pickup(1, 0)
 	session.workshop.stations[station].job.load_material(1, session.ore)
-	session.refresh_ore()
-	session.position_ore(session.ore_bodies[1], Vector2(457, 208), Vector2.ZERO)
+	session.movable_objects.refresh()
+	session.movable_objects.position_body(session.movable_objects.bodies[1], Vector2(457, 208), Vector2.ZERO)
 	session.interact_for(1)
 
 	check(session.ore.carried_by(1) == 1 and session.workshop.stations[station].job.progress == 0, "Nearby loose object wins over loaded placeable on interact")
 	session.ore.release_carrier(1)
-	session.position_ore(session.ore_bodies[1], Vector2(150, 270), Vector2.ZERO)
-	session.refresh_ore()
+	session.movable_objects.position_body(session.movable_objects.bodies[1], Vector2(150, 270), Vector2.ZERO)
+	session.movable_objects.refresh()
 	session.workshop_ui.mobile_bin_button.pressed.emit()
 	await frames(3)
 	var bin: int = session.ore.carried_by(1)
 	check(bin != -1 and session.ore.pieces[bin].kind == "ore_bin" and session.orders.coins == 65, "Catalog buys movable bin directly into hands")
 	await press("push_cart")
 	await frames(40)
-	check(session.ore.is_loose(bin) and session.ore_bodies[bin].get_node("Catch").monitoring, "C drops held bin as a live physics container")
-	var body: RigidBody2D = session.ore_bodies[bin]
+	check(session.ore.is_loose(bin) and session.movable_objects.bodies[bin].get_node("Catch").monitoring, "C drops held bin as a live physics container")
+	var body: RigidBody2D = session.movable_objects.bodies[bin]
 	dwarf.position = session.world.to_local(body.global_position) + Vector2(0, 11)
 	dwarf.velocity = Vector2.ZERO
 	await frames(5)
@@ -55,9 +55,9 @@ func run() -> void:
 	check(session.ore.carried_by(1) == -1 and session.ore.is_loose(bin), "E on empty bin does not pick it up")
 	var center: Vector2 = session.world.to_local(body.global_position)
 	session.ore.pieces[2].kind = "shaft"
-	session.position_ore(session.ore_bodies[2], center + Vector2(0, -35), Vector2(0, 100))
+	session.movable_objects.position_body(session.movable_objects.bodies[2], center + Vector2(0, -35), Vector2(0, 100))
 	await frames(60)
-	check(session.ore.pieces[bin].contents == [2] and not session.ore_bodies[2].visible, "Falling intermediate product is caught in movable bin")
+	check(session.ore.pieces[bin].contents == [2] and not session.movable_objects.bodies[2].visible, "Falling intermediate product is caught in movable bin")
 	dwarf.position = session.world.to_local(body.global_position) + Vector2(0, 11)
 	dwarf.velocity = Vector2.ZERO
 	await frames(5)
@@ -67,7 +67,7 @@ func run() -> void:
 	check(session.ore.carried_by(1) == bin and session.ore.pieces[bin].contents == [2], "C lifts loaded movable bin without losing contents")
 	await press("throw_ore")
 	await frames(40)
-	check(session.ore.is_loose(bin) and session.ore.pieces[bin].contents == [2] and not session.ore_bodies[bin].freeze, "Thrown bin remains physical and retains ore")
+	check(session.ore.is_loose(bin) and session.ore.pieces[bin].contents == [2] and not session.movable_objects.bodies[bin].freeze, "Thrown bin remains physical and retains ore")
 	center = session.world.to_local(body.global_position)
 	dwarf.position = Vector2(center.x, 216)
 	dwarf.velocity = Vector2.ZERO

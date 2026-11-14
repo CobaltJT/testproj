@@ -28,7 +28,7 @@ func run() -> void:
 	check(session.customer_nodes.has(1) and session.customer_nodes[1].position == Vector2(120, 216), "Waiting customer appears beside counter")
 	session.ore.pieces[0].kind = "horseshoe"
 	session.ore.pickup(1, 0)
-	session.refresh_ore()
+	session.movable_objects.refresh()
 	var dwarf = session.players[1]
 	dwarf.position = Vector2(166, 216)
 	await frames(5)
@@ -49,14 +49,14 @@ func run() -> void:
 	check(session.hud.order_cards[1].count.text == "×1" and session.customer_nodes.has(1), "Customer and partial quantity stay visible")
 	session.ore.pieces[1].kind = "horseshoe"
 	session.ore.pickup(1, 1)
-	session.refresh_ore()
+	session.movable_objects.refresh()
 	await frames(12)
 	Input.action_press("interact")
 	await frames(2)
 	Input.action_release("interact")
 	await frames(5)
 	check(session.orders.coins == 120 and session.orders.completed == 1 and session.orders.reputation == 2, "Second item completes request and awards reputation once")
-	check(not session.ore_bodies[0].visible and not dwarf.get_node("CarriedOre").visible, "Sold horseshoe disappears from world and hands")
+	check(not session.movable_objects.bodies[0].visible and not dwarf.get_node("CarriedOre").visible, "Sold horseshoe disappears from world and hands")
 	check("Coins: 120" in session.hud.shop.text, "Order UI displays shared reward")
 	await frames(130)
 	check(not session.customer_nodes.has(1) and session.orders.queue.is_empty(), "Served customer departs")

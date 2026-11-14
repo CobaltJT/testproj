@@ -10,7 +10,7 @@ static func fill(layout: RefCounted) -> void:
 static func prepare(session: Node) -> void:
 	fill(session.rooms)
 	session.apply_room_layout()
-	for id in session.ore_bodies:
+	for id in session.movable_objects.bodies:
 		if session.ore.is_loose(id):
-			session.position_ore(session.ore_bodies[id], Vector2(210 + id * 8, 281 - (id % 2) * 3), Vector2.ZERO)
+			session.movable_objects.position_body(session.movable_objects.bodies[id], Vector2(210 + id * 8, 281 - (id % 2) * 3), Vector2.ZERO)
 	session.broadcast_state("receive_rooms", [session.rooms.snapshot()])

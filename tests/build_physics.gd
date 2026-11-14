@@ -32,8 +32,8 @@ func run_job(at: Vector2) -> void:
 	await frames(5)
 	await press("interact")
 	# Clear loose clutter for this crafting test; pickup priority is tested separately.
-	for piece in session.ore_bodies:
-		if session.ore.is_loose(piece): session.position_ore(session.ore_bodies[piece], Vector2(150, 270), Vector2.ZERO)
+	for piece in session.movable_objects.bodies:
+		if session.ore.is_loose(piece): session.movable_objects.position_body(session.movable_objects.bodies[piece], Vector2(150, 270), Vector2.ZERO)
 	Input.action_press("interact")
 	await frames(310)
 	Input.action_release("interact")
@@ -66,10 +66,10 @@ func run() -> void:
 	check(session.workshop.stations[anvil].at == Vector2(160, 136), "Manual placement works on upper floor")
 	session.ore.pieces[0].kind = "ingot" # Prepared stock for this anvil interaction test.
 	session.ore.pickup(1, 0)
-	session.refresh_ore()
+	session.movable_objects.refresh()
 	await run_job(Vector2(160, 136))
-	check(session.ore.pieces[0].kind == "horseshoe" and session.ore_bodies[0].visible, "Smelted ingot becomes physical horseshoe at placed anvil")
-	var at: Vector2 = session.world.to_local(session.ore_bodies[0].global_position)
+	check(session.ore.pieces[0].kind == "horseshoe" and session.movable_objects.bodies[0].visible, "Smelted ingot becomes physical horseshoe at placed anvil")
+	var at: Vector2 = session.world.to_local(session.movable_objects.bodies[0].global_position)
 	check(absf(at.x - 188) < 8 and at.y < 136 and at.y > 120, "Output falls onto station's relocated tray")
 	session.purchase_for(1, "grinder")
 	await frames(5)
@@ -80,7 +80,7 @@ func run() -> void:
 	session.place_for(1, Vector2(248, 288))
 	var log_id: int = session.ore.add_material("wood")
 	session.ore.pickup(1, log_id)
-	session.refresh_ore()
+	session.movable_objects.refresh()
 	await run_job(Vector2(248, 288))
 	check(session.ore.pieces[log_id].kind == "shaft" and session.ore.carried_by(1) == -1, "Woodbench completes loaded work with empty hands")
 	dwarf.position = Vector2(160, 136)
@@ -89,7 +89,7 @@ func run() -> void:
 	# Packing a loaded station must preserve ingredients.
 	session.ore.pieces[1].kind = "ingot" # Prepared stock for this anvil interaction test.
 	session.ore.pickup(1, 1)
-	session.refresh_ore()
+	session.movable_objects.refresh()
 	await press("interact")
 	await press("pack_station")
 	check(session.workshop.stations.has(anvil) and session.workshop.stations[anvil].job.slots.has("ingot"), "Loaded station cannot be packed")

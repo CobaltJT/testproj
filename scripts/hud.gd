@@ -409,10 +409,7 @@ func _process(_delta: float) -> void:
 		game.station_nodes[id].get_node("ProductIcon").visible = nearby
 	for id in game.vein_nodes:
 		game.vein_nodes[id].get_node("WorkLabel").visible = false
-	for id in game.ore_bodies:
-		if game.ore.pieces[id].kind == "ore_bin": game.ore_bodies[id].get_node("Count").visible = game.world.to_local(game.ore_bodies[id].global_position).distance_to(at) < 65
-	for id in game.cart_nodes:
-		game.cart_nodes[id].get_node("Count").visible = game.transport.carts[id].at.distance_to(at) < 65
+	game.movable_objects.update_labels(at)
 	for customer in game.customer_nodes.values():
 		customer.get_node("Request").visible = false
 	game.merchant_node.get_node("Label").visible = false

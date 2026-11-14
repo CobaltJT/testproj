@@ -50,8 +50,8 @@ func run() -> void:
 			break
 	Input.action_release("interact")
 	await frames(60)
-	check(session.mining.extracted == 1 and session.ore.pieces.size() == 9 and session.ore_bodies.has(8), "Handoff produces one new physical ore identity")
-	var body: RigidBody2D = session.ore_bodies[8]
+	check(session.mining.extracted == 1 and session.ore.pieces.size() == 9 and session.movable_objects.bodies.has(8), "Handoff produces one new physical ore identity")
+	var body: RigidBody2D = session.movable_objects.bodies[8]
 	var at: Vector2 = session.world.to_local(body.global_position)
 	check(body.visible and not body.freeze and at.y > session.MINE_POSITION.y - 8 and at.y < session.MINE_POSITION.y and absf(at.x - session.MINE_OUTPUT.x) < 5, "Extracted ore falls and settles beside the underground vein")
 	dwarf.position = Vector2(session.MINE_OUTPUT.x, session.MINE_POSITION.y)
@@ -65,6 +65,6 @@ func run() -> void:
 	await frames(20)
 	check(session.ore.is_loose(8) and body.visible, "Mined ore uses existing throw physics")
 	session.disconnect_game("Done")
-	check(session.mining.extracted == 0 and session.mining.progress == 0 and session.ore.pieces.size() == 8 and not session.ore_bodies.has(8), "New session clears mined bodies and progress")
+	check(session.mining.extracted == 0 and session.mining.progress == 0 and session.ore.pieces.size() == 8 and not session.movable_objects.bodies.has(8), "New session clears mined bodies and progress")
 	print("MINING PHYSICS RESULT: ", failures, " failures")
 	quit(1 if failures else 0)

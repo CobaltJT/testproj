@@ -18,7 +18,7 @@ func run() -> void:
 	preload("res://tests/world_fixture.gd").prepare(session)
 	await frames(150)
 	var resting := true
-	for body in session.ore_bodies.values():
+	for body in session.movable_objects.bodies.values():
 		var at: Vector2 = session.world.to_local(body.global_position)
 		resting = resting and at.y > 278 and at.y < 288 and body.linear_velocity.length() < 10
 	check(resting, "Loose ore settles on floor in an empty workshop")
@@ -33,9 +33,9 @@ func run() -> void:
 		return
 	session.release_ore(1, true)
 	await frames(90)
-	check(session.ore.is_loose(piece) and session.ore_bodies[piece].visible, "Dropped ore persists")
+	check(session.ore.is_loose(piece) and session.movable_objects.bodies[piece].visible, "Dropped ore persists")
 	session.ore.pickup(1, piece)
-	session.refresh_ore()
+	session.movable_objects.refresh()
 	dwarf.position = Vector2(180, 216)
 	dwarf.velocity = Vector2.ZERO
 	dwarf.sprite.flip_h = false
@@ -45,7 +45,7 @@ func run() -> void:
 	check(session.players[2].position.x > 217, "Thrown ore knocks another dwarf back")
 	check(session.ore.is_loose(piece), "Thrown ore remains a recoverable physics object")
 	session.ore.pickup(2, 5)
-	session.refresh_ore()
+	session.movable_objects.refresh()
 	session.peer_left(2)
 	await frames(30)
 	check(session.ore.is_loose(5), "Disconnect drops carried material")

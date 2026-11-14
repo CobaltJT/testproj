@@ -30,7 +30,6 @@ var cycle = DAY_STATE.new()
 var day_tick := 0
 const TRANSPORT = preload("res://scripts/transport_state.gd")
 var transport = TRANSPORT.new()
-var cart_nodes: Dictionary = {}
 var rail_nodes: Array = []
 var shown_tracks: Array = []
 var shaft_nodes: Array = []
@@ -52,17 +51,6 @@ var merchant = MERCHANT_STATE.new()
 var merchant_node: Node2D
 var customer_nodes: Dictionary = {}
 var recipe_label: Label
-const EXTRA_TEXTURES = {"food": preload("res://assets/textures/food.svg"),
-	"horseshoe": preload("res://assets/textures/horseshoe.svg"),
-	"sword": preload("res://assets/textures/sword.svg"),
-	"axe": preload("res://assets/textures/axe.svg"),
-	"wood": preload("res://assets/textures/wood.svg"),
-	"dull_sword": preload("res://assets/textures/dull_sword.svg"),
-	"axe_head": preload("res://assets/textures/axe_head.svg"),
-	"shaft": preload("res://assets/textures/shaft.svg"),
-	"ingot": preload("res://assets/textures/ingot.svg"),
-	"ore_bin": preload("res://assets/textures/ore_bin.svg")
-}
 const MINING_STATE = preload("res://scripts/mining_state.gd")
 const MINE_POSITION := Vector2(320, 448)
 const MINE_OUTPUT := Vector2(274, 436)
@@ -76,14 +64,8 @@ var order_label: Label
 const PLAYER = preload("res://scenes/player.tscn")
 const WORLD = preload("res://scenes/smithy.tscn")
 const ORE_STATE = preload("res://scripts/ore_state.gd")
-const BIN_BODY = preload("res://scenes/ore_bin.tscn")
-const ORE_BODY = preload("res://scenes/ore_piece.tscn")
-const ORE_TEXTURE = preload("res://assets/textures/ore.svg")
 var work_held: Dictionary = {}
 var ore = ORE_STATE.new()
-var ore_bodies: Dictionary = {}
-var throw_grace: Dictionary = {}
-var hit_cooldowns: Dictionary = {}
 var hint: Label
 var last_interaction: Dictionary = {}
 const PORT := 24567
@@ -113,7 +95,7 @@ func _ready() -> void:
 	merchant_node = preload("res://scenes/merchant.tscn").instantiate()
 	world.add_child(merchant_node)
 	init_transport_world()
-	reset_ore(false)
+	reset_game_state(false)
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var panel := PanelContainer.new()
@@ -199,7 +181,7 @@ func host_game() -> void:
 	active = true
 	menu.hide()
 	leave_button.show()
-	reset_ore(true)
+	reset_game_state(true)
 	spawn_player(1, Vector2(220, 216))
 	if hud != null: hud.reset_events()
 	update_status()
@@ -230,7 +212,7 @@ func client_ready() -> void:
 	broadcast_state("spawn_player", [id, Vector2(210 + (players.size() % 6) * 22, 216)], true)
 	receive_rooms.rpc_id(id, rooms.snapshot())
 	receive_ore.rpc_id(id, ore.snapshot())
-	receive_ore_motion.rpc_id(id, ore_motion())
+	receive_ore_motion.rpc_id(id, movable_objects.motion_snapshot())
 	receive_workshop.rpc_id(id, workshop.snapshot())
 	receive_orders.rpc_id(id, orders.snapshot())
 	receive_mining.rpc_id(id, mining_snapshot())
@@ -265,7 +247,7 @@ func spawn_player(id: int, at: Vector2) -> void:
 	needs.add(id)
 	active = true
 	refresh_progression()
-	refresh_ore()
+	movable_objects.refresh()
 	update_status()
 
 func _physics_process(delta: float) -> void:
@@ -338,7 +320,7 @@ func _physics_process(delta: float) -> void:
 	var jump := Input.is_action_pressed("jump")
 	var climb := Input.is_action_pressed("climb_up") or Input.is_action_pressed("climb_down")
 	if multiplayer.is_server():
-		step_ore()
+		movable_objects.step_loose()
 		work_held[1] = Input.is_action_pressed("interact")
 		apply_controls(1, axis, jump, climb)
 		for id in last_input:
@@ -360,7 +342,7 @@ func _physics_process(delta: float) -> void:
 				var dwarf = players[id]
 				state.append([id, dwarf.position, dwarf.velocity, dwarf.climbing, dwarf.sprite.flip_h])
 			broadcast_state("receive_state", [state], false)
-			broadcast_state("receive_ore_motion", [ore_motion()], false)
+			broadcast_state("receive_ore_motion", [movable_objects.motion_snapshot()], false)
 			broadcast_state("receive_workshop", [workshop.snapshot()], false)
 			broadcast_state("receive_orders", [orders.snapshot()], false)
 			broadcast_state("receive_mining", [mining_snapshot()], false)
@@ -400,8 +382,7 @@ func receive_state(state: Array) -> void:
 func peer_left(id: int) -> void:
 	if multiplayer.is_server():
 		transport.cancel(id, orders)
-		for cart in transport.carts.values():
-			if cart.driver == id: cart.driver = 0
+		movable_objects.forget_actor(id)
 		lift_riders.erase(id)
 		sync_transport()
 		workshop.cancel(id, orders)
@@ -415,6 +396,7 @@ func peer_left(id: int) -> void:
 
 @rpc("authority", "call_local", "reliable")
 func remove_player(id: int) -> void:
+	movable_objects.forget_actor(id)
 	if players.has(id):
 		players[id].free()
 		players.erase(id)
@@ -449,7 +431,7 @@ func disconnect_game(message: String) -> void:
 	update_overview()
 	last_input.clear()
 	last_interaction.clear()
-	reset_ore(false)
+	reset_game_state(false)
 	hint.text = ""
 	if hud != null:
 		hud.last_message = ""
@@ -467,7 +449,7 @@ func request_interaction() -> void:
 @rpc("authority", "call_local", "reliable")
 func receive_ore(state: Dictionary) -> void:
 	ore.restore(state)
-	refresh_ore()
+	movable_objects.refresh()
 
 @rpc("authority", "call_remote", "reliable")
 func interaction_feedback(message: String) -> void:
@@ -482,114 +464,12 @@ func request_throw(drop: bool) -> void:
 		release_ore(multiplayer.get_remote_sender_id(), drop)
 
 func release_ore(id: int, drop: bool) -> void:
-	if not multiplayer.is_server() or not players.has(id):
-		return
-	var piece_id: int = ore.release_carrier(id)
-	if piece_id == -1:
-		return
-	var dwarf = players[id]
-	var direction := -1.0 if dwarf.sprite.flip_h else 1.0
-	var body: RigidBody2D = ore_bodies[piece_id]
-	# Release within the dwarf's footprint so a wall cannot swallow the ore.
-	var bin: bool = ore.pieces[piece_id].kind == "ore_bin"
-	var at: Vector2 = dwarf.position + Vector2(direction * 2, (-22 if not drop else -13) if bin else (-18 if not drop else -7))
-	if bin: at.x = clampf(at.x, 70, MAP.RIGHT_WALL - 20)
-	var motion := Vector2(direction * 280, -180) if not drop else Vector2(direction * 25, 0)
-	position_ore(body, at, motion)
-	body.angular_velocity = direction * 6 if not drop and not bin else 0
-	throw_grace[piece_id] = [id, Time.get_ticks_msec() + 300]
-	broadcast_state("receive_ore", [ore.snapshot()], true)
-	broadcast_state("receive_ore_motion", [ore_motion()], false)
-
-func ore_motion() -> Array:
-	var result: Array = []
-	for id in ore_bodies:
-		if ore.is_loose(id):
-			var body: RigidBody2D = ore_bodies[id]
-			result.append([id, body.global_position, body.rotation, body.linear_velocity])
-	return result
+	if not multiplayer.is_server() or not players.has(id): return
+	movable_objects.release(id, drop)
 
 @rpc("authority", "call_remote", "unreliable_ordered", 2)
 func receive_ore_motion(state: Array) -> void:
-	for item in state:
-		if ore_bodies.has(item[0]):
-			var body: RigidBody2D = ore_bodies[item[0]]
-			body.global_position = item[1]
-			body.rotation = item[2]
-			body.linear_velocity = item[3]
-
-func step_ore() -> void:
-	var collected := false
-	for piece_id in ore_bodies:
-		if not ore.is_loose(piece_id):
-			continue
-		var body: RigidBody2D = ore_bodies[piece_id]
-		var stored := false
-		if ore.pieces[piece_id].kind == "ore" and body.linear_velocity.y >= 0:
-			for cart in cart_nodes:
-				if cart_nodes[cart].get_node("Catch").overlaps_body(body):
-					stored = transport.store(cart, piece_id, ore)
-					if stored:
-						collected = true
-						break
-		if stored: continue
-		if ore.pieces[piece_id].kind in ORE_STATE.BIN_PRODUCTS and body.linear_velocity.y >= 0:
-			for bin in ore_bodies:
-				if ore.pieces[bin].kind == "ore_bin" and ore.is_loose(bin) and ore_bodies[bin].get_node("Catch").overlaps_body(body):
-					stored = ore.store_in_bin(bin, piece_id)
-					if stored:
-						collected = true
-						break
-		if stored: continue
-		if body.linear_velocity.y >= 0:
-			for station_id in workshop.stations:
-				var entry: Dictionary = workshop.stations[station_id]
-				if entry.kind in WORKSHOP_STATE.STORAGE and WORKSHOP_STATE.STORAGE[entry.kind].group == "intermediate" and station_nodes.has(station_id) and station_nodes[station_id].get_node("PartsCatch").overlaps_body(body):
-					stored = workshop.catch_intermediate(station_id, piece_id, ore)
-					if stored:
-						collected = true
-						break
-				if entry.kind == "forge" and station_nodes.has(station_id) and station_nodes[station_id].get_node("BinCatch").overlaps_body(body):
-					stored = entry.job.store_ore(piece_id, ore)
-					if stored:
-						collected = true
-						break
-		if stored:
-			continue
-		if body.linear_velocity.length() < 110:
-			continue
-		for id in players:
-			var now := Time.get_ticks_msec()
-			var grace: Array = throw_grace.get(piece_id, [0, 0])
-			if (grace[0] == id and now < grace[1]) or now < hit_cooldowns.get(Vector2i(piece_id, id), 0):
-				continue
-			var hurtbox := Rect2(players[id].global_position - Vector2(20, 54), Vector2(40, 62))
-			if hurtbox.has_point(body.global_position):
-				players[id].apply_ore_hit(body.linear_velocity * 0.7)
-				hit_cooldowns[Vector2i(piece_id, id)] = now + 400
-				body.linear_velocity = Vector2(-body.linear_velocity.x * 0.4, -70)
-				break
-
-	if collected:
-		sync_transport()
-		broadcast_state("receive_ore", [ore.snapshot()], true)
-		broadcast_state("receive_workshop", [workshop.snapshot()])
-		refresh_workshop()
-
-func position_ore(body: RigidBody2D, at: Vector2, motion: Vector2) -> void:
-	body.freeze = false
-	body.sleeping = false
-	body.rotation = 0
-	body.global_position = world.to_global(at)
-	body.linear_velocity = motion
-	# Update the physics transform as well when releasing a formerly frozen body.
-	PhysicsServer2D.body_set_state(body.get_rid(), PhysicsServer2D.BODY_STATE_TRANSFORM, body.global_transform)
-	PhysicsServer2D.body_set_state(body.get_rid(), PhysicsServer2D.BODY_STATE_LINEAR_VELOCITY, motion)
-
-
-
-
-
+	movable_objects.apply_motion(state)
 
 @rpc("authority", "call_remote", "reliable")
 func receive_orders(state: Dictionary) -> void:
@@ -632,17 +512,6 @@ func show_customer(id: int, at: Vector2, request: String, leaving: bool) -> void
 	node.position = at
 	node.get_node("Sprite2D").flip_h = leaving
 	node.get_node("Request").text = request
-
-func create_ore_body(id: int, simulate: bool, at: Vector2) -> RigidBody2D:
-	var body: RigidBody2D = (BIN_BODY if ore.pieces[id].kind == "ore_bin" else ORE_BODY).instantiate()
-	body.name = "Ore_%s" % id
-	world.add_child(body)
-	body.global_position = world.to_global(at)
-	body.freeze = not simulate
-	body.collision_layer = 4 if simulate else 0
-	body.collision_mask = 29 if simulate else 0
-	ore_bodies[id] = body
-	return body
 
 func vein_at(at: Vector2) -> int:
 	for vein in mine_veins:
@@ -698,10 +567,10 @@ func step_mining(delta: float) -> void:
 			award_exp(worker, "mining")
 			var piece_id: int = ore.add_mined_ore()
 			var output: Vector2 = MAP.VEINS[vein] + Vector2(-46, -12)
-			var body := create_ore_body(piece_id, true, output)
-			position_ore(body, output, Vector2(0, 20))
+			var body := movable_objects.create_body(piece_id, true, output)
+			movable_objects.position_body(body, output, Vector2(0, 20))
 			broadcast_state("receive_ore", [ore.snapshot()], true)
-			broadcast_state("receive_ore_motion", [ore_motion()], false)
+			broadcast_state("receive_ore_motion", [movable_objects.motion_snapshot()], false)
 			broadcast_state("receive_mining", [mining_snapshot()], false)
 	refresh_mining()
 
@@ -743,10 +612,10 @@ func buy_wood_for(id: int) -> void:
 		else:
 			interaction_feedback.rpc_id(id, message)
 		return
-	var body := create_ore_body(piece_id, true, Vector2(222, 202))
-	position_ore(body, Vector2(222, 202), Vector2(0, 20))
+	var body := movable_objects.create_body(piece_id, true, Vector2(222, 202))
+	movable_objects.position_body(body, Vector2(222, 202), Vector2(0, 20))
 	broadcast_state("receive_ore", [ore.snapshot()], true)
-	broadcast_state("receive_ore_motion", [ore_motion()], false)
+	broadcast_state("receive_ore_motion", [movable_objects.motion_snapshot()], false)
 	broadcast_state("receive_orders", [orders.snapshot()], false)
 	broadcast_state("receive_merchant", [merchant.snapshot()], false)
 	refresh_orders()
@@ -776,7 +645,7 @@ func broadcast_state(method: String, arguments: Array, apply_local: bool = false
 			callv("rpc_id", [id, method] + arguments)
 
 func material_texture(kind: String) -> Texture2D:
-	return EXTRA_TEXTURES.get(kind, ORE_TEXTURE)
+	return movable_objects.material_texture(kind)
 
 func interact_for(id: int) -> void:
 	if not transport_allowed(id) or workshop.pending.has(id): return
@@ -792,37 +661,13 @@ func feedback_for(id: int, message: String) -> void:
 	else:
 		interaction_feedback.rpc_id(id, message)
 
-func refresh_ore() -> void:
-	for piece_id in ore.pieces:
-		if not ore_bodies.has(piece_id):
-			create_ore_body(piece_id, false, MINE_OUTPUT)
-	for piece_id in ore_bodies:
-		var body: RigidBody2D = ore_bodies[piece_id]
-		var loose: bool = ore.is_loose(piece_id)
-		body.get_node("Sprite2D").texture = material_texture(ore.pieces[piece_id].kind)
-		body.visible = loose
-		body.freeze = not loose or not (active and multiplayer.is_server())
-		body.collision_layer = 4 if loose and multiplayer.is_server() else 0
-		body.collision_mask = 29 if loose and multiplayer.is_server() else 0
-		if ore.pieces[piece_id].kind == "ore_bin":
-			body.get_node("Catch").monitoring = loose and multiplayer.is_server()
-			body.get_node("Count").text = "%s/10" % ore.pieces[piece_id].contents.size()
-	for id in players:
-		var carried: int = ore.carried_by(id)
-		players[id].get_node("CarriedOre").visible = carried != -1
-		if carried != -1:
-			players[id].get_node("CarriedOre").texture = material_texture(ore.pieces[carried].kind)
-
-func reset_ore(simulate: bool) -> void:
-	for body in ore_bodies.values():
-		body.free()
-	ore_bodies.clear()
-	throw_grace.clear()
-	hit_cooldowns.clear()
+func reset_game_state(simulate: bool) -> void:
+	movable_objects.clear()
 	rooms = ROOMS.new()
 	ore = ORE_STATE.new()
 	transport = TRANSPORT.new()
 	transport.room_layout = rooms
+	movable_objects.bind(world, players, ore, transport, simulate and active and multiplayer.is_server())
 	lift_riders.clear()
 	refresh_transport()
 	progression = PROGRESSION.new()
@@ -843,9 +688,7 @@ func reset_ore(simulate: bool) -> void:
 	refresh_orders()
 	refresh_merchant()
 	work_held.clear()
-	for id in ore.pieces:
-		create_ore_body(id, simulate, Vector2(310 + id * 8, 209 - (id % 2) * 3))
-	refresh_ore()
+	movable_objects.spawn_initial_items()
 	bind_interaction_state()
 
 func choose_recipe(id: int, choice: String) -> void:
@@ -875,12 +718,12 @@ func step_workstations(delta: float) -> void:
 		if worker != 0 and (entry.job.progress > before or output != -1): needs.exert(worker, delta)
 		if output != -1:
 			award_exp(worker, "crafting")
-			position_ore(ore_bodies[output], entry.at + Vector2(28, -18), Vector2(0, 20))
-			ore_bodies[output].angular_velocity = 0
+			movable_objects.position_body(movable_objects.bodies[output], entry.at + Vector2(28, -18), Vector2(0, 20))
+			movable_objects.bodies[output].angular_velocity = 0
 			changed = true
 	if changed:
 		broadcast_state("receive_ore", [ore.snapshot()], true)
-		broadcast_state("receive_ore_motion", [ore_motion()])
+		broadcast_state("receive_ore_motion", [movable_objects.motion_snapshot()])
 		broadcast_state("receive_workshop", [workshop.snapshot()])
 	refresh_workshop()
 
@@ -1228,8 +1071,7 @@ func lift_for(id: int, direction: int) -> void:
 
 func step_transport(delta: float) -> void:
 	for id in players: players[id].transport_locked = false
-	var previous: Dictionary = {}
-	for id in transport.carts: previous[id] = transport.carts[id].at
+	var previous: Dictionary = movable_objects.cart_positions()
 	var riders: Dictionary = lift_riders.duplicate()
 	transport.step_lift(delta)
 	for id in lift_riders:
@@ -1238,17 +1080,7 @@ func step_transport(delta: float) -> void:
 			players[id].position = Vector2(players[id].position.x, transport.lift_y)
 			players[id].velocity = Vector2.ZERO
 	if not transport.moving: lift_riders.clear()
-	for cart in transport.carts.values():
-		var driver: int = cart.driver
-		if not players.has(driver) or players[driver].jump_held or ore.carried_by(driver) != -1:
-			cart.driver = 0
-			continue
-		var id: int = transport.carts.find_key(cart)
-		if not lift_riders.has(driver): transport.move_cart(id, players[driver].controls.x * 70 * delta)
-		players[driver].transport_locked = true
-		players[driver].position.x = TRANSPORT.follow_cart_x(players[driver].position.x, previous[id].x, cart.at.x)
-		if not riders.has(driver): players[driver].position.y += cart.at.y - previous[id].y
-		players[driver].velocity = Vector2.ZERO
+	movable_objects.step_carts(delta, previous, lift_riders, riders)
 	refresh_transport()
 
 func sync_transport() -> void:
@@ -1293,17 +1125,7 @@ func refresh_transport() -> void:
 			sprite.z_index = 10
 			world.add_child(sprite)
 			rail_nodes.append(sprite)
-	for id in cart_nodes.keys():
-		if not transport.carts.has(id):
-			cart_nodes[id].free()
-			cart_nodes.erase(id)
-	for id in transport.carts:
-		if not cart_nodes.has(id):
-			cart_nodes[id] = preload("res://scenes/mine_cart.tscn").instantiate()
-			world.add_child(cart_nodes[id])
-		cart_nodes[id].position = transport.carts[id].at
-		cart_nodes[id].get_node("Catch").monitoring = active and multiplayer.is_server()
-		cart_nodes[id].get_node("Count").text = "%s/25" % transport.carts[id].items.size()
+	movable_objects.refresh_carts()
 	if workshop_ui != null:
 		workshop_ui.refresh_transport(multiplayer.get_unique_id(), progression, transport, rooms.depth())
 
@@ -1441,10 +1263,10 @@ func buy_goods_for(id: int, kind: String) -> void:
 	if piece == -1:
 		feedback_for(id, "Purchase unavailable: check proximity, stock, coins and empty hands.")
 		return
-	var body := create_ore_body(piece, true, Vector2(222, 202))
-	position_ore(body, Vector2(222, 202), Vector2(0, 20))
+	var body := movable_objects.create_body(piece, true, Vector2(222, 202))
+	movable_objects.position_body(body, Vector2(222, 202), Vector2(0, 20))
 	broadcast_state("receive_ore", [ore.snapshot()], true)
-	broadcast_state("receive_ore_motion", [ore_motion()])
+	broadcast_state("receive_ore_motion", [movable_objects.motion_snapshot()])
 	broadcast_state("receive_orders", [orders.snapshot()])
 	broadcast_state("receive_merchant", [merchant.snapshot()])
 	broadcast_state("receive_supplies", [supplies.snapshot()])
@@ -1515,7 +1337,8 @@ func init_interactions() -> void:
 		controller.items_changed.connect(sync_interaction_items)
 		controller.feedback_requested.connect(feedback_for)
 	movable_objects.transport_changed.connect(sync_transport)
-	movable_objects.drop_requested.connect(func(id: int): release_ore(id, true))
+	movable_objects.motion_changed.connect(sync_movable_motion)
+	movable_objects.catch_stationary = placeables.catch_item
 	placeables.workshop_changed.connect(sync_interaction_workshop)
 	npcs.orders_changed.connect(sync_interaction_orders)
 	npcs.experience_requested.connect(award_exp)
@@ -1523,8 +1346,8 @@ func init_interactions() -> void:
 func bind_interaction_state() -> void:
 	# New sessions replace models; refresh explicit dependencies instead of capturing
 	# the old models in closures. The router's ordered method references stay valid.
-	movable_objects.bind(world, players, ore_bodies, ore, transport)
-	placeables.bind(workshop, ore, needs, cycle, vein_at)
+	movable_objects.bind(world, players, ore, transport, active and multiplayer.is_server())
+	placeables.bind(workshop, ore, needs, cycle, vein_at, station_nodes)
 	npcs.bind(ore, orders, progression)
 
 func route_interaction(id: int, action: StringName) -> bool:
@@ -1542,3 +1365,6 @@ func sync_interaction_workshop() -> void:
 func sync_interaction_orders() -> void:
 	broadcast_state("receive_orders", [orders.snapshot()])
 	refresh_orders()
+
+func sync_movable_motion() -> void:
+	broadcast_state("receive_ore_motion", [movable_objects.motion_snapshot()], false)

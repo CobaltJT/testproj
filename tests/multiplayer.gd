@@ -51,7 +51,7 @@ func carry(id: int, piece: int) -> void:
 	check(session.ore.pickup(id, piece), "Fixture transfers available physical item")
 func broadcast() -> void:
 	session.broadcast_state("receive_ore", [session.ore.snapshot()], true)
-	session.broadcast_state("receive_ore_motion", [session.ore_motion()])
+	session.broadcast_state("receive_ore_motion", [session.movable_objects.motion_snapshot()])
 	session.sync_build()
 func _initialize() -> void:
 	for arg in OS.get_cmdline_user_args():
@@ -92,8 +92,8 @@ func host_scenarios() -> void:
 	session.advance_day()
 	check(session.workshop.stations.is_empty() and session.orders.coins == 100, "Host starts with empty workshop")
 	# Keep recipe fixtures clear of the loose-pickup radius at the woodbench.
-	for piece in session.ore_bodies:
-		session.position_ore(session.ore_bodies[piece], Vector2(150, 270), Vector2.ZERO)
+	for piece in session.movable_objects.bodies:
+		session.movable_objects.position_body(session.movable_objects.bodies[piece], Vector2(150, 270), Vector2.ZERO)
 	session.purchase_for(1, "anvil")
 	session.place_for(1, Vector2(256, 216))
 	sync.begin.rpc("build")
@@ -189,7 +189,7 @@ func host_scenarios() -> void:
 	session.ore.pieces[5].kind = "sword"
 	carry(1, 5)
 	move_peer(1, Vector2(166, 216))
-	session.refresh_ore()
+	session.movable_objects.refresh()
 	session.interact_for(1)
 	check(session.orders.completed == 1, "Host completes client's partial order cooperatively")
 	sync.begin.rpc("sell_axe")
@@ -276,8 +276,8 @@ func host_scenarios() -> void:
 		if session.ore.pieces[piece].kind == "ore_bin": mobile = piece
 	check(mobile != -1 and session.orders.coins == 45, "Movable ore bin charges shared price once")
 	var raw: int = session.ore.add_material("shaft")
-	session.refresh_ore()
-	session.position_ore(session.ore_bodies[raw], session.world.to_local(session.ore_bodies[mobile].global_position) + Vector2(0, -35), Vector2(0, 100))
+	session.movable_objects.refresh()
+	session.movable_objects.position_body(session.movable_objects.bodies[raw], session.world.to_local(session.movable_objects.bodies[mobile].global_position) + Vector2(0, -35), Vector2(0, 100))
 	broadcast()
 	sync.begin.rpc("mobile_catch")
 	check(await until(func(): return reports("mobile_catch")), "Movable bin catches intermediate products on host and synchronizes contents")
@@ -320,6 +320,7 @@ func client_scenarios() -> void:
 	var id: int = session.multiplayer.get_unique_id()
 	var before: Dictionary = session.ore.snapshot()
 	check(not session.route_interaction(id, &"interact") and before == session.ore.snapshot(), "Clients cannot execute the authoritative interaction router locally")
+	check(not session.movable_objects.authoritative and session.movable_objects.bodies.values().all(func(body): return body.freeze), "Client item bodies remain frozen under the movable-object owner")
 	sync.report.rpc_id(1, "role-%s-%s" % [role, id])
 	await stage("build")
 	var kind := "grinder" if role == "client1" else "woodbench"
@@ -418,7 +419,7 @@ func client_scenarios() -> void:
 	if role == "client1": Input.action_press("interact")
 	check(await until(func(): return session.ore.pieces[4].kind == "ingot"), "Forge produces replicated ingot")
 	Input.action_release("interact")
-	check(session.ore_bodies[4].visible and job("forge").ore_queue.is_empty(), "Forge output is physical and bin is empty")
+	check(session.movable_objects.bodies[4].visible and job("forge").ore_queue.is_empty(), "Forge output is physical and bin is empty")
 	done("forge_work")
 	await stage("forge_move")
 	if role == "client1":
@@ -449,7 +450,7 @@ func client_scenarios() -> void:
 	await stage("storage_first")
 	if role == "client1": await press("interact")
 	check(await until(func(): return session.workshop.stations[sid("finished_small")].items == [6] and session.ore.pieces[6].processing), "Stored horseshoe identity replicated")
-	check(not session.ore_bodies[6].visible, "Stored item disappears from physical world")
+	check(not session.movable_objects.bodies[6].visible, "Stored item disappears from physical world")
 	done("storage_first")
 	await stage("storage_second")
 	if role == "client2": await press("interact")
@@ -466,7 +467,7 @@ func client_scenarios() -> void:
 	if role == "client2": await press("throw_ore")
 	check(await until(func(): return sid("intermediate_small") != -1 and session.workshop.stations[sid("intermediate_small")].items.size() == 1), "Thrown ingot enters shared intermediate bin")
 	var part: int = session.workshop.stations[sid("intermediate_small")].items[0]
-	check(await until(func(): return session.ore.pieces[part].processing and not session.ore_bodies[part].visible), "Caught part is hidden on both clients")
+	check(await until(func(): return session.ore.pieces[part].processing and not session.movable_objects.bodies[part].visible), "Caught part is hidden on both clients")
 	done("parts_throw")
 	await stage("mobile_buy")
 	if role == "client2":
@@ -479,12 +480,12 @@ func client_scenarios() -> void:
 	var mobile := -1
 	for piece in session.ore.pieces:
 		if session.ore.pieces[piece].kind == "ore_bin": mobile = piece
-	check(mobile != -1 and session.ore.is_loose(mobile) and session.ore_bodies[mobile].z_index > session.players[id].z_index, "Loose movable bin renders above characters on clients")
+	check(mobile != -1 and session.ore.is_loose(mobile) and session.movable_objects.bodies[mobile].z_index > session.players[id].z_index, "Loose movable bin renders above characters on clients")
 	done("mobile_buy")
 	await stage("mobile_catch")
 	check(await until(func(): return session.ore.pieces[mobile].contents.size() == 1), "Nested ore contents replicate")
 	var raw: int = session.ore.pieces[mobile].contents[0]
-	check(session.ore.pieces[raw].processing and not session.ore_bodies[raw].visible, "Stored ore identity hidden on clients")
+	check(session.ore.pieces[raw].processing and not session.movable_objects.bodies[raw].visible, "Stored ore identity hidden on clients")
 	done("mobile_catch")
 	await stage("mine_levels")
 	Input.action_press("interact")
@@ -505,9 +506,9 @@ func client_scenarios() -> void:
 		check(root.get_camera_2d() == session.players[session.multiplayer.get_unique_id()].get_node("FollowCamera"), "Reconnect attaches camera to new local dwarf")
 		check(await until(func(): return session.progression.dwarfs.size() == 3), "Late join receives progression snapshot")
 		check(session.progression.dwarfs[session.multiplayer.get_unique_id()].level == 1, "New connection starts its own session dwarf progression")
-		check(session.workshop.stations[sid("finished_small")].items == [6] and session.ore.pieces[6].processing and not session.ore_bodies[6].visible, "Late join receives container contents and hidden stored identities")
+		check(session.workshop.stations[sid("finished_small")].items == [6] and session.ore.pieces[6].processing and not session.movable_objects.bodies[6].visible, "Late join receives container contents and hidden stored identities")
 		check(session.workshop.stations[sid("intermediate_small")].items.size() == 1, "Reconnect preserves caught intermediate products")
-		check(session.ore.pieces[mobile].contents.size() == 1 and not session.ore_bodies[session.ore.pieces[mobile].contents[0]].visible, "Reconnect preserves movable bin inventory")
+		check(session.ore.pieces[mobile].contents.size() == 1 and not session.movable_objects.bodies[session.ore.pieces[mobile].contents[0]].visible, "Reconnect preserves movable bin inventory")
 		check(session.mine_veins.size() == 6 and session.mine_veins[2].progress > 1.5 and session.mine_veins[5].progress > 1.5, "Reconnect restores every underground vein and paused work")
 		check(job("anvil").slots.has("ingot") and is_equal_approx(job("anvil").progress, 1.25) and session.ore.pieces[8].consumed, "Reconnect preserves paused station ingredients and physical material states")
 	done("rejoin")

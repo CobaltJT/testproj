@@ -329,9 +329,11 @@ func _physics_process(delta: float) -> void:
 				work_held[id] = false
 		step_transport(delta)
 		needs.step(delta)
-		step_care(delta)
-		step_workstations(delta)
-		step_mining(delta)
+		placeables.step_care(delta)
+		placeables.step_workstations(delta)
+		placeables.step_mining(delta)
+		refresh_workshop()
+		refresh_mining()
 		refresh_walking()
 		refresh_orders()
 		refresh_merchant()
@@ -402,15 +404,7 @@ func remove_player(id: int) -> void:
 		players.erase(id)
 	progression.dwarfs.erase(id)
 	needs.dwarfs.erase(id)
-	for entry in workshop.stations.values():
-		if entry.job.diner == id:
-			for piece in entry.job.slots.values():
-				ore.pieces[piece].consumed = true
-				ore.pieces[piece].processing = false
-			entry.job.slots.clear()
-			entry.job.progress = 0
-			entry.job.worker = 0
-			entry.job.diner = 0
+	placeables.forget_actor(id)
 	refresh_progression()
 	last_input.erase(id)
 	work_held.erase(id)
@@ -549,31 +543,6 @@ func mining_snapshot() -> Dictionary:
 	for vein in mine_veins: state[vein] = mine_veins[vein].snapshot()
 	return state
 
-func step_mining(delta: float) -> void:
-	for vein in mine_veins:
-		var job = mine_veins[vein]
-		var eligible: Array[int] = []
-		if cycle.phase == "shop":
-			for id in players:
-				var dwarf = players[id]
-				if not workshop.pending.has(id) and needs.working(id) > 0 and work_held.get(id, false) and vein_at(dwarf.position) == vein and not dwarf.transport_locked and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
-					eligible.append(id)
-		eligible.sort()
-		var worker: int = job.worker if job.worker in eligible else (eligible[0] if not eligible.is_empty() else 0)
-		var before: float = job.progress
-		var finished: bool = job.step(delta * progression.speed(worker, "mining") * needs.working(worker), eligible)
-		if worker != 0 and (job.progress > before or finished): needs.exert(worker, delta)
-		if finished:
-			award_exp(worker, "mining")
-			var piece_id: int = ore.add_mined_ore()
-			var output: Vector2 = MAP.VEINS[vein] + Vector2(-46, -12)
-			var body := movable_objects.create_body(piece_id, true, output)
-			movable_objects.position_body(body, output, Vector2(0, 20))
-			broadcast_state("receive_ore", [ore.snapshot()], true)
-			broadcast_state("receive_ore_motion", [movable_objects.motion_snapshot()], false)
-			broadcast_state("receive_mining", [mining_snapshot()], false)
-	refresh_mining()
-
 @rpc("authority", "call_remote", "reliable")
 func receive_mining(state: Dictionary) -> void:
 	for vein in mine_veins:
@@ -698,34 +667,6 @@ func choose_recipe(id: int, choice: String) -> void:
 	if station_id != -1 and workshop.stations[station_id].job.select(choice):
 		broadcast_state("receive_workshop", [workshop.snapshot()])
 		refresh_workshop()
-
-func step_workstations(delta: float) -> void:
-	var changed := false
-	for station_id in workshop.stations:
-		var entry: Dictionary = workshop.stations[station_id]
-		if entry.kind in WORKSHOP_STATE.STORAGE or entry.kind in WORKSHOP_STATE.CARE:
-			continue
-		var eligible: Array[int] = []
-		for id in players:
-			var dwarf = players[id]
-			if needs.working(id) > 0 and work_held.get(id, false) and workshop.nearest(dwarf.position) == station_id and not workshop.pending.has(id) and not dwarf.transport_locked and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1:
-				eligible.append(id)
-		eligible.sort()
-		var worker: int = entry.job.worker if entry.job.worker in eligible else (eligible[0] if not eligible.is_empty() else 0)
-		var specialty := "woodworking" if entry.kind == "woodbench" else "smithing"
-		var before: float = entry.job.progress
-		var output: int = entry.job.step(delta * progression.speed(worker, specialty) * needs.working(worker), eligible, ore)
-		if worker != 0 and (entry.job.progress > before or output != -1): needs.exert(worker, delta)
-		if output != -1:
-			award_exp(worker, "crafting")
-			movable_objects.position_body(movable_objects.bodies[output], entry.at + Vector2(28, -18), Vector2(0, 20))
-			movable_objects.bodies[output].angular_velocity = 0
-			changed = true
-	if changed:
-		broadcast_state("receive_ore", [ore.snapshot()], true)
-		broadcast_state("receive_ore_motion", [movable_objects.motion_snapshot()])
-		broadcast_state("receive_workshop", [workshop.snapshot()])
-	refresh_workshop()
 
 @rpc("authority", "call_remote", "reliable")
 func receive_workshop(state: Dictionary) -> void:
@@ -1210,39 +1151,6 @@ func receive_needs(state: Dictionary) -> void:
 	needs.restore(state)
 	refresh_walking()
 
-func care_eligible(id: int, station: int) -> bool:
-	var dwarf = players[id]
-	return work_held.get(id, false) and workshop.nearest(dwarf.position) == station and not workshop.pending.has(id) and not dwarf.transport_locked and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and ore.carried_by(id) == -1
-
-func step_care(delta: float) -> void:
-	var changed := false
-	for station in workshop.stations:
-		var entry: Dictionary = workshop.stations[station]
-		if entry.kind not in WORKSHOP_STATE.CARE: continue
-		var eligible: Array[int] = []
-		for id in players:
-			if care_eligible(id, station) and (entry.kind == "bed" and needs.dwarfs[id].energy < 100 or entry.kind == "dining" and entry.job.diner == id and needs.dwarfs[id].food < 100): eligible.append(id)
-		eligible.sort()
-		var job = entry.job
-		job.worker = job.worker if job.worker in eligible else (eligible[0] if not eligible.is_empty() else 0)
-		if job.worker == 0: continue
-		if entry.kind == "bed":
-			needs.change(job.worker, NEEDS.SLEEP_RATE * delta, 0)
-		elif job.slots.has("food"):
-			var rate: float = NEEDS.MEAL_FOOD / NEEDS.MEAL_DURATION
-			var elapsed := minf(delta, minf(NEEDS.MEAL_DURATION - job.progress, (100 - needs.dwarfs[job.worker].food) / rate))
-			needs.change(job.worker, 0, elapsed * rate)
-			job.progress += elapsed
-			if job.progress >= NEEDS.MEAL_DURATION - 0.00001 or needs.dwarfs[job.worker].food >= 100 - 0.00001:
-				ore.pieces[job.slots.food].processing = false
-				ore.pieces[job.slots.food].consumed = true
-				job.slots.clear()
-				job.diner = 0
-				job.worker = 0
-				job.progress = 0
-				changed = true
-	if changed: broadcast_state("receive_ore", [ore.snapshot()], true)
-
 func visiting_merchant() -> RefCounted:
 	return merchant if merchant.remaining > 0 else supplies
 
@@ -1342,12 +1250,17 @@ func init_interactions() -> void:
 	placeables.workshop_changed.connect(sync_interaction_workshop)
 	npcs.orders_changed.connect(sync_interaction_orders)
 	npcs.experience_requested.connect(award_exp)
+	placeables.experience_requested.connect(award_exp)
+	placeables.output_ready.connect(place_work_output)
+	placeables.production_completed.connect(sync_production)
+	placeables.mining_completed.connect(sync_mining)
 
 func bind_interaction_state() -> void:
 	# New sessions replace models; refresh explicit dependencies instead of capturing
 	# the old models in closures. The router's ordered method references stay valid.
 	movable_objects.bind(world, players, ore, transport, active and multiplayer.is_server())
 	placeables.bind(workshop, ore, needs, cycle, vein_at, station_nodes)
+	placeables.bind_workers(players, work_held, progression, mine_veins, active and multiplayer.is_server())
 	npcs.bind(ore, orders, progression)
 
 func route_interaction(id: int, action: StringName) -> bool:
@@ -1368,3 +1281,19 @@ func sync_interaction_orders() -> void:
 
 func sync_movable_motion() -> void:
 	broadcast_state("receive_ore_motion", [movable_objects.motion_snapshot()], false)
+
+func place_work_output(piece: int, at: Vector2) -> void:
+	var body: RigidBody2D = movable_objects.bodies.get(piece)
+	if body == null: body = movable_objects.create_body(piece, true, at)
+	movable_objects.position_body(body, at, Vector2(0, 20))
+	body.angular_velocity = 0
+
+func sync_production() -> void:
+	sync_interaction_items()
+	sync_movable_motion()
+	broadcast_state("receive_workshop", [workshop.snapshot()])
+
+func sync_mining() -> void:
+	sync_interaction_items()
+	sync_movable_motion()
+	broadcast_state("receive_mining", [mining_snapshot()], false)

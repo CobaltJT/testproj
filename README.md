@@ -510,8 +510,8 @@ Controllers emit change/feedback signals after consuming an interaction. The
 session handles replication, presentation refreshes and EXP. Controller state
 dependencies are rebound on reset so new games cannot mutate the previous game's
 models. The movable-object controller also owns item physics and F/Q release.
-Continuous held-E work, purchases and network endpoints retain their existing
-owners for subsequent milestones.
+Continuous held-E work is owned by the placeable controller. Purchases and
+network endpoints retain their existing owners.
 
 ## Movable-object ownership
 
@@ -538,6 +538,28 @@ disables simulation until rebound. Actor cleanup releases cart ownership and
 removes obsolete hit/grace records. `tests/movable_controller.gd` exercises this
 lifecycle and replica behavior without constructing a session; existing physics
 and multiplayer tests retain their behavioral assertions through the new owner.
+
+## Production and recovery ownership
+
+`scripts/controllers/placeables.gd` advances workstation production, ore veins,
+sleep and meals. A shared eligibility check covers held E, empty hands, grounded
+and stationary movement, transport locks, hit stun and pending placement. Work
+also requires nonempty needs; recovery remains available at zero needs. Worker
+selection preserves the active worker, otherwise choosing the lowest eligible
+player ID. Skill multipliers and actual-work needs costs retain their rules.
+
+The controller receives explicit actor, held-input, progression and vein-model
+references through `bind_workers`, alongside its interaction dependencies. Only
+the host advances these loops. Output and EXP signals let the session coordinate
+physical output placement, progression and replication without giving the
+controller a session reference. Reserved-meal cleanup belongs to this controller
+as well. Passive needs drain, view refreshes, placement and elevators remain in
+the session for now.
+
+`tests/placeables_controller.gd` exercises worker handoff, authority, completion
+signals, shop-only mining, depleted recovery and diner ownership independently
+of the session. Existing needs, progression, physics and multiplayer tests cover
+the integrated flows.
 
 ## Validation
 

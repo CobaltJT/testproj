@@ -79,7 +79,7 @@ func run() -> void:
 	exp_before = session.progression.dwarfs[1].exp
 	Input.action_press("interact")
 	await frames(2)
-	session.step_workstations(4.2)
+	session.placeables.step_workstations(4.2)
 	Input.action_release("interact")
 	check(session.ore.pieces[1].kind == "horseshoe" and session.progression.dwarfs[1].exp == exp_before + 3, "Smithing speed and completion EXP apply to active worker")
 	session.purchase_for(1, "woodbench")
@@ -96,7 +96,7 @@ func run() -> void:
 	session.workshop.stations[bench].job.load_material(1, session.ore)
 	Input.action_press("interact")
 	await frames(2)
-	session.step_workstations(4.2)
+	session.placeables.step_workstations(4.2)
 	Input.action_release("interact")
 	check(session.ore.pieces[wood].kind == "shaft", "Woodworking skill accelerates woodbench separately")
 	session.disconnect_game("Done")

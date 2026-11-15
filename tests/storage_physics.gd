@@ -26,7 +26,7 @@ func run() -> void:
 	check(session.workshop_ui.station_buttons.size() == 12 and Rect2(Vector2.ZERO, root.get_visible_rect().size).encloses(session.workshop_ui.get_global_rect()), "Build catalog includes all six storage options and fits viewport")
 	session.workshop_ui.station_buttons.finished_small.pressed.emit()
 	await frames(5)
-	check(session.build_ghost.visible and session.build_ghost.texture == session.STATION_VIEW.TEXTURES.finished_small, "Storage purchase uses its own image texture preview")
+	check(session.placeables.preview.visible and session.placeables.preview.texture == session.placeables.STATION_VIEW.TEXTURES.finished_small, "Storage purchase uses its own image texture preview")
 	session.place_for(1, Vector2(456, 216))
 	var id: int = session.workshop.nearest(Vector2(456, 216))
 	session.players[1].position = Vector2(456, 216)
@@ -36,7 +36,7 @@ func run() -> void:
 	session.movable_objects.refresh()
 	await press("interact")
 	check(session.workshop.stations[id].items == [0] and not session.movable_objects.bodies[0].visible and session.ore.carried_by(1) == -1, "E stores product and hides physical item and carried sprite")
-	check("1/5" in session.station_nodes[id].get_node("Label").text and not session.station_nodes[id].get_node("Progress").visible, "Container shows capacity instead of work progress")
+	check("1/5" in session.placeables.views[id].get_node("Label").text and not session.placeables.views[id].get_node("Progress").visible, "Container shows capacity instead of work progress")
 	await press("pack_station")
 	check(session.workshop.stations.has(id), "R cannot pack a filled container")
 	session.ore.pieces[1].kind = "ingot"

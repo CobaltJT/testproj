@@ -21,7 +21,7 @@ func run() -> void:
 		session.purchase_for(1, kind)
 		session.place_for(1, Vector2(256, 216))
 		var id: int = session.workshop.nearest(Vector2(256, 216))
-		var view: Node2D = session.station_nodes[id]
+		var view: Node2D = session.placeables.views[id]
 		await frames(5)
 		check(view.get_node("PartsCatch").monitoring and view.get_node("PartsWalls").collision_layer == 8, "Open " + size + " bin has live catch sensor and physical sides")
 		var piece: int = session.ore.add_material("ingot")
@@ -51,7 +51,7 @@ func run() -> void:
 		session.pack_for(1)
 		session.place_for(1, Vector2(456, 216))
 		await frames(5)
-		view = session.station_nodes[id]
+		view = session.placeables.views[id]
 		check(view.get_node("PartsCatch").global_position == session.world.to_global(Vector2(464, -view.get_node("Sprite").texture.get_height() / 2.0 + 216)), "Bin sensor relocates with " + size + " container")
 		session.players[1].position = Vector2(456, 216)
 		session.pack_for(1)
@@ -77,7 +77,7 @@ func run() -> void:
 	session.movable_objects.refresh()
 	session.movable_objects.position_body(session.movable_objects.bodies[product], Vector2(464, 165), Vector2(0, 100))
 	await frames(80)
-	check(not session.station_nodes[shelf].get_node("PartsCatch").monitoring and session.workshop.stations[shelf].items.is_empty() and session.ore.is_loose(product), "Shelf never catches thrown finished goods")
+	check(not session.placeables.views[shelf].get_node("PartsCatch").monitoring and session.workshop.stations[shelf].items.is_empty() and session.ore.is_loose(product), "Shelf never catches thrown finished goods")
 	session.disconnect_game("Done")
 	print("BIN PHYSICS RESULT: ", failures, " failures")
 	quit(1 if failures else 0)

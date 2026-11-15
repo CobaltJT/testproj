@@ -26,7 +26,7 @@ func run() -> void:
 	session.buy_transport_for(1, "lift", 2)
 	check(session.transport.upgrades == 0 and session.orders.coins == 100, "Host rejects skipped upgrade")
 	session.workshop_ui.transport_buttons[1].pressed.emit()
-	check(session.transport.upgrades == 1 and session.lift_node.visible and session.players[1].mine_ladder_top == 448, "Purchase replaces top ladder segment with elevator")
+	check(session.transport.upgrades == 1 and session.placeables.lift_node.visible and session.players[1].mine_ladder_top == 448, "Purchase replaces top ladder segment with elevator")
 	session.transport_buy("rail", 0)
 	session.place_rail_for(1, Vector2(326, 288))
 	var dwarf = session.players[1]

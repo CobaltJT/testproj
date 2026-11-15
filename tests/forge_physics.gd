@@ -26,7 +26,7 @@ func run() -> void:
 	session.place_for(1, Vector2(256, 216))
 	var id: int = session.workshop.stations.keys()[0]
 	var forge = session.workshop.stations[id].job
-	var view: Node2D = session.station_nodes[id]
+	var view: Node2D = session.placeables.views[id]
 	await frames(10)
 	check(view.get_node("BinCatch").monitoring and view.get_node("BinWalls").collision_layer == 8, "Included bin has live sensor and physical walls")
 	var dwarf = session.players[1]
@@ -68,7 +68,7 @@ func run() -> void:
 	await press("pack_station")
 	session.place_for(1, Vector2(160, 136))
 	await frames(10)
-	view = session.station_nodes[id]
+	view = session.placeables.views[id]
 	check(view.get_node("BinCatch/Shape").global_position == session.world.to_global(Vector2(146, 128)), "Relocating forge moves bin sensor and geometry with it")
 	check(view.get_node("BinWalls/Left").global_position == session.world.to_global(Vector2(137, 129)), "Attached bin wall relocates with forge")
 	session.disconnect_game("Done")

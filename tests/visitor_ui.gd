@@ -29,8 +29,8 @@ func run() -> void:
 	session.workshop.stations[id].job.progress = 2.5
 	session.refresh_workshop()
 	await frames(3)
-	check(session.station_nodes[id].get_node("Label").text == "" and session.station_nodes[id].get_node("Progress").visible, "Work progress uses a bar without status text")
-	check(session.station_nodes[id].get_node("ProductIcon").texture != null, "Recipe is identified with an icon")
+	check(session.placeables.views[id].get_node("Label").text == "" and session.placeables.views[id].get_node("Progress").visible, "Work progress uses a bar without status text")
+	check(session.placeables.views[id].get_node("ProductIcon").texture != null, "Recipe is identified with an icon")
 	session.cycle.phase = "shop"
 	session.orders.until_arrival = 0.05
 	session.hud.reset_events()

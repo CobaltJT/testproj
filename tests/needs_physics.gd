@@ -34,7 +34,7 @@ func run() -> void:
 	var anvil: int = session.workshop.nearest(Vector2(456, 216))
 	var job = session.workshop.stations[anvil].job
 	var vitals: Dictionary = session.needs.dwarfs[1]
-	check(session.station_nodes[bed].get_node("TrayBody").collision_layer == 0 and session.station_nodes[table].get_node("Sprite").texture == session.STATION_VIEW.TEXTURES.dining, "Care furniture has image textures and no crafting tray collision")
+	check(session.placeables.views[bed].get_node("TrayBody").collision_layer == 0 and session.placeables.views[table].get_node("Sprite").texture == session.placeables.STATION_VIEW.TEXTURES.dining, "Care furniture has image textures and no crafting tray collision")
 	await stand(Vector2(456, 216))
 	session.ore.pieces[0].kind = "ingot"
 	session.ore.pickup(1, 0)

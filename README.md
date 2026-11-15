@@ -473,7 +473,7 @@ The HUD owns its day/status labels and Workshop/Open shop buttons directly;
 controls are no longer created by the session and reparented into the HUD.
 
 Gameplay models remain separate from these views. The session coordinates
-simulation, placement previews and networking; domain controllers own extracted
+simulation, input and networking; domain controllers own extracted
 gameplay behavior. `tests/ui_components.gd` checks the
 extracted scenes independently, while the existing input and multiplayer tests
 exercise the same player actions through their new control owners.
@@ -554,8 +554,8 @@ references through `bind_workers`, alongside its interaction dependencies. Only
 the host advances these loops. Output and EXP signals let the session coordinate
 physical output placement, progression and replication without giving the
 controller a session reference. Reserved-meal cleanup belongs to this controller
-as well. Passive needs drain, view refreshes, placement and elevators remain in
-the session for now.
+as well. Passive needs drain remains coordinated by the session; stationary view
+refreshes, placement and elevators belong to the placeable controller.
 
 `tests/placeables_controller.gd` exercises worker handoff, authority, completion
 signals, shop-only mining, depleted recovery and diner ownership independently
@@ -585,6 +585,35 @@ session: visitor priority, closing and next-day behavior, order decisions,
 front-only multi-item delivery, skill bonuses, purchase validation, replica
 guards and model rebinding. Existing card, day, visitor, progression and network
 tests exercise the same behavior through the session's existing endpoints.
+
+## Placement and stationary transport ownership
+
+The placeable controller also owns workstation purchases, placement, packing,
+kit cancellation/refunds, rail placement, transport purchases and elevator use.
+It enforces empty-hand and pending-kit restrictions and delegates footprint,
+price and upgrade validation to the existing models. Build and transport change
+signals ask the session to refresh UI and replicate the existing snapshots.
+Network endpoints still validate the requesting player and use host positions.
+Disconnect cleanup refunds kits even while the summary pauses player input.
+
+`attach_world` creates the reusable placement preview and elevator scaffold.
+Station views, rail sprites, shaft sprites and rider bookkeeping belong to the
+controller. `clear` frees generated stationary views, hides the scaffold and
+preview, releases character locks and disables simulation. Reset creates and
+binds all new models before rebuilding views. The HUD and tests access station
+views through `placeables.views` rather than a session-owned registry.
+
+The transport model and network payload stay shared. The session snapshots cart
+positions, advances the placeable controller's elevator, then passes current and
+previous rider sets to movable-object cart simulation. This ordering prevents a
+cart driver from receiving elevator displacement twice, including on arrival.
+Cart motion, loose-object physics and cart views remain in the movable owner.
+
+`tests/placement_controller.gd` checks placement and relocation, preview textures,
+packing restrictions, refunds, upgrade order, adjacent rails, client authority,
+stationary view cleanup and elevator/cart movement without creating a session.
+The existing building, transport, storage and multiplayer scenarios retain their
+behavioral assertions through the new view owner.
 
 ## Validation
 

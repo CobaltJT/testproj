@@ -30,7 +30,7 @@ func run() -> void:
 	session.host_game()
 	await frames(10)
 	var dwarf = session.players[1]
-	check(session.rooms.building.size() == 2 and session.station_nodes.is_empty() and session.vein_nodes.is_empty() and dwarf.ladders.is_empty(), "Fresh game contains only two ground rooms, counter and door")
+	check(session.rooms.building.size() == 2 and session.placeables.views.is_empty() and session.vein_nodes.is_empty() and dwarf.ladders.is_empty(), "Fresh game contains only two ground rooms, counter and door")
 	check(session.movable_objects.bodies.values().all(func(body): return session.rooms.contains_floor(Vector2(session.world.to_local(body.global_position).x, 216))), "Starting ore stays inside the owned ground floor")
 	var lower_marker: Rect2 = session.expansion_ui.buttons[Vector3i(0, 1, 0)].get_global_rect()
 	check(session.hud.panels.all(func(panel): return not lower_marker.intersects(panel.get_global_rect())), "Outside purchase marker stays clear of the player HUD")

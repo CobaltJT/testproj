@@ -331,7 +331,7 @@ func client_scenarios() -> void:
 	check(session.workshop.pending.has(id), "Invalid overlap or mine placement keeps kit")
 	session.request_place.rpc_id(1, Vector2(160, 136) if role == "client1" else Vector2(248, 288))
 	check(await until(func(): return sid(kind) != -1 and not session.workshop.pending.has(id)), "Client manually places kit on chosen floor")
-	check(session.station_nodes.has(sid(kind)), "Placed station scene appears")
+	check(session.placeables.views.has(sid(kind)), "Placed station scene appears")
 	done("build")
 	await stage("wood")
 	if role == "client2":
@@ -426,7 +426,7 @@ func client_scenarios() -> void:
 		await press("pack_station")
 		session.request_place.rpc_id(1, Vector2(160, 288))
 	check(await until(func(): return sid("forge") != -1 and session.workshop.stations[sid("forge")].at == Vector2(160, 288)), "Forge relocation replicates")
-	check(session.station_nodes[sid("forge")].get_node("BinCatch/Shape").global_position == session.world.to_global(Vector2(146, 280)), "Attached bin moves with forge on every peer")
+	check(session.placeables.views[sid("forge")].get_node("BinCatch/Shape").global_position == session.world.to_global(Vector2(146, 280)), "Attached bin moves with forge on every peer")
 	done("forge_move")
 	await stage("skills")
 	check(await until(func(): return session.progression.dwarfs.has(id) and session.progression.dwarfs[id].points >= 1), "Personal earned EXP and points received")

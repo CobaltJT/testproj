@@ -25,13 +25,27 @@ var progression: RefCounted
 var mine_veins: Dictionary = {}
 var authoritative := false
 
-func bind(stations: RefCounted, inventory: RefCounted, vitals: RefCounted, day: RefCounted, mining_query: Callable, station_views: Dictionary = {}) -> void:
+const TRANSPORT = preload("res://scripts/transport_state.gd")
+const STATION_SCENE = preload("res://scenes/workstation.tscn")
+const STATION_VIEW = preload("res://scripts/station_view.gd")
+signal build_changed
+signal transport_changed
+var world: Node2D
+var transport: RefCounted
+var economy: RefCounted
+var preview: Sprite2D
+var lift_node: Node2D
+var lift_riders: Dictionary = {}
+var rail_nodes: Array = []
+var shown_tracks: Array = []
+var shaft_nodes: Array = []
+
+func bind(stations: RefCounted, inventory: RefCounted, vitals: RefCounted, day: RefCounted, mining_query: Callable) -> void:
 	workshop = stations
 	items = inventory
 	needs = vitals
 	cycle = day
 	find_vein = mining_query
-	views = station_views
 
 func station(context: CONTEXT) -> int:
 	return context.query(&"station", workshop.nearest)
@@ -117,6 +131,7 @@ func available(id: int) -> bool:
 	return work_held.get(id, false) and not workshop.pending.has(id) and not dwarf.transport_locked and dwarf.is_on_floor() and not dwarf.climbing and dwarf.hit_stun == 0 and dwarf.controls.is_zero_approx() and not dwarf.jump_held and items.carried_by(id) == -1
 
 func forget_actor(id: int) -> void:
+	lift_riders.erase(id)
 	for entry in workshop.stations.values():
 		if entry.job.diner == id:
 			for piece in entry.job.slots.values():
@@ -203,3 +218,197 @@ func step_care(delta: float) -> void:
 				job.progress = 0
 				changed = true
 	if changed: items_changed.emit()
+
+func bind_placement(tracks: RefCounted, shop_economy: RefCounted) -> void:
+	transport = tracks
+	economy = shop_economy
+
+func can_act(id: int) -> bool:
+	return authoritative and players.has(id) and cycle.phase not in ["summary", "transition"]
+
+func purchase(id: int, kind: String) -> void:
+	if not can_act(id) or transport.pending.has(id): return
+	if not workshop.purchase(id, kind, economy, items, 1.0 - 0.1 * progression.rank(id, "purchasing")):
+		feedback_requested.emit(id, "Cannot buy: check coins, empty hands, and any unplaced kit.")
+	build_changed.emit()
+
+func place(id: int, at: Vector2) -> void:
+	if not can_act(id): return
+	if workshop.place(id, at) == -1:
+		feedback_requested.emit(id, "Blocked placement: keep paths, fixed fixtures, and other stations clear.")
+	build_changed.emit()
+
+func cancel_build(id: int) -> void:
+	if not can_act(id): return
+	release_build(id)
+
+## Disconnect cleanup must refund kits even while the day summary pauses input.
+func release_build(id: int) -> void:
+	if not authoritative: return
+	transport.cancel(id, economy)
+	transport_changed.emit()
+	workshop.cancel(id, economy)
+	build_changed.emit()
+
+func pack(id: int) -> void:
+	if not can_act(id) or transport.pending.has(id): return
+	if not workshop.pack(id, players[id].position, items):
+		feedback_requested.emit(id, "Only empty, idle stations or containers can be packed; keep your hands free.")
+	build_changed.emit()
+
+func buy_transport(id: int, kind: String, level: int) -> void:
+	if not can_act(id) or items.carried_by(id) != -1 or workshop.pending.has(id) or transport.pending.has(id): return
+	var ok := false
+	if kind == "lift": ok = transport.upgrade(level, economy, progression.purchase_price(id, TRANSPORT.UPGRADE_PRICE))
+	elif kind == "rail": ok = transport.buy_rail(id, economy, progression.purchase_price(id, TRANSPORT.RAIL_PRICE))
+	elif kind == "cart":
+		var at: Vector2 = players[id].position
+		for rail in transport.tracks:
+			if absf(rail.y - at.y) < 6 and absf(rail.x - at.x) < 24:
+				ok = transport.buy_cart(rail, economy, progression.purchase_price(id, TRANSPORT.CART_PRICE)) != -1
+				break
+	feedback_requested.emit(id, "Transport purchased." if ok else "Cannot buy: check coins, empty hands, upgrade order, and nearby rails for a cart.")
+	transport_changed.emit()
+
+func place_rail(id: int, at: Vector2) -> void:
+	if not can_act(id): return
+	transport.place_rail(id, at)
+	transport_changed.emit()
+
+func use_lift(id: int, direction: int) -> void:
+	if not can_act(id) or direction not in [-1, 1] or absf(players[id].position.x - 390) > 30: return
+	var stop := -1
+	for i in range(transport.upgrades + 1):
+		if absf(players[id].position.y - TRANSPORT.STOPS[i]) < 6: stop = i
+	if stop == -1: return
+	var aboard: bool = absf(players[id].position.x - 390) <= 16
+	for cart in transport.carts.values():
+		if cart.driver == id and absf(cart.at.x - 390) <= 16: aboard = true
+	if absf(transport.lift_y - TRANSPORT.STOPS[stop]) <= 2 and not aboard: return
+	var destination := stop if absf(transport.lift_y - TRANSPORT.STOPS[stop]) > 2 else stop + direction
+	var old: float = transport.lift_y
+	if transport.start_lift(destination):
+		lift_riders.clear()
+		for peer in players:
+			if absf(players[peer].position.x - 390) <= 16 and absf(players[peer].position.y - old) < 6:
+				lift_riders[peer] = true
+				players[peer].climbing = false
+				players[peer].transport_locked = true
+		transport_changed.emit()
+
+func step_lift(delta: float) -> Dictionary:
+	if not authoritative: return {}
+	for id in players: players[id].transport_locked = false
+	var riders: Dictionary = lift_riders.duplicate()
+	transport.step_lift(delta)
+	for id in lift_riders:
+		if players.has(id):
+			players[id].transport_locked = true
+			players[id].position = Vector2(players[id].position.x, transport.lift_y)
+			players[id].velocity = Vector2.ZERO
+	if not transport.moving: lift_riders.clear()
+	return riders
+
+func attach_world(root: Node2D) -> void:
+	world = root
+	preview = Sprite2D.new()
+	preview.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	world.add_child(preview)
+	preview.hide()
+	lift_node = Node2D.new()
+	lift_node.z_index = 10
+	world.add_child(lift_node)
+	var sprite := Sprite2D.new()
+	sprite.texture = preload("res://assets/textures/elevator.svg")
+	sprite.position = Vector2(0, -24)
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	lift_node.add_child(sprite)
+	var body := StaticBody2D.new()
+	body.collision_layer = 16
+	body.collision_mask = 2
+	lift_node.add_child(body)
+	var shape := CollisionShape2D.new()
+	var rectangle := RectangleShape2D.new()
+	rectangle.size = Vector2(32, 4)
+	shape.shape = rectangle
+	shape.one_way_collision = true
+	shape.one_way_collision_margin = 1.0
+	shape.position.y = 2
+	body.add_child(shape)
+
+func refresh_stations() -> void:
+	for id in views.keys():
+		if not workshop.stations.has(id):
+			views[id].free()
+			views.erase(id)
+	for id in workshop.stations:
+		if not views.has(id):
+			var view: Node2D = STATION_SCENE.instantiate()
+			world.add_child(view)
+			views[id] = view
+		views[id].update_view(workshop.stations[id], items)
+
+func refresh_transport_views() -> void:
+	if lift_node == null: return
+	lift_node.visible = transport.upgrades > 0
+	lift_node.position = Vector2(390, transport.lift_y)
+	lift_node.get_child(1).collision_layer = 16 if transport.upgrades > 0 else 0
+	for id in players: players[id].mine_ladder_top = TRANSPORT.STOPS[transport.upgrades]
+	while shaft_nodes.size() < transport.upgrades:
+		var sprite := Sprite2D.new()
+		sprite.texture = preload("res://assets/textures/shaft_lift.svg")
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		sprite.z_index = -9
+		var segment := shaft_nodes.size()
+		var top: float = TRANSPORT.STOPS[segment]
+		var bottom: float = TRANSPORT.STOPS[segment + 1]
+		sprite.position = Vector2(390, (top + bottom) / 2)
+		sprite.scale.y = (bottom - top) / 80.0
+		world.add_child(sprite)
+		shaft_nodes.append(sprite)
+	for i in range(shaft_nodes.size()): shaft_nodes[i].visible = i < transport.upgrades
+	if shown_tracks != transport.tracks:
+		shown_tracks = transport.tracks.duplicate()
+		for node in rail_nodes: node.free()
+		rail_nodes.clear()
+		for at in transport.tracks:
+			var sprite := Sprite2D.new()
+			sprite.texture = preload("res://assets/textures/rail.svg")
+			sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			sprite.position = at - Vector2(0, 2)
+			sprite.z_index = 10
+			world.add_child(sprite)
+			rail_nodes.append(sprite)
+
+func update_preview(id: int, mouse_at: Vector2, active: bool) -> bool:
+	if preview == null: return false
+	var carrying_kit: bool = active and cycle.phase not in ["summary", "transition"] and workshop.pending.has(id)
+	preview.visible = carrying_kit
+	if carrying_kit:
+		var at: Vector2 = workshop.snap(mouse_at)
+		preview.position = at + Vector2(8, -16)
+		preview.texture = STATION_VIEW.TEXTURES[workshop.pending[id].kind]
+		preview.modulate = Color(0.4, 1, 0.5, 0.7) if workshop.can_place(at) else Color(1, 0.3, 0.3, 0.7)
+	if active and transport.pending.has(id) and cycle.phase not in ["summary", "transition"]:
+		var at: Vector2 = transport.snap_rail(mouse_at)
+		preview.visible = true
+		preview.texture = preload("res://assets/textures/rail.svg")
+		preview.position = at - Vector2(0, 2)
+		preview.modulate = Color(0.4, 1, 0.5, 0.7) if transport.can_rail(at) else Color(1, 0.3, 0.3, 0.7)
+	return preview.visible
+
+func clear() -> void:
+	authoritative = false
+	for actor in players.values(): actor.transport_locked = false
+	lift_riders.clear()
+	for view in views.values(): view.free()
+	views.clear()
+	for node in rail_nodes: node.free()
+	rail_nodes.clear()
+	shown_tracks.clear()
+	for node in shaft_nodes: node.free()
+	shaft_nodes.clear()
+	if preview != null: preview.hide()
+	if lift_node != null:
+		lift_node.hide()
+		lift_node.get_child(1).collision_layer = 0

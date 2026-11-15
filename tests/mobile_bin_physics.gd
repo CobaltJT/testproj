@@ -26,7 +26,7 @@ func run() -> void:
 	session.purchase_for(1, "anvil")
 	session.place_for(1, Vector2(456, 216))
 	var station: int = session.workshop.nearest(Vector2(456, 216))
-	check(session.world.get_node("Building").z_index < session.station_nodes[station].z_index and session.station_nodes[station].z_index < dwarf.z_index and dwarf.z_index < session.movable_objects.bodies[0].z_index, "Background, placeables, characters and loose objects use ordered draw layers")
+	check(session.world.get_node("Building").z_index < session.placeables.views[station].z_index and session.placeables.views[station].z_index < dwarf.z_index and dwarf.z_index < session.movable_objects.bodies[0].z_index, "Background, placeables, characters and loose objects use ordered draw layers")
 	dwarf.position = Vector2(456, 216)
 	await frames(5)
 	session.ore.pieces[0].kind = "ingot"

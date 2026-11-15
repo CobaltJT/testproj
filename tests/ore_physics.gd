@@ -22,7 +22,7 @@ func run() -> void:
 		var at: Vector2 = session.world.to_local(body.global_position)
 		resting = resting and at.y > 278 and at.y < 288 and body.linear_velocity.length() < 10
 	check(resting, "Loose ore settles on floor in an empty workshop")
-	check(session.workshop.stations.is_empty() and session.station_nodes.is_empty() and session.orders.number == 0, "No free stations or customer clock before opening")
+	check(session.workshop.stations.is_empty() and session.placeables.views.is_empty() and session.orders.number == 0, "No free stations or customer clock before opening")
 	var dwarf = session.players[1]
 	dwarf.position = Vector2(240, 288)
 	session.interact_for(1)

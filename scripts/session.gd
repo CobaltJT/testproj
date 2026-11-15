@@ -30,22 +30,13 @@ var cycle = DAY_STATE.new()
 var day_tick := 0
 const TRANSPORT = preload("res://scripts/transport_state.gd")
 var transport = TRANSPORT.new()
-var rail_nodes: Array = []
-var shown_tracks: Array = []
-var shaft_nodes: Array = []
-var lift_node: Node2D
-var lift_riders: Dictionary = {}
 const ROOMS = preload("res://scripts/room_state.gd")
 var rooms = ROOMS.new()
 const MAP = preload("res://scripts/map_layout.gd")
 var overview_camera: Camera2D
 const WORKSHOP_STATE = preload("res://scripts/workshop_state.gd")
 const STATION_JOB = preload("res://scripts/station_job.gd")
-const STATION_SCENE = preload("res://scenes/workstation.tscn")
-const STATION_VIEW = preload("res://scripts/station_view.gd")
 var workshop = WORKSHOP_STATE.new()
-var station_nodes: Dictionary = {}
-var build_ghost: Sprite2D
 const MERCHANT_STATE = preload("res://scripts/merchant_state.gd")
 var merchant = MERCHANT_STATE.new()
 var merchant_node: Node2D
@@ -94,7 +85,7 @@ func _ready() -> void:
 	overview_camera.make_current()
 	merchant_node = preload("res://scenes/merchant.tscn").instantiate()
 	world.add_child(merchant_node)
-	init_transport_world()
+	placeables.attach_world(world)
 	reset_game_state(false)
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -376,15 +367,9 @@ func receive_state(state: Array) -> void:
 
 func peer_left(id: int) -> void:
 	if multiplayer.is_server():
-		transport.cancel(id, orders)
+		placeables.release_build(id)
 		movable_objects.forget_actor(id)
-		lift_riders.erase(id)
-		sync_transport()
-		workshop.cancel(id, orders)
-		sync_build()
-		workshop.cancel(id, orders)
-		broadcast_state("receive_workshop", [workshop.snapshot()])
-		broadcast_state("receive_orders", [orders.snapshot()])
+		placeables.forget_actor(id)
 		release_ore(id, true)
 		broadcast_state("remove_player", [id], true)
 		broadcast_state("receive_ore", [ore.snapshot()], true)
@@ -610,31 +595,33 @@ func feedback_for(id: int, message: String) -> void:
 
 func reset_game_state(simulate: bool) -> void:
 	movable_objects.clear()
+	placeables.clear()
 	rooms = ROOMS.new()
 	ore = ORE_STATE.new()
 	transport = TRANSPORT.new()
 	transport.room_layout = rooms
-	movable_objects.bind(world, players, ore, transport, simulate and active and multiplayer.is_server())
-	lift_riders.clear()
-	refresh_transport()
 	progression = PROGRESSION.new()
-	refresh_progression()
 	workshop = WORKSHOP_STATE.new()
 	workshop.room_layout = rooms
-	apply_room_layout()
-	refresh_workshop()
-	reset_mining()
-	refresh_mining()
 	orders = CUSTOMER_STATE.new()
 	cycle = DAY_STATE.new()
-	refresh_day()
 	merchant = MERCHANT_STATE.new()
 	supplies = MERCHANT_STATE.new()
 	supplies.configure_supplies()
 	needs = NEEDS.new()
 	work_held.clear()
-	movable_objects.spawn_initial_items()
 	bind_interaction_state()
+	# Reset controls model ownership; replicas never simulate bodies or work.
+	movable_objects.authoritative = simulate and active and multiplayer.is_server()
+	placeables.authoritative = simulate and active and multiplayer.is_server()
+	npcs.authoritative = simulate and active and multiplayer.is_server()
+	refresh_progression()
+	apply_room_layout()
+	refresh_workshop()
+	reset_mining()
+	refresh_mining()
+	refresh_day()
+	movable_objects.spawn_initial_items()
 	refresh_orders()
 	refresh_merchant()
 
@@ -652,45 +639,18 @@ func receive_workshop(state: Dictionary) -> void:
 	refresh_workshop()
 
 func refresh_workshop() -> void:
-	for id in station_nodes.keys():
-		if not workshop.stations.has(id):
-			station_nodes[id].free()
-			station_nodes.erase(id)
-	for id in workshop.stations:
-		if not station_nodes.has(id):
-			var view: Node2D = STATION_SCENE.instantiate()
-			world.add_child(view)
-			station_nodes[id] = view
-		station_nodes[id].update_view(workshop.stations[id], ore)
+	placeables.refresh_stations()
 	if recipe_label != null:
 		recipe_label.visible = false
 		recipe_label.text = ""
 
 func _process(_delta: float) -> void:
-	if build_ghost == null:
-		return
-	var id := multiplayer.get_unique_id()
-	var carrying_kit: bool = active and cycle.phase not in ["summary", "transition"] and workshop.pending.has(id)
-	build_ghost.visible = carrying_kit
-	if carrying_kit:
-		workshop_ui.hide()
-		var at: Vector2 = workshop.snap(world.get_local_mouse_position())
-		build_ghost.position = at + Vector2(8, -16)
-		build_ghost.texture = STATION_VIEW.TEXTURES[workshop.pending[id].kind]
-		build_ghost.modulate = Color(0.4, 1, 0.5, 0.7) if workshop.can_place(at) else Color(1, 0.3, 0.3, 0.7)
-	if active and transport.pending.has(id) and cycle.phase not in ["summary", "transition"]:
-		workshop_ui.hide()
-		var at: Vector2 = transport.snap_rail(world.get_local_mouse_position())
-		build_ghost.visible = true
-		build_ghost.texture = preload("res://assets/textures/rail.svg")
-		build_ghost.position = at - Vector2(0, 2)
-		build_ghost.modulate = Color(0.4, 1, 0.5, 0.7) if transport.can_rail(at) else Color(1, 0.3, 0.3, 0.7)
-	if not active:
+	if placeables.update_preview(multiplayer.get_unique_id(), world.get_local_mouse_position(), active) or not active:
 		workshop_ui.hide()
 	refresh_expansions()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if active and build_ghost != null and build_ghost.visible and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+	if active and placeables.preview != null and placeables.preview.visible and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if transport.pending.has(multiplayer.get_unique_id()):
 			var rail: Vector2 = transport.snap_rail(world.get_global_transform_with_canvas().affine_inverse() * event.position)
 			if multiplayer.is_server(): place_rail_for(1, rail)
@@ -716,11 +676,7 @@ func request_station(kind: String) -> void:
 		purchase_for(multiplayer.get_remote_sender_id(), kind)
 
 func purchase_for(id: int, kind: String) -> void:
-	if not multiplayer.is_server() or not players.has(id) or transport.pending.has(id) or cycle.phase in ["summary", "transition"]:
-		return
-	if not workshop.purchase(id, kind, orders, ore, 1.0 - 0.1 * progression.rank(id, "purchasing")):
-		feedback_for(id, "Cannot buy: check coins, empty hands, and any unplaced kit.")
-	sync_build()
+	if transport_allowed(id): placeables.purchase(id, kind)
 
 @rpc("any_peer", "call_remote", "reliable")
 func request_place(at: Vector2) -> void:
@@ -728,11 +684,7 @@ func request_place(at: Vector2) -> void:
 		place_for(multiplayer.get_remote_sender_id(), at)
 
 func place_for(id: int, at: Vector2) -> void:
-	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
-		return
-	if workshop.place(id, at) == -1:
-		feedback_for(id, "Blocked placement: keep paths, fixed fixtures, and other stations clear.")
-	sync_build()
+	if transport_allowed(id): placeables.place(id, at)
 
 @rpc("any_peer", "call_remote", "reliable")
 func request_cancel_build() -> void:
@@ -740,12 +692,7 @@ func request_cancel_build() -> void:
 		cancel_build_for(multiplayer.get_remote_sender_id())
 
 func cancel_build_for(id: int) -> void:
-	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
-		return
-	transport.cancel(id, orders)
-	sync_transport()
-	workshop.cancel(id, orders)
-	sync_build()
+	if transport_allowed(id): placeables.cancel_build(id)
 
 @rpc("any_peer", "call_remote", "reliable")
 func request_pack() -> void:
@@ -753,11 +700,7 @@ func request_pack() -> void:
 		pack_for(multiplayer.get_remote_sender_id())
 
 func pack_for(id: int) -> void:
-	if not multiplayer.is_server() or not players.has(id) or transport.pending.has(id) or cycle.phase in ["summary", "transition"]:
-		return
-	if not workshop.pack(id, players[id].position, ore):
-		feedback_for(id, "Only empty, idle stations or containers can be packed; keep your hands free.")
-	sync_build()
+	if transport_allowed(id): placeables.pack(id)
 
 func sync_build() -> void:
 	refresh_workshop()
@@ -892,28 +835,6 @@ func purchase_mobile_bin_for(id: int) -> void:
 	feedback_for(id, "Movable parts bin: Q drops, F throws. Holds 10 intermediate products. E takes a product; C lifts the bin.")
 
 
-func init_transport_world() -> void:
-	lift_node = Node2D.new()
-	lift_node.z_index = 10
-	world.add_child(lift_node)
-	var sprite := Sprite2D.new()
-	sprite.texture = preload("res://assets/textures/elevator.svg")
-	sprite.position = Vector2(0, -24)
-	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	lift_node.add_child(sprite)
-	var body := StaticBody2D.new()
-	body.collision_layer = 16
-	body.collision_mask = 2
-	lift_node.add_child(body)
-	var shape := CollisionShape2D.new()
-	var rectangle := RectangleShape2D.new()
-	rectangle.size = Vector2(32, 4)
-	shape.shape = rectangle
-	shape.one_way_collision = true
-	shape.one_way_collision_margin = 1.0
-	shape.position.y = 2
-	body.add_child(shape)
-
 func transport_buy(kind: String, level: int) -> void:
 	if multiplayer.is_server(): buy_transport_for(1, kind, level)
 	else: request_transport_buy.rpc_id(1, kind, level)
@@ -923,18 +844,7 @@ func request_transport_buy(kind: String, level: int) -> void:
 	if multiplayer.is_server(): buy_transport_for(multiplayer.get_remote_sender_id(), kind, level)
 
 func buy_transport_for(id: int, kind: String, level: int) -> void:
-	if not transport_allowed(id) or ore.carried_by(id) != -1 or workshop.pending.has(id) or transport.pending.has(id): return
-	var ok := false
-	if kind == "lift": ok = transport.upgrade(level, orders, progression.purchase_price(id, TRANSPORT.UPGRADE_PRICE))
-	elif kind == "rail": ok = transport.buy_rail(id, orders, progression.purchase_price(id, TRANSPORT.RAIL_PRICE))
-	elif kind == "cart":
-		var at: Vector2 = players[id].position
-		for rail in transport.tracks:
-			if absf(rail.y - at.y) < 6 and absf(rail.x - at.x) < 24:
-				ok = transport.buy_cart(rail, orders, progression.purchase_price(id, TRANSPORT.CART_PRICE)) != -1
-				break
-	feedback_for(id, "Transport purchased." if ok else "Cannot buy: check coins, empty hands, upgrade order, and nearby rails for a cart.")
-	sync_transport()
+	if transport_allowed(id): placeables.buy_transport(id, kind, level)
 
 func transport_allowed(id: int) -> bool:
 	return multiplayer.is_server() and players.has(id) and cycle.phase not in ["summary", "transition"]
@@ -944,9 +854,7 @@ func request_rail_place(at: Vector2) -> void:
 	if multiplayer.is_server(): place_rail_for(multiplayer.get_remote_sender_id(), at)
 
 func place_rail_for(id: int, at: Vector2) -> void:
-	if transport_allowed(id):
-		transport.place_rail(id, at)
-		sync_transport()
+	if transport_allowed(id): placeables.place_rail(id, at)
 
 @rpc("any_peer", "call_remote", "reliable")
 func request_cart_toggle() -> void:
@@ -960,38 +868,12 @@ func request_lift(direction: int) -> void:
 	if multiplayer.is_server(): lift_for(multiplayer.get_remote_sender_id(), direction)
 
 func lift_for(id: int, direction: int) -> void:
-	if not transport_allowed(id) or direction not in [-1, 1] or absf(players[id].position.x - 390) > 30: return
-	var stop := -1
-	for i in range(transport.upgrades + 1):
-		if absf(players[id].position.y - TRANSPORT.STOPS[i]) < 6: stop = i
-	if stop == -1: return
-	var aboard: bool = absf(players[id].position.x - 390) <= 16
-	for cart in transport.carts.values():
-		if cart.driver == id and absf(cart.at.x - 390) <= 16: aboard = true
-	if absf(transport.lift_y - TRANSPORT.STOPS[stop]) <= 2 and not aboard: return
-	var destination := stop if absf(transport.lift_y - TRANSPORT.STOPS[stop]) > 2 else stop + direction
-	var old: float = transport.lift_y
-	if transport.start_lift(destination):
-		lift_riders.clear()
-		for peer in players:
-			if absf(players[peer].position.x - 390) <= 16 and absf(players[peer].position.y - old) < 6:
-				lift_riders[peer] = true
-				players[peer].climbing = false
-				players[peer].transport_locked = true
-		sync_transport()
+	if transport_allowed(id): placeables.use_lift(id, direction)
 
 func step_transport(delta: float) -> void:
-	for id in players: players[id].transport_locked = false
 	var previous: Dictionary = movable_objects.cart_positions()
-	var riders: Dictionary = lift_riders.duplicate()
-	transport.step_lift(delta)
-	for id in lift_riders:
-		if players.has(id):
-			players[id].transport_locked = true
-			players[id].position = Vector2(players[id].position.x, transport.lift_y)
-			players[id].velocity = Vector2.ZERO
-	if not transport.moving: lift_riders.clear()
-	movable_objects.step_carts(delta, previous, lift_riders, riders)
+	var riders: Dictionary = placeables.step_lift(delta)
+	movable_objects.step_carts(delta, previous, placeables.lift_riders, riders)
 	refresh_transport()
 
 func sync_transport() -> void:
@@ -1006,36 +888,7 @@ func receive_transport(state: Dictionary) -> void:
 	refresh_transport()
 
 func refresh_transport() -> void:
-	if lift_node == null: return
-	lift_node.visible = transport.upgrades > 0
-	lift_node.position = Vector2(390, transport.lift_y)
-	lift_node.get_child(1).collision_layer = 16 if transport.upgrades > 0 else 0
-	for id in players: players[id].mine_ladder_top = TRANSPORT.STOPS[transport.upgrades]
-	while shaft_nodes.size() < transport.upgrades:
-		var sprite := Sprite2D.new()
-		sprite.texture = preload("res://assets/textures/shaft_lift.svg")
-		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		sprite.z_index = -9
-		var segment := shaft_nodes.size()
-		var top: float = TRANSPORT.STOPS[segment]
-		var bottom: float = TRANSPORT.STOPS[segment + 1]
-		sprite.position = Vector2(390, (top + bottom) / 2)
-		sprite.scale.y = (bottom - top) / 80.0
-		world.add_child(sprite)
-		shaft_nodes.append(sprite)
-	for i in range(shaft_nodes.size()): shaft_nodes[i].visible = i < transport.upgrades
-	if shown_tracks != transport.tracks:
-		shown_tracks = transport.tracks.duplicate()
-		for node in rail_nodes: node.free()
-		rail_nodes.clear()
-		for at in transport.tracks:
-			var sprite := Sprite2D.new()
-			sprite.texture = preload("res://assets/textures/rail.svg")
-			sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-			sprite.position = at - Vector2(0, 2)
-			sprite.z_index = 10
-			world.add_child(sprite)
-			rail_nodes.append(sprite)
+	placeables.refresh_transport_views()
 	movable_objects.refresh_carts()
 	if workshop_ui != null:
 		workshop_ui.refresh_transport(multiplayer.get_unique_id(), progression, transport, rooms.depth())
@@ -1138,10 +991,6 @@ func buy_goods_for(id: int, kind: String) -> void:
 	npcs.buy_goods(id, players[id].position, kind)
 
 func init_ui(layer: CanvasLayer) -> void:
-	build_ghost = Sprite2D.new()
-	build_ghost.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	world.add_child(build_ghost)
-	build_ghost.hide()
 	workshop_ui = CATALOG_SCENE.instantiate()
 	layer.add_child(workshop_ui)
 	workshop_ui.station_requested.connect(buy_station)
@@ -1169,7 +1018,7 @@ func refresh_day() -> void:
 	if day_ui != null: day_ui.refresh(active, cycle)
 	if workshop_ui != null and cycle.phase in ["summary", "transition"]:
 		workshop_ui.hide()
-		build_ghost.hide()
+		placeables.preview.hide()
 
 func refresh_expansions() -> void:
 	if expansion_ui == null: return
@@ -1180,7 +1029,7 @@ func refresh_expansions() -> void:
 	if hud != null:
 		for panel in hud.panels:
 			if panel.is_visible_in_tree(): obstacles.append(panel.get_global_rect())
-	var shown: bool = active and cycle.phase not in ["summary", "transition"] and not workshop_ui.visible and not build_ghost.visible and not Input.is_physical_key_pressed(KEY_F1)
+	var shown: bool = active and cycle.phase not in ["summary", "transition"] and not workshop_ui.visible and not placeables.preview.visible and not Input.is_physical_key_pressed(KEY_F1)
 	expansion_ui.project(world.get_global_transform_with_canvas(), get_viewport().get_visible_rect(), obstacles, shown)
 
 func init_interactions() -> void:
@@ -1204,6 +1053,8 @@ func init_interactions() -> void:
 	movable_objects.motion_changed.connect(sync_movable_motion)
 	movable_objects.catch_stationary = placeables.catch_item
 	placeables.workshop_changed.connect(sync_interaction_workshop)
+	placeables.build_changed.connect(sync_build)
+	placeables.transport_changed.connect(sync_transport)
 	npcs.orders_changed.connect(sync_interaction_orders)
 	npcs.experience_requested.connect(award_exp)
 	npcs.output_ready.connect(place_work_output)
@@ -1217,7 +1068,8 @@ func bind_interaction_state() -> void:
 	# New sessions replace models; refresh explicit dependencies instead of capturing
 	# the old models in closures. The router's ordered method references stay valid.
 	movable_objects.bind(world, players, ore, transport, active and multiplayer.is_server())
-	placeables.bind(workshop, ore, needs, cycle, vein_at, station_nodes)
+	placeables.bind(workshop, ore, needs, cycle, vein_at)
+	placeables.bind_placement(transport, orders)
 	placeables.bind_workers(players, work_held, progression, mine_veins, active and multiplayer.is_server())
 	npcs.bind(ore, orders, progression)
 	npcs.bind_visitors(cycle, merchant, supplies, active and multiplayer.is_server())

@@ -391,7 +391,7 @@ func _process(_delta: float) -> void:
 		held_icon.tooltip_text = kind.replace("_", " ").capitalize() if kind != "ore_bin" else "Parts bin · %s/10" % game.ore.pieces[item].contents.size()
 	elif game.workshop.pending.has(local):
 		var kind: String = game.workshop.pending[local].kind
-		held_icon.texture = game.STATION_VIEW.TEXTURES[kind]
+		held_icon.texture = game.placeables.STATION_VIEW.TEXTURES[kind]
 		held_icon.tooltip_text = "Kit · " + game.WORKSHOP_STATE.display_name(kind)
 	elif game.transport.pending.has(local):
 		held_icon.texture = preload("res://assets/textures/rail.svg")
@@ -403,10 +403,10 @@ func _process(_delta: float) -> void:
 	notice.visible = Time.get_ticks_msec() < notice_until and game.cycle.phase not in ["summary", "transition"]
 	notice.modulate.a = clampf((notice_until - Time.get_ticks_msec()) / 500.0, 0, 1)
 	var at: Vector2 = game.players[local].position if game.players.has(local) else Vector2.INF
-	for id in game.station_nodes:
+	for id in game.placeables.views:
 		var nearby: bool = absf(game.workshop.stations[id].at.x - at.x) < 60 and absf(game.workshop.stations[id].at.y - at.y) < 12
-		game.station_nodes[id].get_node("Label").visible = nearby
-		game.station_nodes[id].get_node("ProductIcon").visible = nearby
+		game.placeables.views[id].get_node("Label").visible = nearby
+		game.placeables.views[id].get_node("ProductIcon").visible = nearby
 	for id in game.vein_nodes:
 		game.vein_nodes[id].get_node("WorkLabel").visible = false
 	game.movable_objects.update_labels(at)

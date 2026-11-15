@@ -254,14 +254,7 @@ func _physics_process(delta: float) -> void:
 	if not active or not players.has(multiplayer.get_unique_id()):
 		return
 	if multiplayer.is_server():
-		var previous_phase: String = cycle.phase
-		cycle.step(delta, orders, merchant)
-		if cycle.phase == "shop": supplies.step_supplies(delta, merchant.remaining > 0)
-		else: supplies.remaining = 0
-		if previous_phase == "transition" and cycle.phase == "morning":
-			supplies.until_visit = 20
-			supplies.stock = 0
-		if previous_phase != cycle.phase:
+		if npcs.step(delta):
 			broadcast_state("receive_orders", [orders.snapshot()])
 			broadcast_state("receive_merchant", [merchant.snapshot()])
 			broadcast_state("receive_supplies", [supplies.snapshot()])
@@ -573,22 +566,7 @@ func request_wood() -> void:
 func buy_wood_for(id: int) -> void:
 	if not multiplayer.is_server() or not players.has(id) or cycle.phase != "shop":
 		return
-	var piece_id: int = merchant.buy(id, players[id].position, orders, ore, progression.purchase_price(id, MERCHANT_STATE.WOOD_PRICE))
-	if piece_id == -1:
-		var message := "Wood unavailable: empty hands, %s coins, stock and merchant proximity required." % progression.purchase_price(id, MERCHANT_STATE.WOOD_PRICE)
-		if id == 1:
-			interaction_feedback(message)
-		else:
-			interaction_feedback.rpc_id(id, message)
-		return
-	var body := movable_objects.create_body(piece_id, true, Vector2(222, 202))
-	movable_objects.position_body(body, Vector2(222, 202), Vector2(0, 20))
-	broadcast_state("receive_ore", [ore.snapshot()], true)
-	broadcast_state("receive_ore_motion", [movable_objects.motion_snapshot()], false)
-	broadcast_state("receive_orders", [orders.snapshot()], false)
-	broadcast_state("receive_merchant", [merchant.snapshot()], false)
-	refresh_orders()
-	refresh_merchant()
+	npcs.buy_wood(id, players[id].position)
 
 @rpc("authority", "call_remote", "reliable")
 func receive_merchant(state: Dictionary) -> void:
@@ -654,11 +632,11 @@ func reset_game_state(simulate: bool) -> void:
 	supplies = MERCHANT_STATE.new()
 	supplies.configure_supplies()
 	needs = NEEDS.new()
-	refresh_orders()
-	refresh_merchant()
 	work_held.clear()
 	movable_objects.spawn_initial_items()
 	bind_interaction_state()
+	refresh_orders()
+	refresh_merchant()
 
 func choose_recipe(id: int, choice: String) -> void:
 	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
@@ -812,15 +790,7 @@ func request_order_decision(order_id: int, accept: bool) -> void:
 func decide_order_for(id: int, order_id: int, accept: bool) -> void:
 	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
 		return
-	var failed_before: int = orders.missed
-	var changed: bool = orders.decide(id, players[id].position, order_id, accept, progression.reject_cost(id))
-	var message := "Order accepted · 30s" if accept else "Order declined · −%s rep" % progression.reject_cost(id)
-	if orders.missed > failed_before: message = "Request failed · −6 rep"
-	if not changed:
-		message = "Request no longer available"
-	feedback_for(id, message)
-	broadcast_state("receive_orders", [orders.snapshot()])
-	refresh_orders()
+	npcs.decide_order(id, players[id].position, order_id, accept)
 
 func award_exp(id: int, task: String) -> void:
 	if not multiplayer.is_server() or not players.has(id) or cycle.phase in ["summary", "transition"]:
@@ -1152,7 +1122,7 @@ func receive_needs(state: Dictionary) -> void:
 	refresh_walking()
 
 func visiting_merchant() -> RefCounted:
-	return merchant if merchant.remaining > 0 else supplies
+	return npcs.visiting_merchant()
 
 @rpc("authority", "call_remote", "reliable")
 func receive_supplies(state: Dictionary) -> void:
@@ -1165,21 +1135,7 @@ func request_goods(kind: String) -> void:
 
 func buy_goods_for(id: int, kind: String) -> void:
 	if not transport_allowed(id) or cycle.phase != "shop" or workshop.pending.has(id) or transport.pending.has(id): return
-	var visiting = visiting_merchant()
-	if visiting.kind != kind or kind not in MERCHANT_STATE.PRICES: return
-	var piece: int = visiting.buy(id, players[id].position, orders, ore, progression.purchase_price(id, MERCHANT_STATE.PRICES[kind]))
-	if piece == -1:
-		feedback_for(id, "Purchase unavailable: check proximity, stock, coins and empty hands.")
-		return
-	var body := movable_objects.create_body(piece, true, Vector2(222, 202))
-	movable_objects.position_body(body, Vector2(222, 202), Vector2(0, 20))
-	broadcast_state("receive_ore", [ore.snapshot()], true)
-	broadcast_state("receive_ore_motion", [movable_objects.motion_snapshot()])
-	broadcast_state("receive_orders", [orders.snapshot()])
-	broadcast_state("receive_merchant", [merchant.snapshot()])
-	broadcast_state("receive_supplies", [supplies.snapshot()])
-	refresh_orders()
-	refresh_merchant()
+	npcs.buy_goods(id, players[id].position, kind)
 
 func init_ui(layer: CanvasLayer) -> void:
 	build_ghost = Sprite2D.new()
@@ -1250,6 +1206,8 @@ func init_interactions() -> void:
 	placeables.workshop_changed.connect(sync_interaction_workshop)
 	npcs.orders_changed.connect(sync_interaction_orders)
 	npcs.experience_requested.connect(award_exp)
+	npcs.output_ready.connect(place_work_output)
+	npcs.purchase_completed.connect(sync_visitor_purchase)
 	placeables.experience_requested.connect(award_exp)
 	placeables.output_ready.connect(place_work_output)
 	placeables.production_completed.connect(sync_production)
@@ -1262,6 +1220,7 @@ func bind_interaction_state() -> void:
 	placeables.bind(workshop, ore, needs, cycle, vein_at, station_nodes)
 	placeables.bind_workers(players, work_held, progression, mine_veins, active and multiplayer.is_server())
 	npcs.bind(ore, orders, progression)
+	npcs.bind_visitors(cycle, merchant, supplies, active and multiplayer.is_server())
 
 func route_interaction(id: int, action: StringName) -> bool:
 	if not transport_allowed(id): return false
@@ -1297,3 +1256,11 @@ func sync_mining() -> void:
 	sync_interaction_items()
 	sync_movable_motion()
 	broadcast_state("receive_mining", [mining_snapshot()], false)
+
+func sync_visitor_purchase() -> void:
+	sync_interaction_items()
+	sync_movable_motion()
+	sync_interaction_orders()
+	broadcast_state("receive_merchant", [merchant.snapshot()])
+	broadcast_state("receive_supplies", [supplies.snapshot()])
+	refresh_merchant()

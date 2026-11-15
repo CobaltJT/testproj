@@ -510,8 +510,9 @@ Controllers emit change/feedback signals after consuming an interaction. The
 session handles replication, presentation refreshes and EXP. Controller state
 dependencies are rebound on reset so new games cannot mutate the previous game's
 models. The movable-object controller also owns item physics and F/Q release.
-Continuous held-E work is owned by the placeable controller. Purchases and
-network endpoints retain their existing owners.
+Continuous held-E work is owned by the placeable controller. Merchant purchases
+and order decisions belong to the NPC controller; network endpoints remain in
+the session.
 
 ## Movable-object ownership
 
@@ -560,6 +561,30 @@ the session for now.
 signals, shop-only mining, depleted recovery and diner ownership independently
 of the session. Existing needs, progression, physics and multiplayer tests cover
 the integrated flows.
+
+## NPC ownership
+
+`scripts/controllers/npcs.gd` coordinates visitor simulation, order decisions,
+front-of-queue deliveries and merchant purchases. Customer and merchant models
+retain their queue, deadlines, reputation, pricing, stock and random-arrival
+rules. The day model retains shop boundaries and summary accounting; the NPC
+controller advances it together with supply visits and resets the supply trader
+on the next morning. Its `step` result requests immediate synchronization when
+the phase changes.
+
+The controller receives inventory, order, progression, day and merchant models
+through explicit bindings. It has no session reference, RPCs or scene nodes.
+Order, feedback, EXP and purchase-output signals reach the session, which creates
+physical items and replicates state. The session still validates network senders
+and placement restrictions, and owns customer/merchant views and cards. Visitor
+models are rebound before their views refresh on reset, so new sessions cannot
+keep references to the previous game's visitors.
+
+`tests/npc_controller.gd` checks this orchestration without constructing a
+session: visitor priority, closing and next-day behavior, order decisions,
+front-only multi-item delivery, skill bonuses, purchase validation, replica
+guards and model rebinding. Existing card, day, visitor, progression and network
+tests exercise the same behavior through the session's existing endpoints.
 
 ## Validation
 

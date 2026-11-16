@@ -14,7 +14,9 @@ Only markers adjoining your dwarf’s current room appear; entering another room
 updates them.
 Walk toward a room edge to bring its marker into your camera view. Room purchases
 are separate from the workshop menu. Ladders connect vertically adjacent
-building rooms automatically. Move any workstation blocking a new ladder before expanding.
+building rooms automatically. The entrance room (leftmost ground-floor room)
+cannot be expanded above or below; its column is reserved for the entrance.
+Move any workstation blocking a new ladder before expanding.
 
 | Building level | Cost per room |
 | --- | --- |
@@ -128,7 +130,9 @@ Bin contents, smelting progress, and ingot outputs synchronize for late joiners.
 ## Move and handle items
 
 - **A/D or Left/Right:** walk. **Space:** jump.
-- **W/S or Up/Down:** climb ladders, including diagonal movement.
+- **W/S or Up/Down:** climb ladders, including diagonal movement. Floors remain
+  closed across ladders: walk across normally, climb up through ceilings, or hold
+  Down on a ladder to descend through its floor. Down elsewhere stays blocked.
 - **E:** pick up nearby loose items or load a station. **Hold E:** work or mine.
 - **F:** throw the carried item in the facing direction. **Q:** drop it.
 

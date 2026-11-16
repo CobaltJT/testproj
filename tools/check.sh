@@ -38,6 +38,7 @@ godot --headless --path . --script res://tests/day_physics.gd
 godot --headless --path . --script res://tests/progression.gd
 godot --headless --path . --script res://tests/progression_physics.gd
 godot --headless --path . --script res://tests/camera.gd
+godot --headless --path . --script res://tests/ladder_floors.gd
 godot --headless --path . --script res://tests/movement.gd
 godot --headless --path . --script res://tests/ore.gd
 godot --headless --path . --script res://tests/ore_physics.gd

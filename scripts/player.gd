@@ -22,6 +22,7 @@ var climb_held := false
 var climbing := false
 var active_ladder := -1
 var ladder_jump_locked := false
+var descending_floors: Array[PhysicsBody2D] = []
 @onready var sprite: Sprite2D = $Sprite2D
 
 func _ready() -> void:
@@ -39,13 +40,13 @@ func _physics_process(delta: float) -> void:
 	if transport_locked:
 		velocity = Vector2.ZERO
 		return
+	clear_crossed_floors()
 	hit_stun = maxf(0, hit_stun - delta)
 	var horizontal := controls.x if networked else Input.get_axis("move_left", "move_right")
 	var vertical := controls.y if networked else Input.get_axis("climb_up", "climb_down")
 	var jump_pressed := (jump_held and not previous_jump) if networked else Input.is_action_just_pressed("jump")
 	previous_jump = jump_held
 	var holding_climb := climb_held if networked else (Input.is_action_pressed("climb_up") or Input.is_action_pressed("climb_down"))
-	set_collision_mask_value(5, not (vertical > 0 and position.x >= 374 and position.x <= 406 and position.y >= mine_ladder_top - 2))
 	if climbing and active_ladder == mine_ladder_index and (mine_ladder_top >= mine_ladder_bottom or position.y < mine_ladder_top - 2): climbing = false
 	if not holding_climb:
 		ladder_jump_locked = false
@@ -90,6 +91,8 @@ func _physics_process(delta: float) -> void:
 		sprite.flip_h = horizontal < 0
 	velocity.x += knockback_x
 	knockback_x = move_toward(knockback_x, 0, 700 * delta)
+	set_collision_mask_value(5, not (climbing and active_ladder == mine_ladder_index and vertical > 0))
+	if climbing and vertical > 0: descend_through_floor()
 	move_and_slide()
 	if is_on_floor():
 		ladder_jump_locked = false
@@ -121,3 +124,28 @@ func set_ladders(value: Array) -> void:
 			active_ladder = i
 			climbing = true
 			break
+
+func clear_crossed_floors() -> void:
+	for index in range(descending_floors.size() - 1, -1, -1):
+		var floor_body := descending_floors[index]
+		if not is_instance_valid(floor_body):
+			descending_floors.remove_at(index)
+			continue
+		var feet_y: float = floor_body.to_local(global_position).y
+		# Keep this one exception until the entire character clears the eight-pixel floor.
+		if feet_y > 4 + 23 + 1 or feet_y < -5:
+			remove_collision_exception_with(floor_body)
+			descending_floors.remove_at(index)
+
+func descend_through_floor() -> void:
+	var ladder := ladders[active_ladder]
+	if active_ladder == mine_ladder_index:
+		ladder = Rect2(374, mine_ladder_top, 32, mine_ladder_bottom - mine_ladder_top)
+	var query := PhysicsRayQueryParameters2D.create(to_global(Vector2(0, -1)), to_global(Vector2(0, 2)), 1, [get_rid()])
+	var hit := get_world_2d().direct_space_state.intersect_ray(query)
+	if hit.is_empty(): return
+	var floor_body = hit.collider
+	if not floor_body.has_meta("floor_y") or floor_body.get_meta("floor_y") >= ladder.end.y - 0.5: return
+	if floor_body not in descending_floors:
+		add_collision_exception_with(floor_body)
+		descending_floors.append(floor_body)

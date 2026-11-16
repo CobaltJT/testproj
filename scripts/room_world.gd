@@ -43,7 +43,18 @@ func solid(rect: Rect2) -> void:
 
 func floor_piece(x: float, y: float, width: float, mine: bool) -> void:
 	if width <= 0: return
-	solid(Rect2(x, y, width, 8))
+	# Each floor is a separate one-way body: descending ignores only this crossing.
+	var floor_body := StaticBody2D.new()
+	floor_body.position = Vector2(x + width / 2, y + 4)
+	floor_body.set_meta("floor_y", y)
+	var shape := CollisionShape2D.new()
+	var box := RectangleShape2D.new()
+	box.size = Vector2(width, 8)
+	shape.shape = box
+	shape.one_way_collision = true
+	shape.one_way_collision_margin = 1.0
+	floor_body.add_child(shape)
+	collision.add_child(floor_body)
 	var at := x
 	while at < x + width - 0.01:
 		picture(generated, STONE if mine else WOOD, Vector2(at, y), Vector2(minf(16, x + width - at), 8))
@@ -64,11 +75,7 @@ func configure(layout: RefCounted) -> void:
 		for cell in cells:
 			var rect: Rect2 = layout.room_rect(mine, cell)
 			picture(generated, ROCK if mine else BRICK, rect.position, rect.size).z_index = -1
-			var hole: float = layout.floor_hole(mine, cell)
-			if hole < 0: floor_piece(rect.position.x, rect.end.y, rect.size.x, mine)
-			else:
-				floor_piece(rect.position.x, rect.end.y, hole - 16 - rect.position.x, mine)
-				floor_piece(hole + 16, rect.end.y, rect.end.x - hole - 16, mine)
+			floor_piece(rect.position.x, rect.end.y, rect.size.x, mine)
 			if not cells.has(cell + Vector2i.LEFT):
 				solid(Rect2(rect.position.x - 4, rect.position.y, 8, rect.size.y + 8))
 				picture(generated, STONE, rect.position - Vector2(4, 0), Vector2(8, rect.size.y + 8))

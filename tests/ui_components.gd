@@ -39,16 +39,16 @@ func run() -> void:
 	var expansions = preload("res://scenes/ui/expansion_indicators.tscn").instantiate()
 	root.add_child(expansions)
 	var rooms = preload("res://scripts/room_state.gd").new()
-	expansions.refresh(Vector2(220, 216), rooms, progression, 1, 100)
+	expansions.refresh(Vector2(320, 216), rooms, progression, 1, 100)
 	var obstacles: Array[Rect2] = []
 	expansions.project(Transform2D.IDENTITY, Rect2(0, 0, 1280, 720), obstacles, true)
 	var purchase: Array = []
 	expansions.room_requested.connect(func(mine, cell): purchase.append([mine, cell]))
-	var button: Button = expansions.buttons[Vector3i(0, 1, 0)]
+	var button: Button = expansions.buttons[Vector3i(1, 1, 0)]
 	button.pressed.emit()
-	check(purchase == [[false, Vector2i(0, 1)]] and rooms.building.size() == 2, "Expansion button emits intent without buying a room")
-	expansions.refresh(Vector2(220, 216), rooms, progression, 1, 0)
-	check(expansions.buttons[Vector3i(0, 1, 0)] == button and button.disabled, "Affordability updates preserve marker controls")
+	check(purchase == [[false, Vector2i(1, 1)]] and rooms.building.size() == 2, "Expansion button emits intent without buying a room")
+	expansions.refresh(Vector2(320, 216), rooms, progression, 1, 0)
+	check(expansions.buttons[Vector3i(1, 1, 0)] == button and button.disabled, "Affordability updates preserve marker controls")
 	expansions.refresh(Vector2(390, 328), rooms, progression, 1, 100)
 	check(expansions.buttons.is_empty(), "Room context changes remove irrelevant markers")
 	var summary = preload("res://scenes/ui/day_summary.tscn").instantiate()

@@ -67,6 +67,8 @@ func client() -> void:
 	check(session.rooms.building.size() == 2 and session.vein_nodes.is_empty(), "Client initially receives two-room world")
 	done("initial")
 	await stage("basement")
+	session.request_room.rpc_id(1, false, Vector2i(0, -1))
+	session.request_room.rpc_id(1, false, Vector2i(0, 1))
 	session.request_room.rpc_id(1, false, Vector2i(4, -2))
 	session.request_room.rpc_id(1, false, Vector2i(1, 1))
 	session.request_room.rpc_id(1, false, Vector2i(1, 1))

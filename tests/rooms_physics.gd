@@ -32,8 +32,7 @@ func run() -> void:
 	var dwarf = session.players[1]
 	check(session.rooms.building.size() == 2 and session.placeables.views.is_empty() and session.vein_nodes.is_empty() and dwarf.ladders.is_empty(), "Fresh game contains only two ground rooms, counter and door")
 	check(session.movable_objects.bodies.values().all(func(body): return session.rooms.contains_floor(Vector2(session.world.to_local(body.global_position).x, 216))), "Starting ore stays inside the owned ground floor")
-	var lower_marker: Rect2 = session.expansion_ui.buttons[Vector3i(0, 1, 0)].get_global_rect()
-	check(session.hud.panels.all(func(panel): return not lower_marker.intersects(panel.get_global_rect())), "Outside purchase marker stays clear of the player HUD")
+	check(not session.expansion_ui.buttons.has(Vector3i(0, 1, 0)) and not session.expansion_ui.buttons.has(Vector3i(0, -1, 0)), "Entrance room has no vertical purchase markers")
 	check(not session.expansion_ui.buttons.has(Vector3i(2, 0, 0)) and not session.expansion_ui.buttons.has(Vector3i(1, 1, 0)), "Other room markers are hidden from the starting room")
 	check(not session.workshop.can_place(Vector2(512, 216)) and not session.workshop.can_place(Vector2(256, 136)), "Station placement rejects unpurchased space")
 	dwarf.position = Vector2(410, 216)
@@ -114,8 +113,8 @@ func run() -> void:
 	session.purchase_room_for(1, false, Vector2i(2, -1))
 	check(not session.rooms.owned(false, Vector2i(2, -1)) and session.orders.coins == before, "Room purchase refuses a new ladder through furniture without charging")
 	session.cycle.phase = "summary"
-	session.purchase_room_for(1, false, Vector2i(0, 1))
-	check(not session.rooms.owned(false, Vector2i(0, 1)), "Daily summary blocks room purchases")
+	session.purchase_room_for(1, false, Vector2i(2, 1))
+	check(not session.rooms.owned(false, Vector2i(2, 1)), "Daily summary blocks room purchases")
 	var owned: Dictionary = session.rooms.snapshot()
 	session.cycle.phase = "evening"
 	session.cycle.step(0, session.orders, session.merchant)

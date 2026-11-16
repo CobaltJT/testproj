@@ -35,7 +35,8 @@ func can_buy(mine: bool, cell: Vector2i) -> bool:
 		if not mine_open or cell.y not in DEPTH_PRICES: return false
 		if underground.has(cell + Vector2i.LEFT) or underground.has(cell + Vector2i.RIGHT): return true
 		return cell.x == SHAFT_COLUMN and cell.y > 1 and underground.has(cell + Vector2i.UP)
-	if cell.y not in FLOOR_Y: return false
+	# Keep the entrance column clear above and below the ground-floor storefront.
+	if cell.y not in FLOOR_Y or cell.x == 0 and cell.y != 0: return false
 	for offset in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
 		if building.has(cell + offset): return true
 	return false
@@ -100,12 +101,6 @@ func ladders() -> Array[Rect2]:
 		if start != -9999: result.append(Rect2(ladder_x(col) - 16, start, 32, end - start))
 	if mine_open: result.append(Rect2(374, 288, 32, MAP.MINE_GAP + depth() * 80))
 	return result
-
-func floor_hole(mine: bool, cell: Vector2i) -> float:
-	if mine:
-		return 390.0 if cell.x == SHAFT_COLUMN and underground.has(cell + Vector2i.DOWN) else -1
-	if cell.y == 1: return 390.0 if cell.x == SHAFT_COLUMN and mine_open else -1
-	return ladder_x(cell.x) if building.has(cell + Vector2i.DOWN) else -1
 
 func snapshot() -> Dictionary:
 	return {"building": building.duplicate(), "underground": underground.duplicate(), "mine_open": mine_open}
